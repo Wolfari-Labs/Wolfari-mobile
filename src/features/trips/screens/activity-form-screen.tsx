@@ -91,6 +91,8 @@ function ActivityForm({
     locationId?: string;
   }>();
   const command = useCommand();
+  const [publicDescription, setPublicDescription] = useState(activity?.public_description ?? "");
+  const [selectedLocation, setSelectedLocation] = useState(activity?.selected_location_id ?? plan.selected_locations.find(location => location.id === locationId)?.id ?? "");
   const [title, setTitle] = useState(activity?.title ?? initialTitle ?? "");
   const [description, setDescription] = useState(
     activity?.description ?? note ?? "",
@@ -142,17 +144,14 @@ function ActivityForm({
       return;
     }
     setValidation(undefined);
-    const selectedLocation =
-      activity?.selected_location_id ??
-      plan.selected_locations.find((location) => location.id === locationId)
-        ?.id;
     const input = {
       title: title.trim(),
       description: description.trim() || null,
+      public_description: publicDescription.trim() || null,
       activity_type: type,
       starts_at: starts_at ?? null,
       ends_at: ends_at ?? null,
-      ...(selectedLocation ? { selected_location_id: selectedLocation } : {}),
+      selected_location_id: selectedLocation || null,
       position: activity?.position ?? plan.activities.length,
       expected_plan_version: plan.plan_version,
     };
@@ -275,6 +274,11 @@ function ActivityForm({
         maxLength={5000}
         editable={!command.busy}
       />
+      <FormField label="Giới thiệu công khai của hoạt động" icon="edit" value={publicDescription} onChangeText={setPublicDescription} multiline maxLength={5000} editable={!command.busy} />
+      {plan.selected_locations.length > 0 && <>
+        <Text style={typography.footnote}>Gắn hoạt động với địa điểm đã lưu của nhóm</Text>
+        <Segments scroll items={[{ value: "", label: "Không gắn địa điểm" }, ...plan.selected_locations.map(location => ({ value: location.id, label: location.name }))]} value={selectedLocation} onChange={value => { if (!command.busy) setSelectedLocation(value); }} />
+      </>}
     </Screen>
   );
 }

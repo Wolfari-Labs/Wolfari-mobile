@@ -8,6 +8,7 @@ import type {
   InvitationResult,
   Lifecycle,
   Membership,
+  MembershipOperation,
   Page,
   Plan,
   PlanPolicy,
@@ -121,11 +122,21 @@ export function createTripsApi(client: ApiClient) {
           key,
         ),
       ),
-    members: (tripId: string, cursor?: string, signal?: AbortSignal) =>
+    members: (tripId: string, cursor?: string, signal?: AbortSignal, includeLeft = false) =>
       client.request<Page<Membership>>(
-        `/trips/${id(tripId)}/members?limit=100${cursor ? `&cursor=${id(cursor)}` : ""}`,
+        `/trips/${id(tripId)}/members?limit=100${cursor ? `&cursor=${id(cursor)}` : ""}${includeLeft ? "&include_left=true" : ""}`,
         { signal },
       ),
+    leave: (trip: Trip, reason: string, key: string) => client.request<MembershipOperation>(
+      `/trips/${id(trip.id)}/leave`, write("POST", { reason: reason.trim(), expected_membership_revision: trip.membership_revision }, key),
+    ),
+    removeMember: (trip: Trip, memberId: string, reason: string, key: string) => client.request<MembershipOperation>(
+      `/trips/${id(trip.id)}/members/${id(memberId)}`, write("DELETE", { reason: reason.trim(), expected_membership_revision: trip.membership_revision }, key),
+    ),
+    operation: (operationId: string, signal?: AbortSignal) => client.request<MembershipOperation>(`/operations/${id(operationId)}`, { signal }),
+    inviteLink: (trip: Trip, key: string) => client.request<InvitationResult>(
+      `/trips/${id(trip.id)}/invitations`, write("POST", { invitation_type: "LINK", expected_membership_revision: trip.membership_revision }, key),
+    ),
     policy: (
       trip: Trip,
       policy: PlanPolicy,

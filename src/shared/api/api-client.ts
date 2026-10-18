@@ -26,6 +26,8 @@ export type RequestOptions = {
   accessToken?: string;
   headers?: Record<string, string>;
   signal?: AbortSignal;
+  responseType?: "json" | "blob";
+  retryAuth?: boolean;
 };
 
 type ClientOptions = {
@@ -65,20 +67,22 @@ export function createApiClient({
       }, timeoutMs);
 
       try {
+        const multipart = typeof FormData !== "undefined" && options.body instanceof FormData;
         const response = await fetchRequest(`${baseUrl}${path}`, {
           method: options.method ?? "GET",
           credentials: clientType === "web" ? "include" : "omit",
           headers: {
             Accept: "application/json",
             "X-Client-Type": clientType,
-            ...(options.body !== undefined ? { "Content-Type": "application/json" } : {}),
+            ...(options.body !== undefined && !multipart ? { "Content-Type": "application/json" } : {}),
             ...(options.accessToken ? { Authorization: `Bearer ${options.accessToken}` } : {}),
             ...options.headers,
           },
-          body: options.body === undefined ? undefined : JSON.stringify(options.body),
+          body: multipart ? options.body as FormData : options.body === undefined ? undefined : JSON.stringify(options.body),
           signal: controller.signal,
         });
         if (response.status === 204 && response.ok) return { data: undefined as T, meta: {} as M };
+        if (response.ok && options.responseType === "blob") return { data: await response.blob() as T, meta: {} as M };
 
         const payload: unknown = await response.json().catch(() => undefined);
         const envelope = record(payload);

@@ -1,4 +1,10 @@
 export type Page<T> = { items: T[]; next_cursor: string | null };
+export type MembershipOperation = {
+  operation_id: string; trip_id: string;
+  state: "PROCESSING" | "PENDING_RECOVERY" | "SUCCEEDED" | "FAILED" | "NEEDS_REVIEW";
+  outcome?: { status: "COMMITTED" | "REJECTED" | "CANCELLED"; error_code?: string };
+  error_code?: string; next_retry_at?: string;
+};
 export type Lifecycle = "UPCOMING" | "ONGOING" | "COMPLETED" | "ARCHIVED";
 export type PlanPolicy = "OWNER_ONLY" | "SELECTED_MEMBERS" | "ALL_MEMBERS";
 export type Membership = { id: string; trip_id: string; user_id: string; role: "OWNER" | "MEMBER"; joined_at: string; left_at: string | null };
@@ -14,7 +20,7 @@ export type Activity = {
   activity_type: string; selected_location_id: string | null; starts_at: string | null; ends_at: string | null;
   position: number; status: "TODO" | "COMPLETED"; source: string; plan_version: number;
 };
-export type ActivityInput = { title: string; activity_type: string; description?: string | null; starts_at?: string | null; ends_at?: string | null; selected_location_id?: string | null; position: number; expected_plan_version: number };
+export type ActivityInput = { title: string; activity_type: string; description?: string | null; public_description?: string | null; starts_at?: string | null; ends_at?: string | null; selected_location_id?: string | null; position: number; expected_plan_version: number };
 export type SelectedLocation = { id: string; name: string; address: string | null; latitude: string | null; longitude: string | null; source: string };
 export type PackingItem = { id: string; name: string; quantity: string; unit: string | null; note: string | null; category: string | null; assigned_member_id: string | null; due_at: string | null; status: "TODO" | "COMPLETED" };
 export type DressCode = { id: string; scope_type: "TRIP" | "DAY" | "ACTIVITY"; plan_date: string | null; activity_id: string | null; label: string; description: string | null };

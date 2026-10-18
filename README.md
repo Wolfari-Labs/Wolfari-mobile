@@ -19,6 +19,11 @@ The mobile screens follow the Wolfari Figma mobile design and use the current
 API Gateway contracts: authentication, trip list/create/update, itinerary,
 activity create/edit/complete/delete, place search, members, invitations,
 plan permissions, profile updates and session revocation.
+Additional Gateway flows include password recovery/change, email verification,
+avatar upload/removal, LINK invitations, selected-editor permissions and member
+history. Leave/remove-member screens track asynchronous operation receipts; the
+backend feature remains disabled by default pending Finance integration. See the
+source-audit notes in `docs/mobile-api.md` for backend boundaries.
 
 The interface uses Liquid Glass floating controls, grouped cards, system typography,
 native page sheets and system date/time pickers. Capable iOS 26+ devices use

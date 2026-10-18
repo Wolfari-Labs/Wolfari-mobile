@@ -1,5 +1,5 @@
 import { Image } from "expo-image";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { Keyboard, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
@@ -15,6 +15,7 @@ import { validateLogin, type AuthFieldErrors } from "../validation";
 import { pendingInvitation } from "@/features/trips/pending-invitation";
 
 export default function SignInScreen() {
+  const { notice } = useLocalSearchParams<{ notice?: string }>();
   const { signIn, status, profile } = useSession();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -57,6 +58,7 @@ export default function SignInScreen() {
         <Image source={designAssets.mascot} style={styles.mascot} contentFit="contain" accessible={false} />
       </View>
       <Text style={[typography.body, styles.muted]}>Tiếp tục những hành trình của bạn.</Text>
+      {notice === "password-updated" && <Feedback success message="Đã cập nhật mật khẩu. Hãy đăng nhập lại bằng mật khẩu mới." />}
       {status === "authenticated" && profile ? (
         <>
           <Feedback success message={`Bạn đã đăng nhập với tài khoản ${profile.email}.`} />
@@ -70,6 +72,7 @@ export default function SignInScreen() {
             onChangeText={(value) => { setPassword(value); setErrors((current) => ({ ...current, password: undefined })); setError(null); }} />
           {error && <Feedback message={error} />}
           <Button label="Đăng nhập" loading={loading} onPress={() => { void submit(); }} />
+          <Button label="Quên mật khẩu?" variant="soft" disabled={loading} onPress={() => router.push("/forgot-password")} />
           <View style={styles.signUpPrompt}>
             <Text style={[typography.body, styles.muted, styles.promptCopy]}>Bạn chưa có tài khoản?</Text>
             <Pressable disabled={loading} accessibilityRole="link" onPress={() => router.replace("/sign-up")}>

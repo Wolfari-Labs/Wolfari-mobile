@@ -86,6 +86,7 @@ export default function SignUpScreen() {
           <View style={styles.modalCard} accessibilityViewIsModal>
             <Text accessibilityRole="header" style={typography.section}>Kiểm tra email của bạn</Text>
             <Text style={[typography.body, styles.muted]}>Yêu cầu đăng ký đã được tiếp nhận. Hãy kiểm tra email để xác minh tài khoản, hoặc đăng nhập nếu bạn đã có tài khoản.</Text>
+            <Button label="Xác minh email" variant="soft" onPress={() => router.push("/verify-email")} />
             <Button label="Đăng nhập" onPress={() => { setAccepted(false); router.replace("/sign-in"); }} />
             <Button label="Đóng" variant="soft" onPress={() => setAccepted(false)} />
           </View>

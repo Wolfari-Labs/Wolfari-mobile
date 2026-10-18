@@ -1,14 +1,14 @@
-import { Image } from "expo-image";
+import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
-import { useCallback, useState } from "react";
-import { Text, View } from "react-native";
+import { useCallback, useRef, useState } from "react";
+import { Platform, Text, View } from "react-native";
 
 import { useApi } from "@/shared/api/use-api";
 import { useCommand } from "@/shared/hooks/use-command";
 import { useResource } from "@/shared/hooks/use-resource";
 import { typography } from "@/shared/theme/tokens";
 import { Button } from "@/shared/ui/button";
-import { designAssets } from "@/shared/ui/design-assets";
+import { ProfileAvatar } from "../components/profile-avatar";
 import { Feedback } from "@/shared/ui/feedback";
 import { FormField } from "@/shared/ui/form-field";
 import { Heading, ResourceFeedback, ui } from "@/shared/ui/journal";
@@ -49,6 +49,25 @@ function ProfileForm({
   const profile = resource.data!;
   const [name, setName] = useState(profile.full_name);
   const [validation, setValidation] = useState<string>();
+  const [photo, setPhoto] = useState<ImagePicker.ImagePickerAsset | null>();
+  const [picking, setPicking] = useState(false);
+  const pickerLock = useRef(false);
+  const uploaded = useRef<string | undefined>(undefined);
+  async function choosePhoto() {
+    if (pickerLock.current || command.busy) return;
+    pickerLock.current = true; setPicking(true); setValidation(undefined);
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], allowsEditing: true, aspect: [1, 1], quality: 0.85 });
+      if (result.canceled) return;
+      const asset = result.assets[0];
+      const mime = asset.mimeType ?? (/\.png(?:\?|$)/i.test(asset.uri) ? "image/png" : /\.jpe?g(?:\?|$)/i.test(asset.uri) ? "image/jpeg" : "");
+      if (!["image/jpeg", "image/png"].includes(mime) || (asset.fileSize ?? 0) > 10 * 1024 * 1024 || asset.width * asset.height > 40_000_000) {
+        setValidation("Chọn ảnh JPEG/PNG tối đa 10 MB và 40 megapixel."); return;
+      }
+      uploaded.current = undefined; setPhoto({ ...asset, mimeType: mime });
+    } catch { setValidation("Chưa thể mở thư viện ảnh. Vui lòng thử lại."); }
+    finally { pickerLock.current = false; setPicking(false); }
+  }
   async function save() {
     if (!name.trim() || name.trim().length > 150) {
       setValidation("Họ và tên cần từ 1 đến 150 ký tự.");
@@ -56,9 +75,22 @@ function ProfileForm({
     }
     setValidation(undefined);
     const input = { full_name: name.trim(), expected_version: profile.version };
-    const result = await command.run(input, () =>
-      api.request<Profile>("/me", { method: "PATCH", body: input }),
-    );
+    const result = await command.run({ ...input, photo: photo?.uri ?? photo }, async () => {
+      if (photo && !uploaded.current) {
+        const body = new FormData();
+        if (Platform.OS === "web") {
+          if (!photo.file) throw new Error("Chưa thể đọc ảnh đã chọn. Hãy chọn lại.");
+          body.append("file", photo.file);
+        } else {
+          // React Native's multipart implementation accepts a local URI descriptor.
+          body.append("file", { uri: photo.uri, type: photo.mimeType, name: photo.mimeType === "image/png" ? "avatar.png" : "avatar.jpg" } as unknown as Blob);
+        }
+        uploaded.current = (await api.account.uploadAvatar(body)).object_key;
+      }
+      return api.request<Profile>("/me", { method: "PATCH", body: {
+        ...input, ...(photo === null ? { avatar_object_key: null } : uploaded.current ? { avatar_object_key: uploaded.current } : {}),
+      } });
+    });
     if (result) {
       updateProfile(result);
       router.replace("/(tabs)/profile");
@@ -72,6 +104,7 @@ function ProfileForm({
         <Button
           label="Lưu thay đổi"
           loading={command.busy}
+          disabled={picking}
           onPress={() => {
             void save();
           }}
@@ -83,13 +116,12 @@ function ProfileForm({
         subtitle="Cập nhật để nhóm dễ nhận ra bạn."
       />
       <View style={[ui.row, { marginVertical: 20 }]}>
-        <Image
-          source={designAssets.profileMascot}
-          style={{ width: 64, height: 64 }}
-          contentFit="contain"
-        />
+        <ProfileAvatar profile={photo === null ? { ...profile, avatar: null } : profile} preview={photo?.uri} />
         <Text style={typography.headline}>{profile.full_name}</Text>
       </View>
+      <Button label="Chọn ảnh đại diện" variant="soft" loading={picking} disabled={command.busy} onPress={() => { void choosePhoto(); }} />
+      {(photo || (profile.avatar && photo !== null)) && <Button label="Gỡ ảnh đại diện" variant="destructive" disabled={command.busy || picking} onPress={() => { uploaded.current = undefined; setPhoto(null); }} />}
+      <Text style={typography.footnote}>JPEG/PNG · Tối đa 10 MB. Ảnh chỉ thay đổi khi bấm Lưu thay đổi.</Text>
       {validation && <Feedback message={validation} />}
       {command.error && (
         <>

@@ -6,16 +6,21 @@ See [Expo Go over Wi-Fi](expo-go.md) for networking and the development LAN brid
 | Screen / flow | Gateway endpoints | Behavior |
 | --- | --- | --- |
 | Register / login / restore | `POST /auth/register`, `/auth/login`, `/auth/refresh` | Registration returns 202 without login; native refresh token in SecureStore |
+| Password recovery | `POST /auth/password-reset-requests`, `/auth/password-resets` | Generic anti-enumeration response; paste email link/token; validate 15–128 Unicode characters and confirmation; clear local session after reset |
+| Password change | `POST /me/password-change` | Current/new password; credential 401 does not trigger a refresh/replay; backend revokes all sessions, then mobile returns to sign-in |
+| Email verification | `POST /auth/email-verifications`, `/auth/email-verifications/confirm` | Authenticated resend, public token confirmation, refresh own profile; links parsed locally and never fetched |
+| Avatar | `POST/GET /me/avatar`, `PATCH /me` | System image picker, JPEG/PNG up to 10 MB/40 MP, multipart upload then versioned profile save, preview/remove; private image fetched with auth into memory |
 | Home / My trips | `GET /trips?lifecycle=&limit=&cursor=` | Actual data, four lifecycle filters, pagination, loading/error/empty/retry |
 | Create trip | `POST /trips` | Name, description, Vietnam timezone, validated dates; client_request_id equals Idempotency-Key |
 | Overview / itinerary | `GET /trips/:id`, `GET /trips/:id/plan` | Actual activities, packing counts, descriptions and permissions |
-| Activities | `POST /trips/:id/activities`, `PATCH/DELETE .../activities/:activityId`, `PATCH .../completion` | Add/edit/delete/complete, scheduled/unscheduled, overnight dates, expected plan version |
+| Activities | `POST /trips/:id/activities`, `PATCH/DELETE .../activities/:activityId`, `PATCH .../completion` | Add/edit/delete/complete, scheduled/unscheduled, overnight dates, public description, attach/detach existing selected location, expected plan version |
 | Reorder itinerary | `PUT /trips/:id/activities/order` | All activity IDs in one atomic, versioned order; explicit group save, no time shifts |
 | Places | `GET /travel/places?trip_id=&q=` and plan selected locations | Actual coordinates, native map, external maps, provider attribution/stale/mock metadata |
-| Members | `GET /trips/:id/members` | All pages; own profile name and short user IDs for others (endpoint does not return names) |
-| Invite | `GET/POST /trips/:id/invitations`, `POST .../:invitationId/resend`, `POST .../:invitationId/revoke` | Owner controls, email validation, revision/version checks, revoke confirmation |
+| Members | `GET /trips/:id/members?include_left=` | All pages; active/history filters; own profile name and short user IDs for others (endpoint does not return names) |
+| Leave/remove member | `POST /trips/:id/leave`, `DELETE /trips/:id/members/:memberId`, `GET /operations/:operationId` | Confirmation/reason, role checks, frozen idempotency key/body/revision on uncertain reply; foreground polling, success only for SUCCEEDED + COMMITTED; backend feature remains disabled by default |
+| Invite | `GET/POST /trips/:id/invitations`, `POST .../:invitationId/resend`, `POST .../:invitationId/revoke` | Owner controls, EMAIL/LINK creation, one-time link shown for manual sharing, revision/version checks, revoke confirmation |
 | Respond to invite | `POST /invitations/preview`, `/invitations/accept`, `/invitations/decline` | Paste token or fragment link, preview before responding, memory-only pending token through login |
-| Plan permissions | `PUT /trips/:id/plan-policy` | Owner chooses OWNER_ONLY or ALL_MEMBERS; existing SELECTED_MEMBERS displayed without inventing its editor list |
+| Plan permissions | `PUT /trips/:id/plan-policy` | OWNER_ONLY, ALL_MEMBERS, SELECTED_MEMBERS with real active membership IDs; explicit confirmation replaces the editor list because the current read API does not return it |
 | Edit trip | `PATCH /trips/:id` | Name, group/public descriptions, plan/export revisions |
 | Packing / dress code | `GET /trips/:id/plan` | Read-only shared data, packing filters, P15 modal when actual items are all complete |
 | Edit profile | `GET/PATCH /me` | Actual profile/version, 150-character name limit |
@@ -34,14 +39,36 @@ trip-delete or ownership-transfer routes. The app does not simulate successful
 saves or call speculative endpoints. Packing/dress code stay read-only, and
 future tools are marked as coming later.
 
+### Source audit — 2026-10-18
+
+Compared the sibling `Wolfari-backend/apps/api-gateway/src/{identity,trip,plan,invitation,membership}-proxy.ts`
+against mobile and checked Identity controller/service/avatar validation plus the
+membership lifecycle handoff. Backend source/configuration were not modified.
+
+- Membership lifecycle is Trip-side implementation only. The backend defaults to
+  `TRIP_MEMBERSHIP_LIFECYCLE_ENABLED=false` and explicitly requires Finance/shared
+  protocol readiness before enabling it for real users. Mobile implements the
+  contract, not that missing dependency. A 503 is not reported as success.
+- Pending membership requests keep the same key, reason and revision in memory
+  across navigation during the current app process. They are not an offline queue
+  and do not survive an app restart; the UI shows the operation ID to retain.
+- Current-session logout cannot safely infer `refresh_sessions.id` from JWT `sid`.
+  Local sign-out remains local; session management revokes actual IDs with DELETE.
+  The alternative POST `/auth/logout` takes that same server session ID and is not
+  treated as a current-session discovery API.
+- Existing mobile place search targets `/travel/places`, but the inspected sibling
+  Gateway source does not currently route that path. Do not infer working search
+  from a UI fixture; verify the deployed Gateway/provider separately. Manual
+  activity entry and viewing plan locations remain available.
+
 ## Client behavior
 
 - Native sends `X-Client-Type: mobile`, Bearer tokens and no cookies. Refresh token
   uses SecureStore; access token/profile remain in memory.
 - Web keeps HttpOnly refresh cookies and CSRF. No token in localStorage.
 - Concurrent refreshes share one request. Authenticated 401 gets one refresh/retry
-  with the same operation ID.
-- Writes carry UUID Idempotency-Key and backend revisions. A lost/503 response
+  with the same operation ID, except password-change credential failures.
+- Trip writes carry UUID Idempotency-Key and backend revisions. A lost/503 response
   retains the key for the same intent; duplicate in-flight submissions are blocked.
 - A 409 keeps the form draft and offers reload before another submission.
 - Resources reload on focus/pull-to-refresh. Older requests abort; permission
@@ -78,6 +105,13 @@ explains that the request may already have succeeded; reopening loads the server
 state. There is no offline write queue or persisted draft.
 
 ## Checks
+
+`npm run test:ui:features` uses contract fixtures (no real emails or backend writes)
+for recovery, email verification, password change/credential-401 handling, avatar
+upload, LINK invitations, selected-editor confirmation, member history, uncertain
+request replay, asynchronous completion and Finance blocking. Screenshots are in
+`.cache/visual/backend-features/`. Native image picking and multipart upload still
+need a physical Android/iOS check.
 
 `npm run lint`, `npm run typecheck`, `npm test` cover contracts, session races,
 date/timezone/DST validation, idempotency/revisions, pagination and bridge boundaries.

@@ -2,6 +2,8 @@ import { ApiError } from "./api-client";
 
 export function errorMessage(error: unknown): string {
   if (error instanceof ApiError) {
+    if (error.code === "FINANCE_OBLIGATION_BLOCKED") return "Chưa thể rời hoặc xóa thành viên vì còn nghĩa vụ tài chính cần giải quyết.";
+    if (error.code === "STATE_CONFLICT") return "Trạng thái hiện tại chưa cho phép thao tác này. Tải lại thông tin rồi kiểm tra lại.";
     if (error.status === 409) return "Kế hoạch vừa được cập nhật. Tải lại dữ liệu rồi thử lại để giữ thay đổi của cả nhóm.";
     if (error.status === 403) return "Bạn chưa có quyền thực hiện thao tác này trong chuyến đi.";
     if (error.status === 404) return "Nội dung không còn khả dụng hoặc bạn không còn là thành viên.";

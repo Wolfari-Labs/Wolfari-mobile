@@ -14,6 +14,7 @@ import {
   IconButton,
   ResourceFeedback,
   SectionLink,
+  Segments,
   ui,
 } from "@/shared/ui/journal";
 import { Screen } from "@/shared/ui/screen";
@@ -29,11 +30,12 @@ export default function MembersScreen() {
   const { profile } = useSession();
   const command = useCommand();
   const owner = data?.trip.current_membership.role === "OWNER";
+  const [includeLeft, setIncludeLeft] = useState(false);
   const members = useResource(
     useCallback(
       (signal: AbortSignal) =>
-        collectPages((cursor) => api.trips.members(id, cursor, signal), signal),
-      [api, id],
+        collectPages((cursor) => api.trips.members(id, cursor, signal, includeLeft), signal),
+      [api, id, includeLeft],
     ),
   );
   const invitations = useResource(
@@ -102,6 +104,7 @@ export default function MembersScreen() {
           void members.reload();
         }}
       />
+      <Segments items={[{ value: "active", label: "Đang tham gia" }, { value: "all", label: "Cả lịch sử" }]} value={includeLeft ? "all" : "active"} onChange={value => setIncludeLeft(value === "all")} />
       {members.data?.map((member) => (
         <View key={member.id} style={ui.link}>
           <View style={ui.rowIcon}>
@@ -120,7 +123,9 @@ export default function MembersScreen() {
             <Text style={[typography.footnote, { marginTop: 4 }]}>
               {member.role === "OWNER" ? "Người tổ chức" : "Thành viên"} · Tham
               gia {dateLabel(member.joined_at)}
+              {member.left_at ? ` · Đã rời ${dateLabel(member.left_at)}` : ""}
             </Text>
+            {owner && member.role === "MEMBER" && !member.left_at && data?.trip.lifecycle !== "ARCHIVED" && <Button label={`Xóa ${member.user_id.slice(0, 8)}`} variant="destructive" compact style={{ alignSelf: "flex-start", marginTop: 8 }} onPress={() => router.push({ pathname: "/trip/[id]/membership-action", params: { id, memberId: member.id } })} />}
           </View>
           {member.role === "OWNER" && (
             <Text style={[typography.footnote, { color: colors.teal }]}>

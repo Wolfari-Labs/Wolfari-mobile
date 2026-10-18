@@ -35,6 +35,7 @@
         }
       ],
       "expo-secure-store",
+      ["expo-image-picker", { "photosPermission": "Cho phép Wolfari chọn ảnh đại diện từ thư viện của bạn.", "cameraPermission": false, "microphonePermission": false }],
       "@react-native-community/datetimepicker"
     ],
     "experiments": {

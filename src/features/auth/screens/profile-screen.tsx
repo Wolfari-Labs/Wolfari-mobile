@@ -1,4 +1,3 @@
-import { Image } from "expo-image";
 import { router } from "expo-router";
 import { useState } from "react";
 import { Text, View } from "react-native";
@@ -6,7 +5,7 @@ import { Text, View } from "react-native";
 import { colors, typography } from "@/shared/theme/tokens";
 import { AppHeader } from "@/shared/ui/app-header";
 import { Button } from "@/shared/ui/button";
-import { designAssets } from "@/shared/ui/design-assets";
+import { ProfileAvatar } from "../components/profile-avatar";
 import { Feedback } from "@/shared/ui/feedback";
 import { Heading, IconButton, SectionLink, ui } from "@/shared/ui/journal";
 import { Screen } from "@/shared/ui/screen";
@@ -41,11 +40,7 @@ export default function ProfileScreen() {
         subtitle="Những hành trình bắt đầu từ đây."
       />
       <View style={[ui.card, ui.row]}>
-        <Image
-          source={designAssets.profileMascot}
-          style={{ width: 64, height: 64 }}
-          contentFit="contain"
-        />
+        <ProfileAvatar profile={profile} />
         <View style={ui.flex}>
           <Text style={typography.section}>{profile?.full_name}</Text>
           <Text style={[typography.footnote, { marginTop: 4 }]}>
@@ -59,6 +54,8 @@ export default function ProfileScreen() {
         />
       </View>
       <View style={ui.group}>
+        <SectionLink grouped title="Đổi mật khẩu" subtitle="Bảo vệ tài khoản của bạn" icon="lock" onPress={() => router.push("/change-password")} />
+        <SectionLink grouped title="Xác minh email" subtitle={profile?.email_verified_at ? "Đã xác minh" : "Xác minh để nhận lời mời qua email"} icon="mail" onPress={() => router.push("/verify-email")} />
         <SectionLink
           grouped
           title="Chuyến đi của tôi"
