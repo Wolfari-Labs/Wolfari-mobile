@@ -2,6 +2,7 @@ import { Image } from "expo-image";
 import { router, useLocalSearchParams } from "expo-router";
 import { useState, type PropsWithChildren, type ReactNode } from "react";
 import {
+  Animated,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -16,6 +17,7 @@ import {
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
 
+import { useAccessibilityPreferences } from "@/shared/hooks/use-accessibility-preferences";
 import { colors, typography } from "@/shared/theme/tokens";
 import { designIcons } from "./design-assets";
 import { DesignIcon } from "./design-icon";
@@ -35,6 +37,46 @@ type Props = PropsWithChildren<{
   onRefresh?: () => void;
   onBack?: () => void;
 }>;
+
+function ScreenBackButton({ onPress }: { onPress: () => void }) {
+  const { reduceMotion } = useAccessibilityPreferences();
+  const [scale] = useState(() => new Animated.Value(1));
+
+  const handlePressIn = () => {
+    if (reduceMotion) return;
+    Animated.spring(scale, {
+      toValue: 0.9,
+      damping: 16,
+      stiffness: 350,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const handlePressOut = () => {
+    if (reduceMotion) return;
+    Animated.spring(scale, {
+      toValue: 1,
+      damping: 12,
+      stiffness: 240,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  return (
+    <Animated.View style={{ transform: [{ scale }] }}>
+      <Pressable
+        onPress={onPress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        accessibilityRole="button"
+        accessibilityLabel="Quay lại"
+        style={styles.back}
+      >
+        <DesignIcon name="back" size={24} tintColor={colors.teal} />
+      </Pressable>
+    </Animated.View>
+  );
+}
 
 export function Screen({
   title,
@@ -92,25 +134,14 @@ export function Screen({
           </View>
         )}
         <GlassSurface
+          variant="regular"
           style={styles.header}
           onLayout={(event) => setHeaderHeight(event.nativeEvent.layout.height)}
         >
           {header ?? (
             <>
               <View style={styles.headerSide}>
-                {showBack && (
-                  <Pressable
-                    onPress={goBack}
-                    accessibilityRole="button"
-                    accessibilityLabel="Quay lại"
-                    style={({ pressed }) => [
-                      styles.back,
-                      pressed && styles.backPressed,
-                    ]}
-                  >
-                    <DesignIcon name="back" size={24} tintColor={colors.teal} />
-                  </Pressable>
-                )}
+                {showBack && <ScreenBackButton onPress={goBack} />}
               </View>
               <Text
                 accessibilityRole="header"
@@ -161,6 +192,7 @@ export function Screen({
           </ScrollView>
           {footer && (
             <GlassSurface
+              variant="prominent"
               style={[
                 styles.footer,
                 { paddingBottom: Math.max(insets.bottom, 16) },

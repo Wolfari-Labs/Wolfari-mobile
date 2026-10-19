@@ -68,7 +68,7 @@ export function Sheet({
           style={[styles.sheet, nativeSheet && styles.nativeSheet]}
         >
           {!nativeSheet && <View style={styles.handle} />}
-          <GlassSurface style={styles.header}>
+          <GlassSurface variant="regular" style={styles.header}>
             <Text
               accessibilityRole="header"
               style={[typography.headline, styles.title]}

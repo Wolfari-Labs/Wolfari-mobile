@@ -4,7 +4,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { useSession } from "@/features/auth/session/session-provider";
-import { colors, radii, typography } from "@/shared/theme/tokens";
+import { colors, radii, shadows, typography } from "@/shared/theme/tokens";
 import { Button } from "@/shared/ui/button";
 import { designAssets, type DesignIconName } from "@/shared/ui/design-assets";
 import { DesignIcon } from "@/shared/ui/design-icon";
@@ -82,7 +82,7 @@ const styles = StyleSheet.create({
   headerButton: { minWidth: 124 },
   heading: { gap: 6 },
   eyebrow: { color: colors.teal },
-  cover: { width: "100%", aspectRatio: 354 / 234, borderRadius: radii.card, overflow: "hidden" },
+  cover: { width: "100%", aspectRatio: 354 / 234, borderRadius: radii.card, overflow: "hidden", ...shadows.card },
   coverMascot: { position: "absolute", top: 12, right: 12, width: 78, height: 78 },
   coverCaption: { position: "absolute", bottom: 26, left: 20, right: 20, gap: 4 },
   coverTitle: { color: colors.surface },
@@ -93,8 +93,8 @@ const styles = StyleSheet.create({
   promptAction: { flex: 1 },
   muted: { color: colors.muted },
   link: { color: colors.teal, fontWeight: "600" },
-  featureRow: { minHeight: 76, flexDirection: "row", alignItems: "center", gap: 12, padding: 12, borderRadius: radii.control, backgroundColor: colors.surface },
-  featurePressed: { backgroundColor: colors.peach },
+  featureRow: { minHeight: 76, flexDirection: "row", alignItems: "center", gap: 12, padding: 12, borderRadius: radii.control, backgroundColor: colors.surface, ...shadows.card },
+  featurePressed: { backgroundColor: colors.tealSoft, transform: [{ scale: 0.985 }] },
   featureIcon: { width: 24, height: 24, justifyContent: "center" },
   featureCopy: { flex: 1, gap: 4 },
   featureTitle: { lineHeight: 20 },

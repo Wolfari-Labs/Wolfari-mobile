@@ -1,15 +1,16 @@
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
-import { useCallback } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useCallback, useState } from "react";
+import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { useSession } from "@/features/auth/session/session-provider";
 import { TripCard } from "@/features/trips/components/trip-card";
 import { openTrip } from "@/features/trips/components/trip-navigation";
 import { useApi } from "@/shared/api/use-api";
+import { useAccessibilityPreferences } from "@/shared/hooks/use-accessibility-preferences";
 import { useResource } from "@/shared/hooks/use-resource";
-import { colors, typography } from "@/shared/theme/tokens";
+import { colors, shadows, typography } from "@/shared/theme/tokens";
 import { AppHeader } from "@/shared/ui/app-header";
 import { Button } from "@/shared/ui/button";
 import { designAssets } from "@/shared/ui/design-assets";
@@ -110,33 +111,14 @@ export default function HomeScreen() {
       <Text accessibilityRole="header" style={typography.section}>
         Cảm hứng lên đường
       </Text>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Lên kế hoạch một ngày bên biển"
+      <InspirationCard
         onPress={() =>
           router.push({
             pathname: "/create-trip",
             params: { idea: "Một ngày bên biển" },
           })
         }
-        style={styles.inspiration}
-      >
-        <Image
-          source={designAssets.coast}
-          style={StyleSheet.absoluteFill}
-          contentFit="cover"
-        />
-        <LinearGradient
-          colors={["transparent", "rgba(5,31,61,0.8)"]}
-          style={StyleSheet.absoluteFill}
-        />
-        <Text style={[typography.title, { color: "white" }]}>
-          Biển xanh gọi tên
-        </Text>
-        <Text style={[typography.footnote, { color: "white" }]}>
-          Một chút nắng, một ngày thật xanh
-        </Text>
-      </Pressable>
+      />
       <Button
         label="Xem các chuyến đi của tôi"
         variant="soft"
@@ -145,6 +127,61 @@ export default function HomeScreen() {
     </Screen>
   );
 }
+
+function InspirationCard({ onPress }: { onPress: () => void }) {
+  const { reduceMotion } = useAccessibilityPreferences();
+  const [scale] = useState(() => new Animated.Value(1));
+
+  const handlePressIn = () => {
+    if (reduceMotion) return;
+    Animated.spring(scale, {
+      toValue: 0.98,
+      damping: 16,
+      stiffness: 350,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const handlePressOut = () => {
+    if (reduceMotion) return;
+    Animated.spring(scale, {
+      toValue: 1,
+      damping: 12,
+      stiffness: 240,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  return (
+    <Animated.View style={{ transform: [{ scale }] }}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Lên kế hoạch một ngày bên biển"
+        onPress={onPress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        style={styles.inspiration}
+      >
+        <Image
+          source={designAssets.coast}
+          style={StyleSheet.absoluteFill}
+          contentFit="cover"
+        />
+        <LinearGradient
+          colors={["transparent", "rgba(5,31,61,0.85)"]}
+          style={StyleSheet.absoluteFill}
+        />
+        <Text style={[typography.title, { color: "white" }]}>
+          Biển xanh gọi tên
+        </Text>
+        <Text style={[typography.footnote, { color: "rgba(255,255,255,0.88)" }]}>
+          Một chút nắng, một ngày thật xanh
+        </Text>
+      </Pressable>
+    </Animated.View>
+  );
+}
+
 const styles = StyleSheet.create({
   greeting: {
     flexDirection: "row",
@@ -161,5 +198,6 @@ const styles = StyleSheet.create({
     padding: 16,
     justifyContent: "flex-end",
     gap: 4,
+    ...shadows.card,
   },
 });

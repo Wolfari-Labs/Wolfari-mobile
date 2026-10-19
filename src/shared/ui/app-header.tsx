@@ -1,10 +1,13 @@
 import { Image } from "expo-image";
 import { router } from "expo-router";
-import { Pressable, StyleSheet, View } from "react-native";
+import { useState } from "react";
+import { Animated, Pressable, StyleSheet, View } from "react-native";
 
-import { colors, radii } from "@/shared/theme/tokens";
-import { designAssets } from "./design-assets";
+import { useAccessibilityPreferences } from "@/shared/hooks/use-accessibility-preferences";
+import { colors, radii, shadows } from "@/shared/theme/tokens";
+import { designAssets, type DesignIconName } from "./design-assets";
 import { DesignIcon } from "./design-icon";
+import { GlassSurface } from "./glass-surface";
 
 type Props = {
   onPressNotification?: () => void;
@@ -27,31 +30,73 @@ export function AppHeader({
       />
       <View style={styles.spacer} />
       <View style={styles.actions}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Mở lời mời chuyến đi"
+        <HeaderButton
+          icon="bell"
+          label="Mở lời mời chuyến đi"
           onPress={onPressNotification}
-          style={({ pressed }) => [
-            styles.iconButton,
-            pressed && styles.pressed,
-          ]}
         >
-          <DesignIcon name="bell" size={20} />
           {hasUnreadNotifications && <View style={styles.unreadDot} />}
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Tạo chuyến đi mới"
+        </HeaderButton>
+        <HeaderButton
+          icon="plus"
+          label="Tạo chuyến đi mới"
           onPress={onPressAdd}
-          style={({ pressed }) => [
-            styles.iconButton,
-            pressed && styles.pressed,
-          ]}
-        >
-          <DesignIcon name="plus" size={20} />
-        </Pressable>
+        />
       </View>
     </View>
+  );
+}
+
+function HeaderButton({
+  icon,
+  label,
+  onPress,
+  children,
+}: {
+  icon: DesignIconName;
+  label: string;
+  onPress: () => void;
+  children?: React.ReactNode;
+}) {
+  const { reduceMotion } = useAccessibilityPreferences();
+  const [scale] = useState(() => new Animated.Value(1));
+
+  const handlePressIn = () => {
+    if (reduceMotion) return;
+    Animated.spring(scale, {
+      toValue: 0.92,
+      damping: 16,
+      stiffness: 350,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const handlePressOut = () => {
+    if (reduceMotion) return;
+    Animated.spring(scale, {
+      toValue: 1,
+      damping: 12,
+      stiffness: 240,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  return (
+    <Animated.View style={{ transform: [{ scale }] }}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        onPress={onPress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        style={styles.iconButtonWrapper}
+      >
+        <GlassSurface variant="subtle" style={styles.iconButton}>
+          <DesignIcon name={icon} size={20} tintColor={colors.ink} />
+          {children}
+        </GlassSurface>
+      </Pressable>
+    </Animated.View>
   );
 }
 
@@ -74,24 +119,23 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
   },
+  iconButtonWrapper: {
+    borderRadius: radii.pill,
+  },
   iconButton: {
     width: 44,
     height: 44,
     borderRadius: radii.pill,
-    backgroundColor: colors.surface,
     alignItems: "center",
     justifyContent: "center",
-  },
-  pressed: {
-    backgroundColor: colors.fill,
-    transform: [{ scale: 0.96 }],
+    ...shadows.floating,
   },
   unreadDot: {
     position: "absolute",
     top: 10,
     right: 11,
-    width: 7,
-    height: 7,
+    width: 8,
+    height: 8,
     borderRadius: 999,
     backgroundColor: colors.orange,
     borderWidth: 1.5,

@@ -1,6 +1,7 @@
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   ActivityIndicator,
+  Animated,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -8,7 +9,8 @@ import {
   View,
 } from "react-native";
 
-import { colors, radii, typography } from "@/shared/theme/tokens";
+import { useAccessibilityPreferences } from "@/shared/hooks/use-accessibility-preferences";
+import { colors, radii, shadows, typography } from "@/shared/theme/tokens";
 import { Button } from "./button";
 import { DesignIcon } from "./design-icon";
 import type { DesignIconName } from "./design-assets";
@@ -43,33 +45,65 @@ export function Heading({
     </View>
   );
 }
+
 export function IconButton({
   icon,
   label,
   onPress,
   disabled = false,
+  variant = "soft",
 }: {
   icon: DesignIconName;
   label: string;
   onPress: () => void;
   disabled?: boolean;
+  variant?: "soft" | "glass";
 }) {
+  const { reduceMotion } = useAccessibilityPreferences();
+  const [scale] = useState(() => new Animated.Value(1));
+
+  const handlePressIn = () => {
+    if (disabled || reduceMotion) return;
+    Animated.spring(scale, {
+      toValue: 0.92,
+      damping: 16,
+      stiffness: 350,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const handlePressOut = () => {
+    if (disabled || reduceMotion) return;
+    Animated.spring(scale, {
+      toValue: 1,
+      damping: 12,
+      stiffness: 240,
+      useNativeDriver: true,
+    }).start();
+  };
+
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      disabled={disabled}
-      onPress={onPress}
-      style={({ pressed }) => [
-        ui.iconButton,
-        pressed && ui.pressed,
-        disabled && { opacity: 0.4 },
-      ]}
-    >
-      <DesignIcon name={icon} tintColor={colors.teal} />
-    </Pressable>
+    <Animated.View style={{ transform: [{ scale }] }}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        disabled={disabled}
+        onPress={onPress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        style={({ pressed }) => [
+          ui.iconButton,
+          variant === "glass" && ui.iconButtonGlass,
+          pressed && ui.pressed,
+          disabled && { opacity: 0.4 },
+        ]}
+      >
+        <DesignIcon name={icon} tintColor={colors.teal} />
+      </Pressable>
+    </Animated.View>
   );
 }
+
 export function Segments<T extends string>({
   items,
   value,
@@ -81,8 +115,59 @@ export function Segments<T extends string>({
   onChange: (value: T) => void;
   scroll?: boolean;
 }) {
+  const { reduceMotion } = useAccessibilityPreferences();
+  const [containerWidth, setContainerWidth] = useState(0);
+
+  const selectedIndex = items.findIndex((it) => it.value === value);
+  const [slideAnim] = useState(
+    () => new Animated.Value(Math.max(0, selectedIndex)),
+  );
+
+  useEffect(() => {
+    if (reduceMotion) {
+      slideAnim.setValue(Math.max(0, selectedIndex));
+      return;
+    }
+    Animated.spring(slideAnim, {
+      toValue: Math.max(0, selectedIndex),
+      damping: 18,
+      stiffness: 240,
+      mass: 0.75,
+      useNativeDriver: true,
+    }).start();
+  }, [selectedIndex, reduceMotion, slideAnim]);
+
+  const itemWidth =
+    containerWidth > 0 && items.length > 0
+      ? (containerWidth - 8) / items.length
+      : 0;
+
   const controls = (
-    <GlassSurface style={[ui.segments, scroll && { alignSelf: "flex-start" }]}>
+    <GlassSurface
+      variant="subtle"
+      style={[ui.segments, scroll && { alignSelf: "flex-start" }]}
+      onLayout={(e) => setContainerWidth(e.nativeEvent.layout.width)}
+    >
+      {/* Sliding white card indicator for non-scrolling tabs */}
+      {!scroll && itemWidth > 0 && (
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            ui.segmentPill,
+            {
+              width: itemWidth,
+              transform: [
+                {
+                  translateX: slideAnim.interpolate({
+                    inputRange: items.map((_, i) => i),
+                    outputRange: items.map((_, i) => i * itemWidth),
+                  }),
+                },
+              ],
+            },
+          ]}
+        />
+      )}
       {items.map((item) => (
         <Pressable
           key={item.value}
@@ -92,7 +177,7 @@ export function Segments<T extends string>({
           style={[
             ui.segment,
             scroll ? { flexShrink: 0, paddingHorizontal: 16 } : { flex: 1 },
-            value === item.value && ui.segmentActive,
+            scroll && value === item.value && ui.segmentActive,
           ]}
         >
           <Text
@@ -280,12 +365,30 @@ export const ui = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  iconButtonGlass: {
+    backgroundColor: "rgba(255, 255, 255, 0.78)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.88)",
+    ...shadows.floating,
+  },
   pressed: { opacity: 0.65 },
   segments: {
     flexDirection: "row",
     borderRadius: 22,
     padding: 4,
     minHeight: 48,
+    position: "relative",
+  },
+  segmentPill: {
+    position: "absolute",
+    top: 4,
+    left: 4,
+    bottom: 4,
+    borderRadius: 18,
+    backgroundColor: colors.surface,
+    ...shadows.segmentActive,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(0,0,0,0.04)",
   },
   segment: {
     minHeight: 44,
@@ -293,10 +396,11 @@ export const ui = StyleSheet.create({
     justifyContent: "center",
     borderRadius: 18,
     paddingHorizontal: 5,
+    zIndex: 1,
   },
   segmentActive: {
     backgroundColor: colors.surface,
-    boxShadow: "0 1px 4px rgba(0,0,0,0.1)",
+    ...shadows.segmentActive,
   },
   segmentLabel: { fontSize: 13, lineHeight: 18, textAlign: "center" },
   empty: {
@@ -306,6 +410,7 @@ export const ui = StyleSheet.create({
     gap: 12,
     backgroundColor: colors.surface,
     borderRadius: radii.cardLarge,
+    ...shadows.card,
   },
   emptyIcon: {
     width: 64,
@@ -330,6 +435,7 @@ export const ui = StyleSheet.create({
     borderRadius: radii.card,
     backgroundColor: colors.surface,
     overflow: "hidden",
+    ...shadows.card,
   },
   groupedLink: { borderRadius: 0 },
   separator: {
@@ -361,5 +467,6 @@ export const ui = StyleSheet.create({
     borderRadius: radii.cardLarge,
     backgroundColor: colors.surface,
     gap: 12,
+    ...shadows.card,
   },
 });
