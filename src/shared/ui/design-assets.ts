@@ -4,9 +4,9 @@ export const designAssets = {
   lake: require("@/assets/figma/lake.png"),
   danang: require("@/assets/figma/danang.svg"),
   brushLine: require("@/assets/figma/brush-line.svg"),
-  tripCover: require("@/assets/figma/danang-photo.png"),
-  dalat: require("@/assets/figma/dalat-photo.png"),
-  coast: require("@/assets/figma/coast-photo.png"),
+  tripCover: require("@/assets/figma/danang-photo.jpg"),
+  dalat: require("@/assets/figma/dalat-photo.jpg"),
+  coast: require("@/assets/figma/coast-photo.jpg"),
   underline: require("@/assets/figma/journal-underline.svg"),
   profileMascot: require("@/assets/figma/profile-mascot.png"),
 };
