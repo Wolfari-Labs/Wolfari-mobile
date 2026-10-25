@@ -101,6 +101,7 @@ export default function ItineraryScreen() {
       {trip && plan && (
         <>
           <TripNavigation id={id} active="itinerary" />
+          <Button label="Thử lập bản nháp riêng" variant="soft" compact onPress={() => router.push({ pathname: "/trip/[id]/plan-draft", params: { id } })} />
           <Segments
             scroll
             items={[
