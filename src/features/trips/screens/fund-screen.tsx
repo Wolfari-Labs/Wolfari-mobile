@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Text, View } from "react-native";
+import { PaymentQrEntry } from "@/features/payments/components/payment-qr-entry";
 import { colors, typography } from "@/shared/theme/tokens";
 import { Button } from "@/shared/ui/button";
 import { Heading, Notice, ResourceFeedback, Segments, ui } from "@/shared/ui/journal";
@@ -19,6 +20,7 @@ export default function FundScreen() {
     <ResourceFeedback {...resource} hasData={!!data} onRetry={() => { void resource.reload(); }} />
     {data && <>
       <Notice>Quỹ thật chưa được kết nối. Chưa có số dư được xác nhận. Không thể nạp, chuyển khoản, hoàn tiền hoặc tự trừ quỹ tại đây.</Notice>
+      <PaymentQrEntry key={id} />
       <Button label={demo ? "Ẩn ví dụ quỹ" : "Xem ví dụ quỹ (dữ liệu mẫu)"} variant="soft" onPress={() => setDemo(!demo)} />
       {demo && <View style={[ui.card, { backgroundColor: colors.mint }]}>
         <Text style={typography.headline}>VÍ DỤ MINH HỌA · Không phải quỹ của chuyến đi</Text>

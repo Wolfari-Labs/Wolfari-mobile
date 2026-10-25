@@ -38,7 +38,23 @@
         }
       ],
       "expo-secure-store",
-      ["expo-image-picker", { "photosPermission": "Cho phép Wolfari chọn ảnh đại diện từ thư viện của bạn.", "cameraPermission": false, "microphonePermission": false }],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Cho phép Wolfari chọn ảnh đại diện hoặc ảnh bìa xem trước từ thư viện của bạn.",
+          "cameraPermission": "Cho phép Wolfari dùng camera để quét mã QR chuyển khoản.",
+          "microphonePermission": false
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Cho phép Wolfari dùng camera để quét mã QR chuyển khoản.",
+          "microphonePermission": false,
+          "recordAudioAndroid": false,
+          "barcodeScannerEnabled": true
+        }
+      ],
       "@react-native-community/datetimepicker"
     ],
     "experiments": {
