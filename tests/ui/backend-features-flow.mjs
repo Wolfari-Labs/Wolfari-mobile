@@ -209,3 +209,4 @@ try {
   console.error((await page.locator("body").innerText()).slice(-1800));
   throw error;
 } finally { await browser.close(); }
+import { Buffer } from "node:buffer";

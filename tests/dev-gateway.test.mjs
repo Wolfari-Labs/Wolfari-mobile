@@ -29,3 +29,4 @@ test("LAN bridge forwards API writes, supports web CSRF/cookies, and blocks fore
     assert.equal(received.length, 1);
   } finally { bridge.close(); bridge.closeAllConnections(); target.close(); target.closeAllConnections(); }
 });
+import { Buffer } from "node:buffer";
