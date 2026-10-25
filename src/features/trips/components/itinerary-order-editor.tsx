@@ -39,6 +39,7 @@ export function ItineraryOrderEditor({
     session.getSnapshot,
   );
   const [discard, setDiscard] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const dragging = useRef(false);
   useEffect(() => {
     void session.reload();
@@ -78,7 +79,7 @@ export function ItineraryOrderEditor({
     state.uncertain ||
     !state.plan?.permissions.can_edit;
   const close = () => {
-    if (!state.busy) {
+    if (!state.busy && !dragging.current) {
       if (session.dirty() || state.uncertain) setDiscard(true);
       else onClose();
     }
@@ -87,8 +88,8 @@ export function ItineraryOrderEditor({
     <Sheet
       visible
       title={discard ? "Đóng bản sắp xếp?" : "Sắp xếp lịch trình"}
-      dismissible={!state.busy}
-      allowSwipeDismissal={!session.dirty() && !state.uncertain}
+      dismissible={!state.busy && !isDragging}
+      allowSwipeDismissal={!isDragging && !session.dirty() && !state.uncertain}
       onClose={close}
       scrollable={false}
     >
@@ -109,7 +110,7 @@ export function ItineraryOrderEditor({
       ) : (
         <>
           <Text style={typography.footnote}>
-            Kéo tay nắm ☰ hoặc dùng ▲ ▼. Chỉ đổi thứ tự trong{" "}
+            Nhấn giữ tay nắm ☰ rồi kéo, hoặc dùng ▲ ▼. Chỉ đổi thứ tự trong{" "}
             {day === "unscheduled"
               ? "mục Chưa xếp lịch"
               : `ngày ${day.slice(8)}/${day.slice(5, 7)}`}
@@ -138,6 +139,7 @@ export function ItineraryOrderEditor({
                 disabled={locked}
                 onDragging={(value) => {
                   dragging.current = value;
+                  setIsDragging(value);
                   if (value) session.cancelRead();
                 }}
                 onChange={(ids) =>
@@ -153,7 +155,7 @@ export function ItineraryOrderEditor({
                   label="Bỏ bản nháp, tải bản mới"
                   variant="soft"
                   compact
-                  disabled={state.busy || state.loading}
+                  disabled={state.busy || state.loading || isDragging}
                   onPress={() => {
                     void session.reload(true);
                   }}
@@ -163,12 +165,14 @@ export function ItineraryOrderEditor({
                 label={state.uncertain ? "Thử lưu lại" : "Lưu thứ tự cho nhóm"}
                 loading={state.busy}
                 disabled={
+                  isDragging ||
                   state.loading ||
                   state.conflict ||
                   !state.plan.permissions.can_edit ||
                   !session.dirty()
                 }
                 onPress={() => {
+                  if (dragging.current) return;
                   void session.save().then((saved) => {
                     if (saved) onSaved();
                   });

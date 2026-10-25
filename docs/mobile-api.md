@@ -82,6 +82,20 @@ membership lifecycle handoff. Backend source/configuration were not modified.
 
 The editor opens a fresh plan and lets authorized editors drag within a day
 (including the unscheduled group), with up/down controls as an accessible alternative.
+Open **Sắp xếp lịch trình** or hold an activity card for 400 ms (a normal tap still
+opens details). Hold its 48-point **☰** grip for 250 ms, then drag up/down and release.
+Swipe the title area to scroll normally; moving the grip before the hold delay does
+not reorder. The active row follows the finger, the destination position is shown,
+and dragging near an edge auto-scrolls long days. At least two activities and edit
+permission are required to open the editor.
+
+Dragging uses the existing Gesture Handler/Reanimated dependencies; modal content
+has its own gesture root for Android. Save/close/swipe dismissal are blocked during
+a drag. Gesture cancellation, a second finger, backgrounding, focus loss or layout
+changes cancel the current drag without changing the draft. Completed earlier
+reorders remain until saved or explicitly discarded. No dependency or API change
+is needed for this interaction.
+
 The preview is local until the user selects **Lưu thứ tự cho nhóm**. Changing the
 order does not change `starts_at`/`ends_at`, shift days or reschedule appointments.
 The screen displays backend `position` order, so time labels can be nonchronological.
@@ -116,11 +130,15 @@ need a physical Android/iOS check.
 `npm run lint`, `npm run typecheck`, `npm test` cover contracts, session races,
 date/timezone/DST validation, idempotency/revisions, pagination and bridge boundaries.
 `npm run test:ui`, `npm run test:ui:trips` and `npm run test:ui:order` cover auth,
-password toggles, trip workflows, repeated pointer drag/drop, long-list auto-scroll,
+password toggles, trip workflows, card long-press, browser touch and repeated pointer
+drag/drop, quick-swipe/cancel/multitouch/background/resize guards, long-list auto-scroll,
 two-editor conflicts, lost-response retries and revoked permissions using
 contract fixtures. They do not send email or create real backend trips. Screenshots
 are in `.cache/visual/`. Native Maps, SecureStore and Wi-Fi still require a physical
 phone check in Expo Go, as do native Liquid Glass, touch dragging and screen readers.
+For native drag QA, check Android/iOS modal gestures, ordinary list scrolling,
+dragging at both scroll edges, screen rotation, app background/resume and TalkBack/
+VoiceOver arrow controls. Browser touch emulation is not physical-device coverage.
 
 `npm run test:backend -- --auth --trips` checks the current Trip, Plan, members,
 invitations and Travel search against the real Gateway. Add `--seed-demo` to create

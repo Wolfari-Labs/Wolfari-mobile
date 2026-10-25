@@ -9,10 +9,12 @@ export function ActivityRow({
   activity,
   timezone,
   onPress,
+  onLongPress,
 }: {
   activity: Activity;
   timezone: string;
   onPress: () => void;
+  onLongPress?: () => void;
 }) {
   const complete = activity.status === "COMPLETED";
   return (
@@ -20,6 +22,9 @@ export function ActivityRow({
       accessibilityRole="button"
       accessibilityLabel={`${activity.title}, ${timeLabel(activity.starts_at, timezone)}${complete ? ", đã hoàn thành" : ""}`}
       onPress={onPress}
+      onLongPress={onLongPress}
+      delayLongPress={400}
+      accessibilityHint={onLongPress ? "Chạm để xem. Nhấn giữ để mở sắp xếp lịch trình." : undefined}
       style={({ pressed }) => [styles.row, pressed && { opacity: 0.7 }]}
     >
       <Text style={[typography.footnote, styles.time]}>

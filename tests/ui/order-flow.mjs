@@ -24,6 +24,7 @@ assert.ok(executablePath);
 const browser = await chromium.launch({ executablePath, headless: true });
 const context = await browser.newContext({
   viewport: { width: 402, height: 874 },
+  hasTouch: true,
   reducedMotion: "reduce",
 });
 const output = path.resolve(".cache/visual");
@@ -183,16 +184,102 @@ async function dragTo(title, targetTitle) {
   assert.ok(from && to);
   await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
   await page.mouse.down();
+  await page.waitForTimeout(350); // Intentional long-press activation, not a network wait.
   await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, {
     steps: 12,
   });
   await page.mouse.up();
 }
+
+async function checkTouchGestures() {
+  const cdp = await context.newCDPSession(page);
+  const grip = page.getByLabel("Kéo để di chuyển Ăn sáng", { exact: true });
+  const idle = page.getByText("Nhấn giữ ☰ rồi kéo · Vuốt phần tên để cuộn", { exact: true });
+  const save = button("Lưu thứ tự cho nhóm");
+  const start = async () => {
+    const from = await grip.boundingBox();
+    const to = await page.getByLabel("Kéo để di chuyển Tham quan", { exact: true }).boundingBox();
+    assert.ok(from && to);
+    const point = { id: 1, x: from.x + from.width / 2, y: from.y + from.height / 2 };
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [point] });
+    await page.waitForTimeout(350); // User holds the grip before moving.
+    const startY = point.y;
+    for (let step = 1; step <= 8; step++) {
+      point.y = startY + (to.y + to.height / 2 - startY) * step / 8;
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [point] });
+    }
+    await page.getByText("Thả vào vị trí 2 / 3 · Chưa lưu", { exact: true }).waitFor();
+    assert.equal(await save.isDisabled(), true);
+    assert.equal(await button("Đóng").isDisabled(), true);
+    return point;
+  };
+  for (const reason of ["cancel", "second-finger", "background", "resize"]) {
+    const point = await start();
+    if (reason === "cancel") {
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchCancel", touchPoints: [] });
+    } else if (reason === "second-finger") {
+      await cdp.send("Input.dispatchTouchEvent", {
+        type: "touchStart",
+        touchPoints: [point, { ...point, id: 2, x: point.x - 20 }],
+      });
+    } else if (reason === "background") {
+      // Simulate the web AppState lifecycle, without changing actual device state.
+      await page.evaluate(() => {
+        Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" });
+        document.dispatchEvent(new Event("visibilitychange"));
+      });
+    } else {
+      await page.setViewportSize({ width: 403, height: 874 });
+    }
+    await idle.waitFor();
+    if (reason !== "cancel") {
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    }
+    if (reason === "background") {
+      await page.evaluate(() => {
+        delete document.visibilityState;
+        document.dispatchEvent(new Event("visibilitychange"));
+      });
+      await page.getByText("Phiên bản 1 · Đã đồng bộ", { exact: true }).waitFor();
+    }
+    if (reason === "resize") await page.setViewportSize({ width: 402, height: 874 });
+    assert.equal(await save.isDisabled(), true, `${reason} must not reorder`);
+    assert.equal(await button("Đưa Ăn sáng lên").isDisabled(), true);
+    assert.equal(writes.length, 0, "Dragging must not write before explicit Save");
+  }
+  // A normal touch release does commit the local draft; a reverse drag restores it.
+  await start();
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  await idle.waitFor();
+  assert.equal(await save.isDisabled(), false);
+  assert.equal(writes.length, 0);
+  await dragTo("Ăn sáng", "Tham quan");
+  assert.equal(await save.isDisabled(), true);
+  await cdp.detach();
+}
 try {
   await page.goto(`${appUrl}/trip/${tripId}/itinerary`, {
     waitUntil: "networkidle",
   });
+  // Long-press on a timeline card opens the editor, while a tap still opens details.
+  await button("Ăn sáng, 08:00").click();
+  await page.getByRole("button", { name: "Chỉnh sửa hoạt động", exact: true }).waitFor();
+  await button("Đóng").click();
+  const card = await button("Ăn sáng, 08:00").boundingBox();
+  await page.mouse.move(card.x + card.width / 2, card.y + card.height / 2);
+  await page.mouse.down();
+  await page.getByLabel("Kéo để di chuyển Ăn sáng", { exact: true }).waitFor();
+  await page.mouse.up();
+  await button("Đóng").click();
   await openEditor();
+  // A quick swipe before the hold delay does not accidentally reorder.
+  const quickFrom = await page.getByLabel("Kéo để di chuyển Ăn sáng", { exact: true }).boundingBox();
+  await page.mouse.move(quickFrom.x + quickFrom.width / 2, quickFrom.y + quickFrom.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(quickFrom.x + quickFrom.width / 2, quickFrom.y + quickFrom.height / 2 + 90);
+  await page.mouse.up();
+  assert.equal(await button("Lưu thứ tự cho nhóm").isDisabled(), true);
+  await checkTouchGestures();
   // Actual pointer drag, not just the accessible arrow fallback.
   await dragTo("Ăn sáng", "Tham quan");
   await page.waitForFunction(() =>
@@ -322,6 +409,7 @@ try {
     handle.y + handle.height / 2,
   );
   await page.mouse.down();
+  await page.waitForTimeout(350);
   await page.mouse.move(
     handle.x + handle.width / 2,
     viewport.y + viewport.height - 15,
@@ -344,7 +432,7 @@ try {
   await peer.close();
   assert.deepEqual(errors, []);
   console.log(
-    "PASS repeated drag/drop, long-list auto-scroll, atomic full order, two-editor conflict, lost-response idempotency, revoked permissions, discard and 320px layout (API fixtures only).",
+    "PASS card long-press, touch drag/drop, cancel/multitouch/background/resize guards, hold-to-drag, quick-swipe guard, repeated drag/drop, long-list auto-scroll, atomic full order, two-editor conflict, lost-response idempotency, revoked permissions, discard and 320px layout (API fixtures only).",
   );
 } catch (error) {
   await page
