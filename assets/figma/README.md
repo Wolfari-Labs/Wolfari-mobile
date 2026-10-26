@@ -3,20 +3,23 @@
 The current mobile implementation also uses frames M04–M32 and P15 `612:8805`.
 Assets are downloaded locally; no temporary Figma URLs are used in the app.
 
-- `danang-photo.png`: Cầu Rồng, Bùi Thụy Đào Nguyên,
+- `danang-photo.jpg`: Cầu Rồng, Bùi Thụy Đào Nguyên,
   [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/),
   [original](https://commons.wikimedia.org/wiki/File:Cầu_Rồng.jpg).
   Used as a cropped trip cover, ticket, create/edit preview and settings thumbnail.
-- `coast-photo.png`: Mỹ Khê, Ray in Manila,
+- `coast-photo.jpg`: Mỹ Khê, Ray in Manila,
   [CC BY 2.0](https://creativecommons.org/licenses/by/2.0/),
   [original](https://commons.wikimedia.org/wiki/File:My_Khe_Beach,_Da_Nang,_Vietnam.jpg).
   Used as cropped inspiration/generic travel cover.
-- `dalat-photo.png`: destination cover supplied by Figma M05; original export
+- `dalat-photo.jpg`: destination cover supplied by Figma M05; original export
   preserved, used for trip names containing Đà Lạt.
 - `journal-underline.svg`: M05 heading accent, 96 × 10 slot.
 - `profile-mascot.png`: M22/M32 account illustration, 64 × 64 contain slot.
 - Additional local icons: trip, search, clock, gear and shirt. All keep their
   exported viewBox geometry and use contain sizing in touch-friendly wrappers.
+
+The three photo files contain JPEG data and use `.jpg` extensions so Android's
+resource compiler can package them. Their original image bytes are unchanged.
 
 Trip API has no cover-image field. These pictures illustrate a trip, rather than
 claiming to be uploaded photos. P15 uses the supplied mascot in a 108 × 84 slot.

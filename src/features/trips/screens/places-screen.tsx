@@ -1,7 +1,9 @@
 import { openURL } from "expo-linking";
 import { router } from "expo-router";
+import { randomUUID } from "expo-crypto";
 import { useEffect, useRef, useState } from "react";
-import { Text, View } from "react-native";
+import { Platform, Text, View } from "react-native";
+import { useLocalDraft } from "@/shared/storage/use-local-draft";
 
 import { errorMessage } from "@/shared/api/errors";
 import { typography } from "@/shared/theme/tokens";
@@ -17,10 +19,13 @@ import {
   ui,
 } from "@/shared/ui/journal";
 import { Screen } from "@/shared/ui/screen";
+import { Sheet } from "@/shared/ui/sheet";
 import { TripMap, type MapPoint } from "../components/trip-map";
 import { TripNavigation } from "../components/trip-navigation";
 import { useTrip } from "../hooks/use-trip";
 import type { TravelMeta, TravelPlace } from "../types";
+import { emptyPlaceDraft, isPlaceDraft, validCoordinates, type LocalPlace } from "../model/place-draft";
+import { dateKey, tripDays } from "../utils";
 
 const travelWarnings: Record<string, string> = {
   OPENING_HOURS_NOT_AVAILABLE:
@@ -33,6 +38,17 @@ const travelWarnings: Record<string, string> = {
 export default function PlacesScreen() {
   const resource = useTrip();
   const { data, api, id } = resource;
+  const draft = useLocalDraft(id, "places", isPlaceDraft);
+  const local = draft.value ?? emptyPlaceDraft;
+  const [placeFilter, setPlaceFilter] = useState("all");
+  const [dayFilter, setDayFilter] = useState("all");
+  const [mapType, setMapType] = useState<"standard" | "satellite">("standard");
+  const [manual, setManual] = useState(false);
+  const [placeName, setPlaceName] = useState("");
+  const [address, setAddress] = useState("");
+  const [latitude, setLatitude] = useState("");
+  const [longitude, setLongitude] = useState("");
+  const [manualError, setManualError] = useState<string>();
   const [query, setQuery] = useState("");
   const [result, setResult] = useState<{
     data: TravelPlace[];
@@ -60,28 +76,52 @@ export default function PlacesScreen() {
       const response = await api.trips.searchPlaces(id, query, request.signal);
       if (!request.signal.aborted) setResult(response);
     } catch (cause) {
-      if (!request.signal.aborted) setError(errorMessage(cause));
+      if (!request.signal.aborted) setError(errorMessage(cause) + " Bạn vẫn có thể thêm địa điểm thủ công (nháp).");
     } finally {
       if (!request.signal.aborted) setBusy(false);
     }
   }
-  const places =
+  const allPlaces: LocalPlace[] =
     mode === "saved"
-      ? (data?.plan.selected_locations ?? []).map((p) => ({
+      ? [...(data?.plan.selected_locations ?? []).map((p) => ({
           id: p.id,
           name: p.name,
           address: p.address ?? "",
-          latitude: p.latitude === null ? NaN : Number(p.latitude),
-          longitude: p.longitude === null ? NaN : Number(p.longitude),
-        }))
-      : (result?.data ?? []).map((p) => ({ ...p, ...p.coordinates }));
-  const points: MapPoint[] = places.filter(
-    (p) =>
-      Number.isFinite(p.latitude) &&
-      Number.isFinite(p.longitude) &&
-      Math.abs(p.latitude) <= 90 &&
-      Math.abs(p.longitude) <= 180,
-  );
+          latitude: p.latitude === null ? null : Number(p.latitude),
+          longitude: p.longitude === null ? null : Number(p.longitude),
+          source: "Kế hoạch chung",
+          attribution: [],
+        })), ...local.places]
+      : (result?.data ?? []).map((p) => ({ id: "search:" + p.id, name: p.name, address: p.address, ...p.coordinates, source: (result?.meta.is_mock ? "Dữ liệu mô phỏng · " : "") + (result?.meta.provider ?? "") + " · " + (result?.meta.fetched_at ?? "") + (result?.meta.stale ? " · Có thể đã cũ" : ""), attribution: result?.meta.attribution ?? [] }));
+  const scheduled = (placeId: string) => (data?.plan.activities ?? []).filter(a => a.selected_location_id === placeId && !!a.starts_at);
+  const places = allPlaces.filter(place => {
+    const activities = scheduled(place.id);
+    if (local.hidden.includes(place.id) && !activities.length) return false;
+    if (placeFilter === "picked" && !local.selected.includes(place.id)) return false;
+    if (placeFilter === "scheduled" && !activities.length) return false;
+    if (placeFilter === "unscheduled" && activities.length) return false;
+    return dayFilter === "all" || activities.some(a => dateKey(a.starts_at!, data!.trip.timezone) === dayFilter);
+  });
+  const points: MapPoint[] = places.flatMap(p => validCoordinates(p.latitude, p.longitude) ? [{ id: p.id, name: p.name, latitude: p.latitude!, longitude: p.longitude! }] : []);
+  async function togglePlace(place: LocalPlace) {
+    if (!draft.ready || draft.busy || !data?.plan.permissions.can_edit) return;
+    const exists = local.selected.includes(place.id);
+    await draft.save({
+      ...local,
+      selected: exists ? local.selected.filter(value => value !== place.id) : [...local.selected, place.id],
+      places: !data.plan.selected_locations.some(p => p.id === place.id) && !local.places.some(p => p.id === place.id) ? [...local.places, place] : local.places,
+    });
+  }
+  async function addManual() {
+    if (!draft.ready || draft.busy || !data?.plan.permissions.can_edit) return;
+    if (!placeName.trim()) { setManualError("Nhập tên địa điểm."); return; }
+    const lat = latitude.trim() ? Number(latitude) : null, lon = longitude.trim() ? Number(longitude) : null;
+    if ((latitude.trim() || longitude.trim()) && !validCoordinates(lat, lon)) { setManualError("Nhập đủ vĩ độ (-90 đến 90) và kinh độ (-180 đến 180), hoặc để trống cả hai."); return; }
+    const place: LocalPlace = { id: "local:" + randomUUID(), name: placeName.trim(), address: address.trim(), latitude: lat, longitude: lon, source: "Tự nhập trên thiết bị", attribution: [] };
+    if (await draft.save({ ...local, selected: [...local.selected, place.id], places: [...local.places, place] })) {
+      setManual(false); setPlaceName(""); setAddress(""); setLatitude(""); setLongitude(""); setMode("saved"); setPlaceFilter("picked"); setDayFilter("all");
+    }
+  }
   async function viewMap(latitude: number, longitude: number) {
     try {
       await openURL(
@@ -110,6 +150,10 @@ export default function PlacesScreen() {
       {data && (
         <>
           <TripNavigation id={id} active="places" />
+          <Notice>Chọn và ẩn địa điểm chỉ lưu trên thiết bị theo tài khoản/chuyến đi, không đồng bộ với nhóm. Tìm kiếm trực tuyến phụ thuộc dịch vụ địa điểm của máy chủ.</Notice>
+          {draft.error && <Feedback message={draft.error} />}
+          {draft.error && <Button label="Xóa dữ liệu địa điểm không đọc được" variant="soft" onPress={() => { void draft.clear(); }} />}
+          {data.plan.permissions.can_edit && <Button label="Thêm địa điểm thủ công (nháp)" variant="soft" disabled={!draft.ready || draft.busy} onPress={() => { setManualError(undefined); setManual(true); }} />}
           <FormField
             label="Khám phá địa điểm"
             icon="search"
@@ -134,13 +178,17 @@ export default function PlacesScreen() {
             items={[
               {
                 value: "saved",
-                label: `Đã lưu · ${data.plan.selected_locations.length}`,
+                label: "Nhóm & địa điểm nháp",
               },
               { value: "search", label: "Kết quả tìm kiếm" },
             ]}
             value={mode}
             onChange={setMode}
           />
+          <Segments scroll value={placeFilter} onChange={setPlaceFilter} items={[{ value: "all", label: "Tất cả" }, { value: "picked", label: "Đã chọn trên máy" }, { value: "scheduled", label: "Đã xếp lịch" }, { value: "unscheduled", label: "Chưa xếp lịch" }]} />
+          <Segments scroll value={dayFilter} onChange={setDayFilter} items={[{ value: "all", label: "Mọi ngày" }, ...tripDays(data.trip).map((value, i) => ({ value, label: "Ngày " + (i + 1) }))]} />
+          {Platform.OS !== "web" && <Segments value={mapType} onChange={setMapType} items={[{ value: "standard", label: "Bản đồ đường" }, { value: "satellite", label: "Vệ tinh" }]} />}
+          {!!local.hidden.length && <Button label="Hiện lại các địa điểm đã ẩn trên máy" variant="soft" disabled={!draft.ready || draft.busy} onPress={() => { void draft.save({ ...local, hidden: [] }); }} />}
           {error && <Feedback message={error} />}
           {mode === "search" && result?.meta && (
             <>
@@ -169,7 +217,7 @@ export default function PlacesScreen() {
                 )}
             </>
           )}
-          <TripMap points={points} onSelect={setSelected} />
+          <TripMap points={points} onSelect={setSelected} mapType={mapType} />
           <Heading
             title={
               mode === "saved" ? "Điểm dừng của nhóm" : "Một nơi để khám phá"
@@ -187,6 +235,12 @@ export default function PlacesScreen() {
               ]}
             >
               <Text style={typography.headline}>{place.name}</Text>
+              <Text style={typography.footnote}>{place.source} · {scheduled(place.id).length ? "Đã xếp lịch chung" : "Chưa xếp lịch chung"}</Text>
+              {place.attribution.map(source => /^https?:\/\//i.test(source.url) ? <Button key={source.url} label={source.text} variant="soft" compact onPress={() => { void openURL(source.url).catch(() => setError("Chưa thể mở nguồn địa điểm.")); }} /> : <Text key={source.text} style={typography.footnote}>{source.text}</Text>)}
+              {data.plan.permissions.can_edit && <>
+                <Button label={local.selected.includes(place.id) ? "Bỏ chọn trên thiết bị" : "Chọn trên thiết bị"} compact variant="soft" disabled={!draft.ready || draft.busy} onPress={() => { void togglePlace(place); }} />
+                {!scheduled(place.id).length && <Button label="Ẩn địa điểm trên thiết bị" compact variant="soft" disabled={!draft.ready || draft.busy} onPress={() => { void draft.save({ ...local, hidden: [...new Set([...local.hidden, place.id])] }); }} />}
+              </>}
               {!!place.address && (
                 <Text style={typography.footnote}>{place.address}</Text>
               )}
@@ -196,7 +250,7 @@ export default function PlacesScreen() {
                   variant="soft"
                   compact
                   onPress={() => {
-                    void viewMap(place.latitude, place.longitude);
+                    void viewMap(place.latitude!, place.longitude!);
                   }}
                 />
               )}
@@ -211,7 +265,7 @@ export default function PlacesScreen() {
                         id,
                         title: place.name,
                         note: place.address,
-                        ...(mode === "saved" ? { locationId: place.id } : {}),
+                        ...(data.plan.selected_locations.some(p => p.id === place.id) ? { locationId: place.id } : {}),
                       },
                     })
                   }
@@ -219,6 +273,16 @@ export default function PlacesScreen() {
               )}
             </View>
           ))}
+          <Button label="Lên bản nháp từ địa điểm đã chọn" variant="soft" onPress={() => router.push({ pathname: "/trip/[id]/plan-draft", params: { id } })} />
+          <Sheet visible={manual} title="Địa điểm riêng trên thiết bị" dismissible={!draft.busy} onClose={() => setManual(false)}>
+            <Notice>Không tạo địa điểm chung. Tọa độ không bắt buộc; cần đủ hai tọa độ để hiện trên bản đồ.</Notice>
+            <FormField label="Tên địa điểm" icon="pin" value={placeName} onChangeText={setPlaceName} maxLength={200} editable={!draft.busy} />
+            <FormField label="Địa chỉ" icon="map" value={address} onChangeText={setAddress} maxLength={500} editable={!draft.busy} />
+            <FormField label="Vĩ độ" icon="pin" value={latitude} onChangeText={setLatitude} placeholder="16.0544" maxLength={20} editable={!draft.busy} />
+            <FormField label="Kinh độ" icon="pin" value={longitude} onChangeText={setLongitude} placeholder="108.2022" maxLength={20} editable={!draft.busy} />
+            {manualError && <Feedback message={manualError} />}{draft.error && <Feedback message={draft.error} />}
+            <Button label="Lưu địa điểm trên thiết bị" disabled={!draft.ready || !data.plan.permissions.can_edit} loading={draft.busy} onPress={() => { void addManual(); }} />
+          </Sheet>
           {!places.length && !busy && (
             <EmptyState
               title={

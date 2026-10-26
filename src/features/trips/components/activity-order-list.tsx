@@ -1,20 +1,24 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type PropsWithChildren } from "react";
+import { useIsFocused } from "expo-router";
 import {
   AccessibilityInfo,
-  Animated,
-  PanResponder,
+  AppState,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
   useWindowDimensions,
+  type LayoutChangeEvent,
 } from "react-native";
+import Animated, { useAnimatedStyle, useSharedValue, type SharedValue } from "react-native-reanimated";
 
 import { colors, typography } from "@/shared/theme/tokens";
 import type { Activity } from "../types";
 import { moveItem } from "../order-session";
 import { timeLabel } from "../utils";
+import { ActivityDragHandle } from "./activity-drag-handle";
+import { dragPosition, dragScrollOffset, orderFrames, ORDER_LIST_PADDING, ORDER_ROW_GAP, type OrderFrame } from "../model/order-drag";
 
 type Props = {
   activities: Activity[];
@@ -23,9 +27,29 @@ type Props = {
   onChange: (ids: string[]) => void;
   onDragging: (dragging: boolean) => void;
 };
-type Frame = { y: number; height: number };
-const ROW_GAP = 10;
-const LIST_PADDING = 3;
+
+function OrderRow({ id, active, target, translation, onLayout, children }: PropsWithChildren<{
+  id: string;
+  active: boolean;
+  target: boolean;
+  translation: SharedValue<number>;
+  onLayout: (event: LayoutChangeEvent) => void;
+}>) {
+  // Keep an animated style attached to each row and explicitly reset inactive rows.
+  // Removing a Reanimated style does not undo its last native transform.
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: active ? translation.get() : 0 }],
+  }));
+  return (
+    <Animated.View
+      testID={`order-row-${id}`}
+      onLayout={onLayout}
+      style={[styles.row, target && styles.target, active && styles.dragging, animatedStyle]}
+    >
+      {children}
+    </Animated.View>
+  );
+}
 
 export function ActivityOrderList({
   activities,
@@ -34,10 +58,12 @@ export function ActivityOrderList({
   onChange,
   onDragging,
 }: Props) {
-  const { height } = useWindowDimensions();
+  const { height, width, fontScale } = useWindowDimensions();
+  const focused = useIsFocused();
+  const [foreground, setForeground] = useState(AppState.currentState === "active");
   const scroll = useRef<ScrollView>(null);
   const viewport = useRef<View>(null);
-  const frames = useRef(new Map<string, Frame>());
+  const frames = useRef(new Map<string, OrderFrame>());
   const offset = useRef(0);
   const contentHeight = useRef(0);
   const bounds = useRef({ top: 0, height: 0 });
@@ -49,13 +75,14 @@ export function ActivityOrderList({
     dy: number;
     pageY: number;
     items: Activity[];
-    frames: Map<string, Frame>;
+    frames: Map<string, OrderFrame>;
   } | null>(null);
   const timer = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
   const [activeId, setActiveId] = useState<string>();
   const [targetId, setTargetId] = useState<string>();
   const [measuredIds, setMeasuredIds] = useState<string[]>([]);
-  const [translation] = useState(() => new Animated.Value(0));
+  const translation = useSharedValue(0);
+  const locked = disabled || !foreground || !focused;
   const callbacks = useRef({ onChange, onDragging });
   useEffect(() => {
     callbacks.current = { onChange, onDragging };
@@ -64,13 +91,14 @@ export function ActivityOrderList({
   const finish = useCallback(
     (commit: boolean) => {
       const current = drag.current;
+      if (!current) return;
       drag.current = null;
       clearInterval(timer.current);
       setActiveId(undefined);
       setTargetId(undefined);
-      translation.setValue(0);
+      translation.set(0);
       callbacks.current.onDragging(false);
-      if (commit && current && current.to !== current.from) {
+      if (commit && current.to !== current.from) {
         const next = moveItem(current.items, current.from, current.to);
         callbacks.current.onChange(next.map((item) => item.id));
         AccessibilityInfo.announceForAccessibility(
@@ -81,8 +109,17 @@ export function ActivityOrderList({
     [translation],
   );
   useEffect(() => {
-    if (disabled && drag.current) finish(false);
-  }, [disabled, finish]);
+    if (locked) finish(false);
+  }, [locked, finish]);
+  const itemKey = activities.map(item => item.id).join(",");
+  useEffect(() => { finish(false); }, [height, width, fontScale, itemKey, finish]);
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", state => {
+      if (state !== "active") finish(false);
+      setForeground(state === "active");
+    });
+    return () => subscription.remove();
+  }, [finish]);
   useEffect(
     () => () => {
       clearInterval(timer.current);
@@ -94,39 +131,24 @@ export function ActivityOrderList({
   function update() {
     const current = drag.current;
     if (!current) return;
-    const frame = current.frames.get(current.id);
-    if (!frame) return;
     const delta = current.dy + offset.current - current.startOffset;
-    const center = frame.y + frame.height / 2 + delta;
-    let nearest = current.from,
-      distance = Infinity;
-    current.items.forEach((item, index) => {
-      const row = current.frames.get(item.id);
-      if (row && Math.abs(center - row.y - row.height / 2) < distance) {
-        nearest = index;
-        distance = Math.abs(center - row.y - row.height / 2);
-      }
-    });
+    const position = dragPosition(current.items.map(item => item.id), current.frames, current.id, delta);
+    if (!position) return;
+    const nearest = position.index;
     if (current.to !== nearest) {
       current.to = nearest;
       setTargetId(current.items[nearest].id);
     }
-    translation.setValue(delta);
+    translation.set(position.translation);
   }
   function begin(id: string, pageY: number) {
-    if (disabled || drag.current) return;
+    if (locked || drag.current || AppState.currentState !== "active") return false;
     const from = activities.findIndex((item) => item.id === id);
-    if (from < 0 || activities.some((item) => !frames.current.has(item.id)))
-      return;
+    const orderedFrames = orderFrames(activities.map(item => item.id), frames.current);
+    if (from < 0 || !orderedFrames) return false;
     // A keyed row can move without another size/layout event on web. Rebuild
     // positions from the current order and measured heights before EVERY drag.
-    let y = LIST_PADDING;
-    const orderedFrames = new Map<string, Frame>();
-    for (const item of activities) {
-      const height = frames.current.get(item.id)!.height;
-      orderedFrames.set(item.id, { y, height });
-      y += height + ROW_GAP;
-    }
+    bounds.current = { top: 0, height: 0 };
     viewport.current?.measureInWindow((_x, y, _width, h) => {
       bounds.current = { top: y, height: h };
     });
@@ -145,25 +167,22 @@ export function ActivityOrderList({
     callbacks.current.onDragging(true);
     timer.current = setInterval(() => {
       const current = drag.current;
-      if (!current || !bounds.current.height) return;
+      if (!current || !bounds.current.height || Math.abs(current.dy) < 3) return;
       const local = current.pageY - bounds.current.top;
-      const speed =
-        local < 52 ? -9 : local > bounds.current.height - 52 ? 9 : 0;
-      const next = Math.max(
-        0,
-        Math.min(
-          contentHeight.current - bounds.current.height,
-          offset.current + speed,
-        ),
-      );
-      if (speed && next !== offset.current) {
+      const next = dragScrollOffset(offset.current, local, bounds.current.height, contentHeight.current);
+      if (next !== offset.current) {
         offset.current = next;
         scroll.current?.scrollTo({ y: next, animated: false });
         update();
       }
     }, 32);
+    return true;
   }
   return (
+    <>
+    <Text accessibilityLiveRegion="polite" style={[typography.footnote, { minHeight: 36 * fontScale }]}>
+      {activeId ? `Thả vào vị trí ${activities.findIndex(item => item.id === targetId) + 1} / ${activities.length} · Chưa lưu` : "Nhấn giữ ☰ rồi kéo · Vuốt phần tên để cuộn"}
+    </Text>
     <View
       ref={viewport}
       testID="activity-order-list"
@@ -172,6 +191,8 @@ export function ActivityOrderList({
       <ScrollView
         ref={scroll}
         scrollEnabled={!activeId}
+        bounces={false}
+        overScrollMode="never"
         scrollEventThrottle={16}
         onScroll={(event) => {
           offset.current = event.nativeEvent.contentOffset.y;
@@ -182,24 +203,20 @@ export function ActivityOrderList({
         contentContainerStyle={styles.list}
       >
         {activities.map((activity, index) => (
-          <Animated.View
+          <OrderRow
             key={activity.id}
+            id={activity.id}
+            active={activeId === activity.id}
+            target={targetId === activity.id && activeId !== activity.id}
+            translation={translation}
             onLayout={(event) => {
+              const previous = frames.current.get(activity.id);
+              if (drag.current && previous && previous.height !== event.nativeEvent.layout.height) finish(false);
               frames.current.set(activity.id, event.nativeEvent.layout);
               setMeasuredIds((ids) =>
                 ids.includes(activity.id) ? ids : [...ids, activity.id],
               );
             }}
-            style={[
-              styles.row,
-              targetId === activity.id &&
-                activeId !== activity.id &&
-                styles.target,
-              activeId === activity.id && [
-                styles.dragging,
-                { transform: [{ translateY: translation }] },
-              ],
-            ]}
           >
             <View style={styles.copy}>
               <Text style={styles.time}>
@@ -211,9 +228,9 @@ export function ActivityOrderList({
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={`Đưa ${activity.title} lên`}
-                disabled={disabled || !!activeId || index === 0}
+                disabled={locked || !!activeId || index === 0}
                 accessibilityState={{
-                  disabled: disabled || !!activeId || index === 0,
+                  disabled: locked || !!activeId || index === 0,
                 }}
                 style={styles.arrow}
                 onPress={() =>
@@ -226,7 +243,7 @@ export function ActivityOrderList({
               >
                 <Text
                   style={{
-                    color: index === 0 || disabled ? colors.line : colors.teal,
+                    color: index === 0 || locked ? colors.line : colors.teal,
                   }}
                 >
                   ▲
@@ -236,11 +253,11 @@ export function ActivityOrderList({
                 accessibilityRole="button"
                 accessibilityLabel={`Đưa ${activity.title} xuống`}
                 disabled={
-                  disabled || !!activeId || index === activities.length - 1
+                  locked || !!activeId || index === activities.length - 1
                 }
                 accessibilityState={{
                   disabled:
-                    disabled || !!activeId || index === activities.length - 1,
+                    locked || !!activeId || index === activities.length - 1,
                 }}
                 style={styles.arrow}
                 onPress={() =>
@@ -254,7 +271,7 @@ export function ActivityOrderList({
                 <Text
                   style={{
                     color:
-                      index === activities.length - 1 || disabled
+                      index === activities.length - 1 || locked
                         ? colors.line
                         : colors.teal,
                   }}
@@ -263,10 +280,11 @@ export function ActivityOrderList({
                 </Text>
               </Pressable>
             </View>
-            <DragHandle
+            <ActivityDragHandle
               label={activity.title}
+              active={activeId === activity.id}
               disabled={
-                disabled ||
+                locked || (!!activeId && activeId !== activity.id) ||
                 activities.some((item) => !measuredIds.includes(item.id))
               }
               onBegin={(pageY) => begin(activity.id, pageY)}
@@ -279,66 +297,15 @@ export function ActivityOrderList({
               }}
               onEnd={finish}
             />
-          </Animated.View>
+          </OrderRow>
         ))}
       </ScrollView>
     </View>
-  );
-}
-
-function DragHandle({
-  label,
-  disabled,
-  onBegin,
-  onMove,
-  onEnd,
-}: {
-  label: string;
-  disabled: boolean;
-  onBegin: (pageY: number) => void;
-  onMove: (dy: number, pageY: number) => void;
-  onEnd: (commit: boolean) => void;
-}) {
-  const latest = useRef({ disabled, onBegin, onMove, onEnd });
-  useEffect(() => {
-    latest.current = { disabled, onBegin, onMove, onEnd };
-  }, [disabled, onBegin, onMove, onEnd]);
-  // PanResponder stores these callbacks; refs are read only on gesture events.
-  const responder = useMemo(
-    () =>
-      // eslint-disable-next-line react-hooks/refs -- PanResponder stores callbacks; it does not invoke them during render.
-      PanResponder.create({
-        onStartShouldSetPanResponder: () => !latest.current.disabled,
-        onMoveShouldSetPanResponder: () => !latest.current.disabled,
-        onPanResponderGrant: (event) => {
-          event.preventDefault();
-          latest.current.onBegin(event.nativeEvent.pageY);
-        },
-        onPanResponderMove: (event, gesture) => {
-          if (gesture.numberActiveTouches > 1) latest.current.onEnd(false);
-          else latest.current.onMove(gesture.dy, event.nativeEvent.pageY);
-        },
-        onPanResponderRelease: () => latest.current.onEnd(true),
-        onPanResponderTerminationRequest: () => false,
-        onPanResponderTerminate: () => latest.current.onEnd(false),
-      }),
-    [],
-  );
-  return (
-    <View
-      {...responder.panHandlers}
-      accessible
-      accessibilityLabel={`Kéo để di chuyển ${label}`}
-      accessibilityState={{ disabled }}
-      accessibilityHint="Dùng các nút lên và xuống nếu không kéo thả."
-      style={[styles.handle, disabled && { opacity: 0.4 }]}
-    >
-      <Text style={styles.grip}>☰</Text>
-    </View>
+    </>
   );
 }
 const styles = StyleSheet.create({
-  list: { gap: ROW_GAP, padding: LIST_PADDING },
+  list: { gap: ORDER_ROW_GAP, padding: ORDER_LIST_PADDING },
   row: {
     flexDirection: "row",
     alignItems: "center",
@@ -356,13 +323,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  handle: {
-    width: 44,
-    alignSelf: "stretch",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  grip: { color: colors.muted, fontSize: 22, userSelect: "none" },
   target: { borderColor: colors.teal, backgroundColor: colors.tealSoft },
   dragging: {
     zIndex: 10,

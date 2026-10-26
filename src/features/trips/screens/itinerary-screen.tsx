@@ -53,6 +53,12 @@ export default function ItineraryScreen() {
         )
       : [];
   const selected = plan?.activities.find((a) => a.id === selectedId);
+  function openOrderEditor() {
+    if (command.busy || !plan?.permissions.can_edit || activities.length < 2) return;
+    setSelectedId(undefined);
+    setOrderSaved(false);
+    setReordering(true);
+  }
   async function complete(activity: Activity) {
     if (!plan) return;
     const result = await command.run(
@@ -101,6 +107,7 @@ export default function ItineraryScreen() {
       {trip && plan && (
         <>
           <TripNavigation id={id} active="itinerary" />
+          <Button label="Thử lập bản nháp riêng" variant="soft" compact onPress={() => router.push({ pathname: "/trip/[id]/plan-draft", params: { id } })} />
           <Segments
             scroll
             items={[
@@ -136,11 +143,11 @@ export default function ItineraryScreen() {
               variant="soft"
               compact
               disabled={command.busy}
-              onPress={() => {
-                setOrderSaved(false);
-                setReordering(true);
-              }}
+              onPress={openOrderEditor}
             />
+          )}
+          {plan.permissions.can_edit && activities.length > 1 && (
+            <Text style={typography.footnote}>Nhấn giữ một hoạt động để mở sắp xếp kéo thả.</Text>
           )}
           {orderSaved && (
             <Feedback
@@ -166,6 +173,7 @@ export default function ItineraryScreen() {
               key={activity.id}
               activity={activity}
               timezone={trip.timezone}
+              onLongPress={plan.permissions.can_edit && activities.length > 1 && !command.busy ? openOrderEditor : undefined}
               onPress={() => {
                 command.clearError();
                 setConfirmDelete(false);

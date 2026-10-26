@@ -10,6 +10,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import { useAccessibilityPreferences } from "@/shared/hooks/use-accessibility-preferences";
 import { colors, typography } from "@/shared/theme/tokens";
@@ -50,6 +51,7 @@ export function Sheet({
       onRequestClose={close}
       statusBarTranslucent={!nativeSheet}
     >
+      <GestureHandlerRootView style={{ flex: 1 }}>
       <KeyboardAvoidingView
         style={[styles.overlay, nativeSheet && styles.nativeOverlay]}
         behavior={nativeSheet ? "padding" : undefined}
@@ -114,6 +116,7 @@ export function Sheet({
           )}
         </View>
       </KeyboardAvoidingView>
+      </GestureHandlerRootView>
     </Modal>
   );
 }

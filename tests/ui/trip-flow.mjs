@@ -483,7 +483,7 @@ try {
   await page.getByRole("tab", { name: "Tiện ích", exact: true }).click();
   await click("Hành lý");
   await screenshot("m13-packing.png");
-  await click("Cả nhóm đã sẵn sàng!");
+  await click("Danh sách đã sẵn sàng!");
   await page.getByText("Sẵn sàng lên đường!", { exact: true }).waitFor();
   await screenshot("p15-packing-complete.png");
   await click("Tuyệt, đi thôi!");
@@ -499,7 +499,7 @@ try {
   await screenshot("m22-small-phone.png");
   assert.deepEqual(pageErrors, []);
   console.log(
-    "Trip UI passed: real contract fixtures, create/date validation, lost-response retry, activity completion, conflict/reload/edit, places metadata, invitation, policy, trip/profile updates, readonly packing, P15 and 360px layout.",
+    "Trip UI passed: contract fixtures, create/date validation, lost-response retry, activity completion, conflict/reload/edit, places metadata, invitation, policy, trip/profile updates, packing, P15 and 360px layout.",
   );
   console.log(`Screenshots: ${output}`);
 } catch (error) {
