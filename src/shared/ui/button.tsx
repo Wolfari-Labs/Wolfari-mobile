@@ -17,6 +17,7 @@ import { DesignIcon } from "./design-icon";
 
 type Props = {
   label: string;
+  accessibilityLabel?: string;
   onPress: () => void;
   loading?: boolean;
   disabled?: boolean;
@@ -28,6 +29,7 @@ type Props = {
 
 export function Button({
   label,
+  accessibilityLabel,
   onPress,
   loading = false,
   disabled = false,
@@ -64,7 +66,7 @@ export function Button({
     <Animated.View style={[{ transform: [{ scale }] }, style]}>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={label}
+        accessibilityLabel={accessibilityLabel ?? label}
         accessibilityState={{ disabled: inactive, busy: loading }}
         disabled={inactive}
         onPress={onPress}
