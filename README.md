@@ -11,6 +11,13 @@ It provides a mobile experience for users to access Wolfari's travel features, m
 
 ## Project Status
 
+### Interactive trip preview
+
+Choose **Khám phá chuyến đi mẫu** on the welcome or Explore screen to try packing,
+dress codes, group-fund states and trip details without a backend or sign-in.
+This isolated `/demo-trip` preview uses fictional, in-memory data only; it does
+not sync a group or perform payments. See [the preview guide](docs/trip-demo.md).
+
 🚧 **Under Development**
 
 The project is currently in the early development stage. The architecture, folder structure, and technical implementation may change as the project evolves.
