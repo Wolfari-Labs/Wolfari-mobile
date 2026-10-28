@@ -53,6 +53,8 @@ export default function GuestScreen() {
       </View>
       <Text style={[typography.body, styles.description]}>Lên lịch, chuẩn bị hành lý và quản lý quỹ — cả nhóm cùng nhau, trong một nơi.</Text>
       <Button label={authenticated ? "Tiếp tục hành trình" : "Bắt đầu hành trình"} onPress={start} />
+      <Button label="Khám phá chuyến đi mẫu" variant="soft" onPress={() => router.push("/demo-trip")} />
+      <Text style={typography.footnote}>Thử hành lý, dress code và quỹ nhóm với dữ liệu mẫu, không cần đăng nhập.</Text>
       {!authenticated && (
         <View style={styles.memberPrompt}>
           <Text style={[typography.body, styles.muted, styles.promptCopy]}>Đã có tài khoản?</Text>

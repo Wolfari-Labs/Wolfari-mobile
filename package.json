@@ -56,6 +56,7 @@
     "test:ui:order": "node tests/ui/order-flow.mjs",
     "test:ui:features": "node tests/ui/backend-features-flow.mjs",
     "test:ui:parity": "node tests/ui/mobile-parity-flow.mjs",
+    "test:ui:demo": "node tests/ui/trip-demo-flow.mjs",
     "test:ui:backend": "node --env-file-if-exists=.env.backend-test.local tests/ui/backend-flow.mjs",
     "test:backend": "node --env-file-if-exists=.env.backend-test.local --experimental-strip-types scripts/check-backend.mjs"
   },

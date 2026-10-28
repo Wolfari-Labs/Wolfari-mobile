@@ -69,6 +69,12 @@ export default function HomeScreen() {
           void resource.reload();
         }}
       />
+      <SectionLink
+        title="Khám phá chuyến đi mẫu"
+        subtitle="Thử hành lý, dress code, quỹ và thông tin chuyến đi"
+        icon="compass"
+        onPress={() => router.push("/demo-trip")}
+      />
       {current && (
         <>
           <TripCard trip={current} ticket />
