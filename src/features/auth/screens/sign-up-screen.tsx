@@ -1,6 +1,6 @@
 import { router } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { Keyboard, Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Keyboard, Modal, Pressable, StyleSheet, Text, View, type TextInputInstance } from "react-native";
 
 import { colors, radii, typography } from "@/shared/theme/tokens";
 import { Button } from "@/shared/ui/button";
@@ -25,9 +25,9 @@ export default function SignUpScreen() {
   const [accepted, setAccepted] = useState(false);
   const submitting = useRef(false);
   const mounted = useRef(true);
-  const emailInput = useRef<TextInput>(null);
-  const passwordInput = useRef<TextInput>(null);
-  const confirmationInput = useRef<TextInput>(null);
+  const emailInput = useRef<TextInputInstance>(null);
+  const passwordInput = useRef<TextInputInstance>(null);
+  const confirmationInput = useRef<TextInputInstance>(null);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
 
   function clearFieldError(field: keyof AuthFieldErrors) {

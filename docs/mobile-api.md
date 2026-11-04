@@ -31,7 +31,15 @@ saves supported fields only. Trip pictures are bundled Figma illustrations.
 Provider search IDs are not selected-location UUIDs: search results can prefill
 activity title/note; existing selected locations attach using actual Trip IDs.
 
-## Backend gaps
+## Finance / Price Watch update — 2026-11-04
+
+The October audit below is historical. Finance and Price Watch now have public
+Gateway endpoints and the mobile screens call them. See
+[the current integration matrix](finance-price-watch-mobile.md) for supported
+actions, recovery, source limits and reproducible checks. API162 history requires
+the newer backend main; a 404 from an older demo branch is an error, not empty history.
+
+## Historical backend gaps (2026-10-18)
 
 The inspected Gateway has no mutation endpoints for packing/dress code and no
 public finance, fare-tracking, export/share, notification-preference, archive,

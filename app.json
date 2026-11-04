@@ -23,11 +23,16 @@
       "package": "com.tanthanh_67.Wolfarimobile"
     },
     "web": {
-      "output": "static",
+      "output": "single",
       "favicon": "./assets/images/wolfari-app-icon.png"
     },
     "plugins": [
-      "expo-router",
+      [
+        "expo-router",
+        {
+          "asyncRoutes": { "web": false }
+        }
+      ],
       [
         "expo-splash-screen",
         {
@@ -41,7 +46,7 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Cho phép Wolfari chọn ảnh đại diện hoặc ảnh bìa xem trước từ thư viện của bạn.",
+          "photosPermission": "Cho phép Wolfari chọn ảnh đại diện, ảnh bìa hoặc chứng từ thử nghiệm từ thư viện của bạn.",
           "cameraPermission": "Cho phép Wolfari dùng camera để quét mã QR chuyển khoản.",
           "microphonePermission": false
         }

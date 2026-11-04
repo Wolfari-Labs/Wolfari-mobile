@@ -18,7 +18,7 @@ Dữ liệu quét chỉ ở trong bộ nhớ màn hình, không gửi lên API/a
 
 ## Build và kiểm thử
 
-Thêm `expo-camera ~57.0.6`, `expo-clipboard ~57.0.2` theo Expo SDK 57. `app.json` có plugin camera và thông báo quyền tiếng Việt, không bật microphone. `expo-image-picker.cameraPermission` phải không còn là `false` vì giá trị đó chặn CAMERA trên Android dù plugin camera đã thêm quyền.
+Hiện dùng `expo-camera ~58.0.14`, `expo-clipboard ~58.0.4` theo Expo SDK 58 (nâng từ SDK 57 ngày 04/11/2026). `app.json` có plugin camera và thông báo quyền tiếng Việt, không bật microphone. `expo-image-picker.cameraPermission` phải không còn là `false` vì giá trị đó chặn CAMERA trên Android dù plugin camera đã thêm quyền.
 
 APK cũ cần build và cài lại để có module native/quyền mới; chỉ reload JavaScript hoặc OTA không đủ. Không tạo/sửa thư mục native bằng tay. Web cần HTTPS hoặc localhost để dùng camera; dán nội dung QR là đường dự phòng.
 
@@ -39,9 +39,9 @@ Cần kiểm tra trên thiết bị Android/iOS trước phát hành: từ chố
 
 Tài liệu API và vector đối chiếu:
 
-- [Expo Camera SDK 57](https://docs.expo.dev/versions/v57.0.0/sdk/camera/)
-- [Expo Clipboard SDK 57](https://docs.expo.dev/versions/v57.0.0/sdk/clipboard/)
-- [Expo Router SDK 57](https://docs.expo.dev/versions/v57.0.0/sdk/router/)
+- [Expo Camera SDK 58](https://docs.expo.dev/versions/v58.0.0/sdk/camera/)
+- [Expo Clipboard SDK 58](https://docs.expo.dev/versions/v58.0.0/sdk/clipboard/)
+- [Expo Router SDK 58](https://docs.expo.dev/versions/v58.0.0/sdk/router/)
 - [React Native AppState 0.86](https://reactnative.dev/docs/0.86/appstate)
 - [Cấu trúc và generator VietQR của Subiz](https://github.com/subiz/vietqr/blob/master/vietqr.go)
 - [Vector kiểm thử của generator](https://github.com/subiz/vietqr/blob/master/vietqr_test.go)

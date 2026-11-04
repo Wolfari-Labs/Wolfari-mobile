@@ -6,7 +6,7 @@ It provides a mobile experience for users to access Wolfari's travel features, m
 
 ## Tech Stack
 
-- Expo SDK 57 / Expo Router
+- Expo SDK 58 / Expo Router
 - React Native / TypeScript
 
 ## Project Status
@@ -42,8 +42,16 @@ concurrent edits preserve the local draft and require an explicit reload instead
 of overwriting another member. The editor checks for updates every 15 seconds
 while foregrounded and not dragging; this is polling, not live presence/WebSocket sync.
 
-Packing and dress code show the shared plan in read-only mode. Finance, fare
-tracking, export and notification preferences await public Gateway APIs.
+Finance and Price Watch now call the real Gateway. Fund setup, destinations,
+contributions, expenses, refunds, outside-fund notes, ledger, closure snapshots,
+member audit history and Sandbox payment commands are connected. Price Watch has
+create/edit/pause/resume/stop, per-user thresholds, observation history and stale
+source labels. The provider remains `MOCK_FLIGHT`, not live airline prices.
+Private drafts remain available from separate links; they never alter server balances.
+Export and notification-preference integration are outside this increment.
+
+See [Finance / Price Watch coverage and verification](docs/finance-price-watch-mobile.md)
+and [Windows + iPhone demo, step by step](docs/iphone-finance-demo.md).
 
 Run on your phone with **Expo Go over Wi-Fi**, without USB debugging:
 
