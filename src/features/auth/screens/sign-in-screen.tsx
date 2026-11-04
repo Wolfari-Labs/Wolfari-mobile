@@ -1,7 +1,7 @@
 import { Image } from "expo-image";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { Keyboard, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Keyboard, Pressable, StyleSheet, Text, View, type TextInputInstance } from "react-native";
 
 import { colors, radii, typography } from "@/shared/theme/tokens";
 import { Button } from "@/shared/ui/button";
@@ -24,7 +24,7 @@ export default function SignInScreen() {
   const [loading, setLoading] = useState(false);
   const submitting = useRef(false);
   const mounted = useRef(true);
-  const passwordInput = useRef<TextInput>(null);
+  const passwordInput = useRef<TextInputInstance>(null);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
 
   async function submit() {

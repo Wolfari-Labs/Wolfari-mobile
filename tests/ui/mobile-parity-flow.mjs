@@ -130,7 +130,7 @@ try {
   await page.getByText("Trắng bên biển", { exact: true }).waitFor();
   await screenshot("dress-code");
 
-  await goto(tripRoute("fund"));
+  await goto(tripRoute("fund-drafts"));
   assert.equal(await page.evaluate(() => qrFixture.requests), 0, "No camera before explicit entry");
   await button("Quét QR thanh toán").click();
   await button("Cho phép camera").click();
@@ -138,7 +138,7 @@ try {
   await field("Nội dung QR").fill("https://untrusted.example.test/pay");
   await button("Đọc thông tin QR").click();
   await page.getByText(/Chỉ hỗ trợ VietQR chuyển khoản/).waitFor();
-  assert.equal(page.url().endsWith(tripRoute("fund")), true, "QR URLs never navigate");
+  assert.equal(page.url().endsWith(tripRoute("fund-drafts")), true, "QR URLs never navigate");
   await button("Dán nội dung QR").click();
   await field("Nội dung QR").fill(dynamicQr);
   await button("Đọc thông tin QR").click();
@@ -190,7 +190,7 @@ try {
   await page.getByText(/Lưu Bữa tối dự kiến/).waitFor();
   await screenshot("fund");
 
-  await goto(tripRoute("price-watch"));
+  await goto(tripRoute("price-watch-drafts"));
   await button("Thêm yêu cầu giá vé").click();
   await field("Điểm đi").fill("Hà Nội");
   await field("Điểm đến").fill("Đà Nẵng");

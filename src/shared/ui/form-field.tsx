@@ -7,6 +7,7 @@ import {
   TextInput,
   View,
   type TextInputProps,
+  type TextInputInstance,
 } from "react-native";
 
 import { colors, radii, typography } from "@/shared/theme/tokens";
@@ -17,7 +18,7 @@ type Props = TextInputProps & {
   label: string;
   icon: DesignIconName;
   error?: string;
-  ref?: Ref<TextInput>;
+  ref?: Ref<TextInputInstance>;
 };
 
 export function FormField({

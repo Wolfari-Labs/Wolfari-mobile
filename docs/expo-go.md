@@ -1,11 +1,13 @@
 # Chạy Wolfari bằng Expo Go qua Wi-Fi
 
-Project dùng Expo SDK 57 và Expo Router trong `src/app`. Không cần bật USB debugging,
+Project dùng Expo SDK 58 và Expo Router trong `src/app`. Không cần bật USB debugging,
 không cần `adb reverse`, không cần tạo thư mục `android/` hoặc `ios/`.
+
+Máy Windows tại `D:\Wolfari` dùng bộ demo Gateway13000: xem [hướng dẫn iPhone Finance/Price Watch](iphone-finance-demo.md) cho đầy đủ ba terminal và tài khoản Expo. Các lệnh bên dưới là cấu hình backend dev mặc định3000.
 
 ## Chạy trên điện thoại
 
-1. Cài Expo Go hỗ trợ SDK 57. Điện thoại và máy tính kết nối cùng Wi-Fi.
+1. Cài Expo Go hỗ trợ SDK 58. Điện thoại và máy tính kết nối cùng Wi-Fi.
 2. Bật Docker Desktop, rồi chạy backend trong terminal riêng:
 
    ```powershell
@@ -31,7 +33,8 @@ không cần `adb reverse`, không cần tạo thư mục `android/` hoặc `ios
    npm.cmd run start:go
    ```
 
-6. Quét QR code bằng Expo Go trên Android hoặc Camera trên iPhone. Giữ hai terminal
+6. Trên iPhone, đăng nhập cùng tài khoản Expo trên CLI (`npx.cmd expo login`) và Expo Go.
+7. Quét QR code bằng Expo Go trên Android hoặc Camera trên iPhone. Giữ hai terminal
    mở trong khi sử dụng app. Nếu PowerShell không chặn npm scripts, có thể dùng `npm`
    thay cho `npm.cmd`.
 
@@ -139,7 +142,16 @@ Tìm địa điểm cần `GEOAPIFY_API_KEY` trong file
 Nếu backend chưa cấu hình khóa này, app hiển thị trạng thái chưa sẵn sàng và cho
 thêm hoạt động thủ công. Giữ khóa ở backend, không đặt trong `EXPO_PUBLIC_*`.
 
-Tài liệu: [Expo SDK 57](https://docs.expo.dev/versions/v57.0.0/),
+Preview Web của repo mobile dùng `web.output=single` và `asyncRoutes.web=false`:
+renderer HTML của SDK 58 từng gây lỗi Metro `Requiring unknown module` khi mở nhiều
+route trên Windows, kể cả khi đã tắt async routes. Các màn hình riêng tư tải dữ
+liệu sau đăng nhập, nên dùng ứng dụng phía client thay vì prerender từng route.
+Web export vì vậy là SPA; máy chủ triển khai phải fallback về index.html. Repo
+Wolfari-web riêng không thay đổi. iOS/Android vẫn dùng bundle native. Khi cập nhật
+SDK/config, chạy `npx.cmd expo start --clear` một lần. Xem
+[hướng dẫn chuyển Router 57 → 58](https://docs.expo.dev/router/migrate/sdk-57-to-58/).
+
+Tài liệu: [Expo SDK 58](https://docs.expo.dev/versions/v58.0.0/),
 [Expo CLI](https://docs.expo.dev/more/expo-cli/),
-[GlassEffect SDK 57](https://docs.expo.dev/versions/v57.0.0/sdk/glass-effect/),
-[React Native Maps](https://docs.expo.dev/versions/v57.0.0/sdk/map-view/).
+[GlassEffect SDK 58](https://docs.expo.dev/versions/v58.0.0/sdk/glass-effect/),
+[React Native Maps](https://docs.expo.dev/versions/v58.0.0/sdk/map-view/).

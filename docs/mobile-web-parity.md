@@ -3,6 +3,11 @@
 Implementation branch: feat/mobile-trip-tools-and-branding.
 Only the Mobile repository changes. Existing shared-plan and account API contracts remain unchanged.
 
+Update 2026-11-04: the Fund and Price Watch rows below describe the preserved
+private draft screens (`fund-drafts`, `price-watch-drafts`). The primary `fund`
+and `price-watch` routes now use real APIs; see
+[Finance / Price Watch integration](finance-price-watch-mobile.md).
+
 ## Added
 
 | Feature | Mobile behavior | Data boundary |
