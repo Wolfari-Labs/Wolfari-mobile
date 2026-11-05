@@ -1,8 +1,9 @@
 import { Image } from "expo-image";
+import { LinearGradient } from "expo-linear-gradient";
 import { router, useLocalSearchParams } from "expo-router";
-import { useState, type PropsWithChildren, type ReactNode } from "react";
+import { useRef, useState, useSyncExternalStore, type PropsWithChildren, type ReactNode } from "react";
+import { BlurTargetView } from "expo-blur";
 import {
-  Animated,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -11,19 +12,27 @@ import {
   StyleSheet,
   Text,
   View,
+  type ViewInstance,
 } from "react-native";
+import Animated from "react-native-reanimated";
 import {
   SafeAreaView,
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
 
-import { useAccessibilityPreferences } from "@/shared/hooks/use-accessibility-preferences";
-import { colors, typography } from "@/shared/theme/tokens";
+import { usePressMotion } from "@/shared/hooks/use-press-motion";
+import { colors, fonts, gradients, shadows, typography } from "@/shared/theme/tokens";
 import { designIcons } from "./design-assets";
 import { DesignIcon } from "./design-icon";
 import { BottomTabBar, type TabKey } from "./bottom-tab-bar";
 import { GlassSurface } from "./glass-surface";
-import { LinearGradient } from "expo-linear-gradient";
+import { webSafeArea } from "./web-safe-area";
+
+const ScreenArea = Platform.OS === "web" ? View : SafeAreaView;
+
+const subscribeToHydration = () => () => {};
+const clientSnapshot = () => true;
+const serverSnapshot = () => false;
 
 type Props = PropsWithChildren<{
   title?: string;
@@ -36,43 +45,28 @@ type Props = PropsWithChildren<{
   refreshing?: boolean;
   onRefresh?: () => void;
   onBack?: () => void;
+  /** A full-width opening section supplies its own accessible navigation. */
+  immersive?: boolean;
 }>;
 
 function ScreenBackButton({ onPress }: { onPress: () => void }) {
-  const { reduceMotion } = useAccessibilityPreferences();
-  const [scale] = useState(() => new Animated.Value(1));
-
-  const handlePressIn = () => {
-    if (reduceMotion) return;
-    Animated.spring(scale, {
-      toValue: 0.9,
-      damping: 16,
-      stiffness: 350,
-      useNativeDriver: true,
-    }).start();
-  };
-
-  const handlePressOut = () => {
-    if (reduceMotion) return;
-    Animated.spring(scale, {
-      toValue: 1,
-      damping: 12,
-      stiffness: 240,
-      useNativeDriver: true,
-    }).start();
-  };
+  const motion = usePressMotion(false, 0.92);
 
   return (
-    <Animated.View style={{ transform: [{ scale }] }}>
+    <Animated.View style={motion.animatedStyle}>
       <Pressable
         onPress={onPress}
-        onPressIn={handlePressIn}
-        onPressOut={handlePressOut}
+        onPressIn={motion.onPressIn}
+        onPressOut={motion.onPressOut}
         accessibilityRole="button"
         accessibilityLabel="Quay lại"
-        style={styles.back}
+        hitSlop={4}
+        pressRetentionOffset={16}
+        style={styles.backHit}
       >
-        <DesignIcon name="back" size={24} tintColor={colors.teal} />
+        <View style={styles.back}>
+          <DesignIcon name="back" size={22} tintColor={colors.ink} />
+        </View>
       </Pressable>
     </Animated.View>
   );
@@ -90,13 +84,17 @@ export function Screen({
   refreshing = false,
   onRefresh,
   onBack,
+  immersive = false,
 }: Props) {
   const insets = useSafeAreaInsets();
   const [headerHeight, setHeaderHeight] = useState(56);
   const [tabHeight, setTabHeight] = useState(0);
+  const blurTarget = useRef<ViewInstance>(null);
   const { preview } = useLocalSearchParams<{ preview?: string }>();
+  const hydrated = useSyncExternalStore(subscribeToHydration, clientSnapshot, serverSnapshot);
   // Opt-in browser preview chrome mirrors Figma. Native devices use real OS bars.
-  const devicePreview = Platform.OS === "web" && preview === "1";
+  // Static HTML cannot know query parameters; enable chrome only after hydration.
+  const devicePreview = Platform.OS === "web" && hydrated && preview === "1";
   function goBack() {
     if (onBack) {
       onBack();
@@ -108,13 +106,8 @@ export function Screen({
 
   return (
     <View style={styles.outer}>
-      <SafeAreaView style={styles.screen} edges={["top", "left", "right"]}>
-        <LinearGradient
-          pointerEvents="none"
-          colors={["#E5F3F8", "#F3F3FA", "#F2F2F7"]}
-          locations={[0, 0.45, 1]}
-          style={StyleSheet.absoluteFill}
-        />
+      <LinearGradient pointerEvents="none" colors={gradients.canvas} locations={[0, 0.5, 1]} style={StyleSheet.absoluteFill} />
+      <ScreenArea style={[styles.screen, webSafeArea.screen]} edges={Platform.OS === "web" ? undefined : ["top", "left", "right"]}>
         {devicePreview && (
           <View style={styles.statusBar} accessible={false}>
             <Text style={[typography.body, styles.clock]}>9:41</Text>
@@ -133,8 +126,7 @@ export function Screen({
             </View>
           </View>
         )}
-        <GlassSurface
-          variant="regular"
+        {!immersive && <View
           style={styles.header}
           onLayout={(event) => setHeaderHeight(event.nativeEvent.layout.height)}
         >
@@ -153,58 +145,65 @@ export function Screen({
               <View style={styles.headerSide}>{headerRight}</View>
             </>
           )}
-        </GlassSurface>
+        </View>}
         <KeyboardAvoidingView
           style={styles.viewport}
           behavior={Platform.OS === "ios" ? "padding" : undefined}
-          keyboardVerticalOffset={insets.top + headerHeight}
+          keyboardVerticalOffset={insets.top + (immersive ? 0 : headerHeight)}
         >
-          <ScrollView
-            contentContainerStyle={[
-              styles.content,
-              {
-                paddingBottom: Math.max(
-                  bottomPadding,
-                  tab
-                    ? Math.max(tabHeight, 74 + Math.max(insets.bottom, 12)) + 16
-                    : footer
-                      ? 24
-                      : insets.bottom + 24,
-                ),
-              },
-            ]}
-            keyboardShouldPersistTaps="handled"
-            keyboardDismissMode={
-              Platform.OS === "ios" ? "interactive" : "on-drag"
-            }
-            showsVerticalScrollIndicator={false}
-            refreshControl={
-              onRefresh ? (
-                <RefreshControl
-                  refreshing={refreshing}
-                  onRefresh={onRefresh}
-                  tintColor={colors.teal}
-                />
-              ) : undefined
-            }
-          >
-            {children}
-          </ScrollView>
+          <BlurTargetView ref={blurTarget} style={styles.viewport}>
+            <ScrollView
+              contentContainerStyle={[
+                styles.content,
+                immersive && styles.immersiveContent,
+                {
+                  paddingBottom: Math.max(
+                    bottomPadding,
+                    tab
+                      ? Math.max(tabHeight, 74 + Math.max(insets.bottom, 12)) + 16
+                      : footer
+                        ? 24
+                        : insets.bottom + 24,
+                  ),
+                },
+                !tab && !footer && webSafeArea.content(bottomPadding),
+              ]}
+              keyboardShouldPersistTaps="handled"
+              contentInsetAdjustmentBehavior="automatic"
+              keyboardDismissMode={
+                Platform.OS === "ios" ? "interactive" : "on-drag"
+              }
+              showsVerticalScrollIndicator={false}
+              refreshControl={
+                onRefresh ? (
+                  <RefreshControl
+                    refreshing={refreshing}
+                    onRefresh={onRefresh}
+                    tintColor={colors.teal}
+                  />
+                ) : undefined
+              }
+            >
+              {children}
+            </ScrollView>
+          </BlurTargetView>
           {footer && (
             <GlassSurface
               variant="prominent"
+              blurTarget={blurTarget}
               style={[
                 styles.footer,
                 { paddingBottom: Math.max(insets.bottom, 16) },
+                webSafeArea.footer,
               ]}
             >
               {footer}
             </GlassSurface>
           )}
         </KeyboardAvoidingView>
-        {tab && <BottomTabBar activeTab={tab} onHeightChange={setTabHeight} />}
+        {tab && <BottomTabBar activeTab={tab} onHeightChange={setTabHeight} blurTarget={blurTarget} />}
         {devicePreview && <View style={styles.homeIndicator} />}
-      </SafeAreaView>
+      </ScreenArea>
     </View>
   );
 }
@@ -215,7 +214,7 @@ const styles = StyleSheet.create({
     flex: 1,
     width: "100%",
     maxWidth: 480,
-    backgroundColor: colors.canvas,
+    backgroundColor: "transparent",
   },
   statusBar: {
     height: 54,
@@ -228,9 +227,9 @@ const styles = StyleSheet.create({
   indicators: { width: 86, flexDirection: "row", alignItems: "center", gap: 5 },
   header: {
     minHeight: 56,
-    marginHorizontal: 16,
-    marginTop: 6,
-    paddingHorizontal: 8,
+    marginHorizontal: 24,
+    marginTop: 4,
+    paddingVertical: 4,
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
@@ -241,22 +240,26 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  backHit: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
   back: {
     width: 44,
     height: 44,
     borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: colors.surface,
+    ...shadows.floating,
   },
-  backPressed: { opacity: 0.7 },
-  headerTitle: { flex: 1, textAlign: "center", paddingVertical: 8 },
+  headerTitle: { flex: 1, textAlign: "center", paddingVertical: 8, fontFamily: fonts.heading },
   viewport: { flex: 1 },
-  content: { paddingHorizontal: 24, paddingTop: 16, gap: 20 },
+  content: { paddingHorizontal: 24, paddingTop: 20, gap: 20 },
+  immersiveContent: { paddingHorizontal: 0, paddingTop: 0, gap: 0 },
   footer: {
     paddingHorizontal: 24,
     paddingTop: 12,
     marginHorizontal: 12,
-    borderRadius: 24,
+    marginBottom: 8,
+    borderRadius: 22,
     gap: 8,
   },
   homeIndicator: {

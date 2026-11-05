@@ -22,6 +22,7 @@ export function DateTimeField({
     <View style={styles.field}>
       <Text style={styles.label}>{label}</Text>
       <Pressable
+        cssInterop={false}
         accessibilityRole="button"
         accessibilityLabel={label}
         accessibilityValue={{ text: value || "Chưa chọn" }}

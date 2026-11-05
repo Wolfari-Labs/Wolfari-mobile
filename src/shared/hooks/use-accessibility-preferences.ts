@@ -4,6 +4,7 @@ import { AccessibilityInfo, Platform } from "react-native";
 export function useAccessibilityPreferences() {
   // Start without motion or transparency until the system preference is known.
   const [reduceMotion, setReduceMotion] = useState(true);
+  const [motionReady, setMotionReady] = useState(false);
   const [reduceTransparency, setReduceTransparency] = useState(true);
 
   useEffect(() => {
@@ -16,7 +17,8 @@ export function useAccessibilityPreferences() {
     };
     void AccessibilityInfo.isReduceMotionEnabled()
       .then(updateMotion)
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => { if (mounted) setMotionReady(true); });
     const motion = AccessibilityInfo.addEventListener(
       "reduceMotionChanged",
       updateMotion,
@@ -47,7 +49,7 @@ export function useAccessibilityPreferences() {
         media.removeEventListener("change", listener);
       };
     } else {
-      // Android uses an opaque, inexpensive fallback; no native blur sampling.
+      // Android glass components choose an SDK-aware blur or inexpensive fallback.
       updateTransparency(false);
     }
     return () => {
@@ -57,5 +59,5 @@ export function useAccessibilityPreferences() {
     };
   }, []);
 
-  return { reduceMotion, reduceTransparency };
+  return { reduceMotion, reduceTransparency, motionReady };
 }
