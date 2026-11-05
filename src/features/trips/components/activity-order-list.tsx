@@ -10,6 +10,8 @@ import {
   View,
   useWindowDimensions,
   type LayoutChangeEvent,
+  type ScrollViewInstance,
+  type ViewInstance,
 } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue, type SharedValue } from "react-native-reanimated";
 
@@ -61,8 +63,8 @@ export function ActivityOrderList({
   const { height, width, fontScale } = useWindowDimensions();
   const focused = useIsFocused();
   const [foreground, setForeground] = useState(AppState.currentState === "active");
-  const scroll = useRef<ScrollView>(null);
-  const viewport = useRef<View>(null);
+  const scroll = useRef<ScrollViewInstance>(null);
+  const viewport = useRef<ViewInstance>(null);
   const frames = useRef(new Map<string, OrderFrame>());
   const offset = useRef(0);
   const contentHeight = useRef(0);

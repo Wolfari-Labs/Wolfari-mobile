@@ -12,6 +12,7 @@ node_modules/
 .expo/
 dist/
 web-build/
+/public/canvaskit.wasm
 expo-env.d.ts
 
 # Native
