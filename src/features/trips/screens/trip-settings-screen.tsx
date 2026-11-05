@@ -16,6 +16,7 @@ import { coverFor } from "../components/trip-card";
 import { useTrip } from "../hooks/use-trip";
 import type { PlanPolicy } from "../types";
 import { tripDates } from "../utils";
+import { memberName } from "../model/member-name";
 
 const policyLabels: Record<PlanPolicy, string> = { OWNER_ONLY: "Chỉ người tổ chức", ALL_MEMBERS: "Tất cả thành viên", SELECTED_MEMBERS: "Các thành viên được chọn" };
 export default function TripSettingsScreen() {
@@ -52,7 +53,7 @@ export default function TripSettingsScreen() {
           <Notice>Đây là danh sách MỚI sẽ thay thế toàn bộ quyền đã cấp trước đó. Chủ nhóm luôn giữ quyền sửa.</Notice>
           <ResourceFeedback {...members} hasData={!!members.data} onRetry={() => { void members.reload(); }} />
           {eligible.map(member => <Pressable key={member.id} accessibilityRole="checkbox" accessibilityLabel={"Cho phép " + member.user_id.slice(0, 8) + " sửa lịch trình"} accessibilityState={{ checked: selected.includes(member.id), disabled: command.busy }} disabled={command.busy} style={ui.link} onPress={() => setSelected(old => old.includes(member.id) ? old.filter(value => value !== member.id) : [...old, member.id])}>
-            <Text style={typography.headline}>{selected.includes(member.id) ? "✓" : "○"} Bạn đồng hành · {member.user_id.slice(0, 8)}</Text>
+            <Text style={typography.headline}>{selected.includes(member.id) ? "✓" : "○"} {memberName(member)}</Text>
           </Pressable>)}
           <Text style={typography.footnote}>Đã chọn {selected.length} thành viên. Không chọn ai nghĩa là chỉ chủ nhóm được sửa.</Text>
         </>}

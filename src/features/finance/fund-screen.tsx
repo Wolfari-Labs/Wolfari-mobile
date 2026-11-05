@@ -16,6 +16,7 @@ import { Heading, Notice, ResourceFeedback, SectionLink, Segments, ui } from "@/
 import { Screen } from "@/shared/ui/screen";
 import { financeCommands } from "./api";
 import { ClosureSheet } from "./components/closure-sheet";
+import { userNamer } from "../trips/model/member-name";
 import { FinanceForm, type FinanceFormSpec } from "./components/finance-form";
 import { InstructionSheet } from "./components/instruction-sheet";
 import { PagedRecords } from "./components/paged-records";
@@ -61,6 +62,7 @@ function FundWorkspace({ tripId, userId }: { tripId: string; userId: string }) {
   const archived = trip?.lifecycle === "ARCHIVED";
   const open = (spec: FinanceFormSpec) => { if (!operation.locked && !resource.loading && !resource.error) setForm(spec); };
   const locked = operation.locked || resource.loading || !!resource.error;
+  const who = userNamer(members.data, userId);
   async function reload() { await Promise.all([resource.reload(), members.reload()]); }
   async function finish() {
     if (operation.pending?.kind === "leave" && operationCommitted(operation.pending)) router.replace("/(tabs)/trips");
@@ -80,11 +82,11 @@ function FundWorkspace({ tripId, userId }: { tripId: string; userId: string }) {
           <Text style={typography.body}>Giữ chỗ hoàn tiền: {money(fund.reserved_refund)}</Text>
           <Text style={typography.headline}>Khả dụng: {money(fund.available_balance)}</Text>
           <Text style={typography.body}>Ngân sách dự kiến: {money(fund.budget_amount)}</Text>
-          <Text style={typography.footnote}>Người giữ quỹ: {fund.holder_user_id === userId ? "Bạn" : fund.holder_user_id.slice(0, 8)}</Text>
+          <Text style={typography.footnote}>Người giữ quỹ: {who(fund.holder_user_id)}</Text>
         </View>
         {(fund.status !== "OPEN" || archived) && <Notice>{fund.status === "CLOSING" ? "Đang chốt quỹ: các giao dịch khác và thay đổi thành viên bị khóa. Mở tab Đóng quỹ để xem/xác nhận hoặc hủy phiên." : "Quỹ đã đóng hoặc chuyến đi đã lưu trữ: chỉ đọc lịch sử."}</Notice>}
         <Segments scroll items={tabs} value={tab} onChange={setTab} />
-        {tab === "overview" ? <FundOverview key={`${fund.id}:${fund.finance_version}`} fund={fund} trip={trip} userId={userId} locked={locked} open={open} /> : <FundRecords key={`${fund.id}:${fund.finance_version}:${tab}`} fund={fund} trip={trip} userId={userId} tab={tab} members={members.data ?? []} locked={locked} open={open} onInstruction={setInstruction} onClosure={setClosureId} />}
+        {tab === "overview" ? <FundOverview key={`${fund.id}:${fund.finance_version}`} fund={fund} trip={trip} userId={userId} locked={locked} open={open} who={who} /> : <FundRecords key={`${fund.id}:${fund.finance_version}:${tab}`} fund={fund} trip={trip} userId={userId} tab={tab} members={members.data ?? []} locked={locked} who={who} open={open} onInstruction={setInstruction} onClosure={setClosureId} />}
         {((tab === "contributions" || tab === "contribution-requests" || tab === "refunds") && owner) && <ResourceFeedback {...members} hasData={!!members.data} onRetry={() => { void members.reload(); }} />}
       </> : <>
         <Notice>Chưa tìm thấy quỹ khả dụng. Nếu đã mở quỹ, hãy kiểm tra quyền hoặc cấu hình Finance Gateway trước khi tạo mới. Chỉ chủ nhóm có thể mở quỹ.</Notice>
@@ -96,11 +98,11 @@ function FundWorkspace({ tripId, userId }: { tripId: string; userId: string }) {
     </>}
     {form && <FinanceForm spec={form} busy={operation.busy} onSubmit={operation.run} onClose={() => setForm(undefined)} />}
     {instruction && <InstructionSheet contributionId={instruction} onClose={() => setInstruction(undefined)} />}
-    {closureId && <ClosureSheet closureId={closureId} owner={!!owner} userId={userId} writable={!locked && !archived} onClose={() => setClosureId(undefined)} onAction={(row, action) => { setClosureId(undefined); open(closureActionForm(row, action)); }} />}
+    {closureId && <ClosureSheet closureId={closureId} owner={!!owner} userId={userId} who={who} writable={!locked && !archived} onClose={() => setClosureId(undefined)} onAction={(row, action) => { setClosureId(undefined); open(closureActionForm(row, action)); }} />}
   </Screen>;
 }
 
-type Context = { fund: Fund; trip: Trip; userId: string; locked: boolean; open(spec: FinanceFormSpec): void };
+type Context = { fund: Fund; trip: Trip; userId: string; locked: boolean; open(spec: FinanceFormSpec): void; who(userId: string): string };
 function FundOverview({ fund, trip, userId, locked, open }: Context) {
   const api = useApi();
   const actor = financeActor(fund, userId, trip.current_membership.role === "OWNER", trip.lifecycle === "ARCHIVED");
@@ -131,7 +133,7 @@ function FundOverview({ fund, trip, userId, locked, open }: Context) {
   </View>;
 }
 
-function FundRecords({ fund, trip, userId, locked, open, tab, members, onInstruction, onClosure }: Context & {
+function FundRecords({ fund, trip, userId, locked, open, who, tab, members, onInstruction, onClosure }: Context & {
   tab: keyof FinanceCollections; members: Membership[]; onInstruction(id: string): void; onClosure(id: string): void;
 }) {
   const api = useApi();
@@ -151,18 +153,18 @@ function FundRecords({ fund, trip, userId, locked, open, tab, members, onInstruc
   return <View style={ui.stack}>
     {tab === "contributions" && <>{contribute}<PagedRecords title="đóng góp" load={contributions} render={row => <>
       <Text style={typography.headline}>{money(row.amount)}</Text>
-      <Text style={typography.body}>{row.member_user_id === userId ? "Khoản đóng của bạn" : `Thành viên · ${row.member_user_id.slice(0, 8)}`}</Text>
+      <Text style={typography.body}>{row.member_user_id === userId ? "Khoản đóng của bạn" : who(row.member_user_id)}</Text>
       {status(row.status)}
       {row.waived_reason && <Text style={typography.body}>Lý do miễn: {row.waived_reason}</Text>}
       {row.cancelled_reason && <Text style={typography.body}>Lý do hủy: {row.cancelled_reason}</Text>}
       {actor.writable && row.member_user_id === userId && row.status === "PENDING" && <Button label="Xem VietQR TEST" variant="soft" disabled={locked} onPress={() => onInstruction(row.id)} />}
-      {contributionActions(row, actor).map(action => <Button key={action} label={actionLabels[action]} accessibilityLabel={`${actionLabels[action]} ${row.id.slice(0, 8)}`} variant="soft" disabled={locked} onPress={() => open(contributionForm(fund, row, action))} />)}
+      {contributionActions(row, actor).map(action => <Button key={action} label={actionLabels[action]} accessibilityLabel={`${actionLabels[action]} ${row.id.slice(0, 8)}`} variant="soft" disabled={locked} onPress={() => open(contributionForm(fund, row, action, who))} />)}
     </>} /></>}
     {tab === "contribution-requests" && <>{contribute}<PagedRecords title="đợt góp" load={requests} render={row => <>
       <Text style={typography.headline}>{row.title}</Text>{status(row.status)}
       {row.note && <Text style={typography.body}>{row.note}</Text>}
       <Text style={typography.footnote}>{row.due_at ? `Hạn: ${row.due_at}` : "Không đặt hạn"}</Text>
-      {row.contributions?.map(item => <Text key={item.id} style={typography.body}>{item.member_user_id === userId ? "Bạn" : item.member_user_id.slice(0, 8)} · {money(item.amount)} · {statusLabels[item.status]}</Text>)}
+      {row.contributions?.map(item => <Text key={item.id} style={typography.body}>{who(item.member_user_id)} · {money(item.amount)} · {statusLabels[item.status]}</Text>)}
     </>} /></>}
     {tab === "expenses" && <>
       {actor.writable && <Button label="Tạo khoản chi" disabled={locked} onPress={() => open(expenseForm(fund))} />}
@@ -178,11 +180,11 @@ function FundRecords({ fund, trip, userId, locked, open, tab, members, onInstruc
     {tab === "refunds" && <>
       {actor.owner && actor.writable && <Button label="Tạo hoàn tiền" disabled={locked || !members.length} onPress={() => open(refundForm(fund, members, userId))} />}
       <PagedRecords title="hoàn tiền" load={refunds} render={row => <>
-        <Text style={typography.headline}>{money(row.amount)} · {row.member_user_id === userId ? "Hoàn cho bạn" : row.member_user_id.slice(0, 8)}</Text>{status(row.status)}
+        <Text style={typography.headline}>{money(row.amount)} · {row.member_user_id === userId ? "Hoàn cho bạn" : who(row.member_user_id)}</Text>{status(row.status)}
         <Text style={typography.body}>{row.reason}</Text>
         {row.nonreceipt_confirmed_at && <Notice>Người nhận đã báo chưa nhận tiền.</Notice>}
         {row.reversal_requested_at && <Notice>Đã yêu cầu đảo hoàn tiền · {row.reversal_consented_at ? "Người nhận đã đồng ý" : "Chờ người nhận đồng ý"}</Notice>}
-        {refundActions(row, actor).map(action => <Button key={action} label={actionLabels[action]} accessibilityLabel={`${actionLabels[action]} ${row.id.slice(0, 8)}`} variant="soft" disabled={locked} onPress={() => open(refundActionForm(fund, row, action))} />)}
+        {refundActions(row, actor).map(action => <Button key={action} label={actionLabels[action]} accessibilityLabel={`${actionLabels[action]} ${row.id.slice(0, 8)}`} variant="soft" disabled={locked} onPress={() => open(refundActionForm(fund, row, action, who))} />)}
       </>} />
     </>}
     {tab === "transactions" && <PagedRecords title="giao dịch" load={transactions} render={row => <>

@@ -34,6 +34,7 @@ import {
 } from '../../finance/extended-model';
 import type { WriteIntent } from '../../finance/api';
 import { collectPages } from '../api/pagination';
+import { memberName, userNamer } from '../model/member-name';
 
 const tabs: { value: keyof FinanceCollections | 'setup'; label: string }[] = [
   { value: 'contributions', label: 'Đóng góp' },
@@ -168,6 +169,7 @@ function FundWorkspace({ id, userId }: { id: string; userId: string }) {
     page.data?.collection === tab && page.data.fundId === fund?.id ? page.data : undefined;
   const [loadingMore, setLoadingMore] = useState(false);
   const disabled = command.blocked || !writable || !!page.error || page.loading;
+  const who = userNamer(members.data, userId);
   const memberOptions = (members.data ?? [])
     .filter((m) => !m.left_at)
     .map((m) => ({
@@ -175,7 +177,7 @@ function FundWorkspace({ id, userId }: { id: string; userId: string }) {
       label:
         m.user_id === userId
           ? 'Bạn'
-          : `Thành viên ${m.user_id.slice(0, 8)}${m.role === 'OWNER' ? ' (Owner)' : ''}`,
+          : `${memberName(m)}${m.role === 'OWNER' ? ' · Chủ nhóm' : ''}`,
     }));
   const memberField: Field = {
     key: 'member_user_id',
@@ -572,7 +574,7 @@ function FundWorkspace({ id, userId }: { id: string; userId: string }) {
             (visiblePage?.items as FinanceCollections['contributions'][] | undefined)?.map((c) => (
               <Card
                 key={c.id}
-                title={`${moneyLabel(c.amount)} · ${c.member_user_id === userId ? 'Khoản của bạn' : c.member_user_id.slice(0, 8)}`}
+                title={`${moneyLabel(c.amount)} · ${c.member_user_id === userId ? 'Khoản của bạn' : who(c.member_user_id)}`}
               >
                 <Line>
                   {statusLabel[c.status]}
@@ -657,7 +659,7 @@ function FundWorkspace({ id, userId }: { id: string; userId: string }) {
                   {r.note && <Line>{r.note}</Line>}
                   {r.contributions.map((c) => (
                     <Line key={c.id}>
-                      {c.member_user_id.slice(0, 8)}: {moneyLabel(c.amount)} ·{' '}
+                      {who(c.member_user_id)}: {moneyLabel(c.amount)} ·{' '}
                       {statusLabel[c.status]}
                     </Line>
                   ))}
@@ -846,7 +848,7 @@ function FundWorkspace({ id, userId }: { id: string; userId: string }) {
             (visiblePage?.items as FinanceCollections['refunds'][] | undefined)?.map((r) => (
               <Card
                 key={r.id}
-                title={`${moneyLabel(r.amount)} · ${r.member_user_id === userId ? 'Hoàn cho bạn' : r.member_user_id.slice(0, 8)}`}
+                title={`${moneyLabel(r.amount)} · ${r.member_user_id === userId ? 'Hoàn cho bạn' : who(r.member_user_id)}`}
               >
                 <Line>
                   {statusLabel[r.status]} · {r.reason}
@@ -873,6 +875,7 @@ function FundWorkspace({ id, userId }: { id: string; userId: string }) {
                               'Báo chưa nhận hoàn tiền',
                               `/refunds/${r.id}/confirm-nonreceipt`,
                               version(r),
+                              true,
                             ),
                           )}
                       </>

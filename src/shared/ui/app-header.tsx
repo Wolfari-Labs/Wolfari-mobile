@@ -1,9 +1,10 @@
-import { router } from "expo-router";
-import { useState } from "react";
+import { router, useFocusEffect } from "expo-router";
+import { useCallback, useState } from "react";
 import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { useAccessibilityPreferences } from "@/shared/hooks/use-accessibility-preferences";
 import { useSession } from "@/features/auth/session/session-provider";
+import { useApi } from "@/shared/api/use-api";
 import { ProfileAvatar } from "@/features/auth/components/profile-avatar";
 import { colors, radii, typography } from "@/shared/theme/tokens";
 import { type DesignIconName } from "./design-assets";
@@ -17,11 +18,23 @@ type Props = {
 };
 
 export function AppHeader({
-  onPressNotification = () => router.push("/invitation"),
+  onPressNotification = () => router.push("/notifications"),
   onPressAdd,
-  hasUnreadNotifications = false,
+  hasUnreadNotifications,
 }: Props) {
-  const { profile } = useSession();
+  const { profile, status } = useSession();
+  const api = useApi();
+  const [unread, setUnread] = useState(false);
+  // Refresh the unread dot whenever a screen with the header regains focus.
+  useFocusEffect(useCallback(() => {
+    if (status !== "authenticated") return;
+    const controller = new AbortController();
+    api.notifications.list({ unread: true, limit: 1, signal: controller.signal })
+      .then(page => setUnread(page.items.some(item => item.status !== "CANCELLED")))
+      .catch(() => { /* badge is best-effort */ });
+    return () => controller.abort();
+  }, [api, status]));
+  const showDot = hasUnreadNotifications ?? unread;
   const name = profile?.full_name.trim().split(/\s+/).at(-1) ?? "bạn";
   return (
     <View style={styles.header}>
@@ -35,10 +48,10 @@ export function AppHeader({
       <View style={styles.actions}>
         <HeaderButton
           icon="bell"
-          label="Mở lời mời chuyến đi"
+          label={showDot ? "Mở thông báo, có thông báo chưa đọc" : "Mở thông báo"}
           onPress={onPressNotification}
         >
-          {hasUnreadNotifications && <View style={styles.unreadDot} />}
+          {showDot && <View style={styles.unreadDot} />}
         </HeaderButton>
         {onPressAdd && <HeaderButton
           icon="plus"

@@ -1,4 +1,5 @@
 import type { Membership } from "../trips/types";
+import { memberName } from "../trips/model/member-name.ts";
 import { financeCommands as commands } from "./api.ts";
 import type { FinanceFormSpec } from "./components/finance-form";
 import { eligibleDestinations, money, parseMoney, requiredText } from "./model.ts";
@@ -9,7 +10,9 @@ const amountField = { key: "amount", label: "Số tiền (VND, chỉ chữ số)
 const reasonField = { key: "reason", label: "Lý do", multiline: true, max: 1024 };
 const titleField = { key: "title", label: "Nội dung", max: 200 };
 const text = requiredText;
-const memberOptions = (members: Membership[], self: string) => members.filter(member => !member.left_at).map(member => ({ value: member.user_id, label: `${member.user_id === self ? "Bạn" : member.role === "OWNER" ? "Chủ nhóm" : "Thành viên"} · ${member.user_id.slice(0, 8)}` }));
+const memberOptions = (members: Membership[], self: string) => members.filter(member => !member.left_at).map(member => ({ value: member.user_id, label: `${member.user_id === self ? "Bạn" : memberName(member)}${member.role === "OWNER" ? " · Chủ nhóm" : ""}` }));
+type Namer = (userId: string) => string;
+const shortId: Namer = userId => `#${userId.slice(0, 4).toUpperCase()}`;
 const bankFields = [
   { key: "bank_code", label: "Mã ngân hàng (VD: VCB)", max: 30 },
   { key: "account_number", label: "Số tài khoản", max: 80 },
@@ -50,9 +53,9 @@ export function contributionRequestForm(fund: Fund, members: Membership[], desti
       return commands.contributionRequest(fund, { title: text(values.title ?? "", "Nội dung", 200), contributions: selected.map(member_user_id => ({ member_user_id, amount: parseMoney(values.amount ?? ""), destination_id: values.destination })), ...(values.note?.trim() ? { note: text(values.note, "Ghi chú") } : {}) });
     } };
 }
-export function contributionForm(fund: Fund, row: Contribution, action: Parameters<typeof commands.contribution>[2]): FinanceFormSpec {
+export function contributionForm(fund: Fund, row: Contribution, action: Parameters<typeof commands.contribution>[2], who: Namer = shortId): FinanceFormSpec {
   const reason = ["waive", "cancel", "reject-transfer", "reverse"].includes(action);
-  return { title: actionLabels[action], description: `${money(row.amount)} · Thành viên ${row.member_user_id.slice(0, 8)}. ${reason ? reasonDescription : action === "confirm-received" ? "Chỉ xác nhận sau khi đối chiếu đã nhận đủ tiền; xác nhận sẽ ghi thu vào sổ quỹ." : action === "report-transfer" ? "Báo đã chuyển chưa làm tăng số dư. Chờ người giữ quỹ xác nhận nhận đủ." : "Chỉ sửa khoản còn chờ; không thay đổi tài khoản nhận đã chốt."}`,
+  return { title: actionLabels[action], description: `${money(row.amount)} · ${who(row.member_user_id)}. ${reason ? reasonDescription : action === "confirm-received" ? "Chỉ xác nhận sau khi đối chiếu đã nhận đủ tiền; xác nhận sẽ ghi thu vào sổ quỹ." : action === "report-transfer" ? "Báo đã chuyển chưa làm tăng số dư. Chờ người giữ quỹ xác nhận nhận đủ." : "Chỉ sửa khoản còn chờ; không thay đổi tài khoản nhận đã chốt."}`,
     initial: { amount: row.amount }, fields: action === "amount" ? [amountField] : reason ? [reasonField] : [], destructive: reason,
     receipt: action === "report-transfer" ? { fundId: fund.id, field: "evidence_object_key" } : undefined,
     build: values => commands.contribution(fund, row, action, action === "amount" ? { amount: parseMoney(values.amount ?? "") } : reason ? { reason: text(values.reason ?? "", "Lý do") } : {}) };
@@ -80,9 +83,9 @@ export function refundForm(fund: Fund, members: Membership[], self: string): Fin
   return { title: "Tạo hoàn tiền", description: "Khoản hoàn sẽ giữ chỗ từ số dư khả dụng. Tiền chỉ được ghi chi khi người nhận xác nhận đã nhận; app không chuyển tiền hộ.", fields: [{ key: "member", label: "Người nhận hoàn", options: memberOptions(members, self) }, amountField, reasonField],
     build: values => { if (!members.some(row => row.user_id === values.member && !row.left_at)) throw new Error("Chọn người nhận đang tham gia."); return commands.refund(fund, { member_user_id: values.member, amount: parseMoney(values.amount ?? ""), reason: text(values.reason ?? "", "Lý do") }); } };
 }
-export function refundActionForm(fund: Fund, row: Refund, action: Parameters<typeof commands.refundAction>[2]): FinanceFormSpec {
+export function refundActionForm(fund: Fund, row: Refund, action: Parameters<typeof commands.refundAction>[2], who: Namer = shortId): FinanceFormSpec {
   const reason = ["confirm-nonreceipt", "cancel", "request-reversal", "reverse"].includes(action);
-  return { title: actionLabels[action], description: `${money(row.amount)} · Người nhận ${row.member_user_id.slice(0, 8)}. ${action === "reverse" ? "Phải nhập đúng lý do của yêu cầu đảo đã được người nhận đồng ý. Backend không trả lý do đảo trong danh sách; đối chiếu trực tiếp với người giữ quỹ." : action === "consent-reversal" ? "Chỉ đồng ý sau khi đã trao đổi lý do với người giữ quỹ. Đây là đồng ý đảo sổ, không phải tự thu hồi tiền ngân hàng." : "Người giữ quỹ báo trả; chính người nhận xác nhận đã nhận đủ. Hủy khoản đã báo trả cần người nhận báo chưa nhận trước."}`,
+  return { title: actionLabels[action], description: `${money(row.amount)} · Người nhận: ${who(row.member_user_id)}. ${action === "reverse" ? "Phải nhập đúng lý do của yêu cầu đảo đã được người nhận đồng ý. Backend không trả lý do đảo trong danh sách; đối chiếu trực tiếp với người giữ quỹ." : action === "consent-reversal" ? "Chỉ đồng ý sau khi đã trao đổi lý do với người giữ quỹ. Đây là đồng ý đảo sổ, không phải tự thu hồi tiền ngân hàng." : "Người giữ quỹ báo trả; chính người nhận xác nhận đã nhận đủ. Hủy khoản đã báo trả cần người nhận báo chưa nhận trước."}`,
     fields: reason ? [reasonField] : [], destructive: ["cancel", "reverse", "request-reversal"].includes(action),
     build: values => commands.refundAction(fund, row, action, reason ? text(values.reason ?? "", "Lý do") : undefined) };
 }

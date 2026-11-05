@@ -7,7 +7,7 @@ export type MembershipOperation = {
 };
 export type Lifecycle = "UPCOMING" | "ONGOING" | "COMPLETED" | "ARCHIVED";
 export type PlanPolicy = "OWNER_ONLY" | "SELECTED_MEMBERS" | "ALL_MEMBERS";
-export type Membership = { id: string; trip_id: string; user_id: string; role: "OWNER" | "MEMBER"; joined_at: string; left_at: string | null };
+export type Membership = { id: string; trip_id: string; user_id: string; role: "OWNER" | "MEMBER"; joined_at: string; left_at: string | null; display_name?: string | null };
 export type Trip = {
   id: string; name: string; description: string | null; public_description: string | null;
   start_at: string; end_at: string; timezone: string; lifecycle: Lifecycle; archived_at: string | null;
