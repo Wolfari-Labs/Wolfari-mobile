@@ -1,11 +1,17 @@
 # Chạy Wolfari bằng Expo Go qua Wi-Fi
 
-Project dùng Expo SDK 57 và Expo Router trong `src/app`. Không cần bật USB debugging,
+**Máy mới hoặc chưa cài dependencies/database:** làm theo
+[hướng dẫn Backend + Mobile từ đầu](local-setup.md) trước.
+
+Project dùng Expo SDK 58 và Expo Router trong `src/app`. Không cần bật USB debugging,
 không cần `adb reverse`, không cần tạo thư mục `android/` hoặc `ios/`.
 
 ## Chạy trên điện thoại
 
-1. Cài Expo Go hỗ trợ SDK 57. Điện thoại và máy tính kết nối cùng Wi-Fi.
+1. Cài Expo Go hỗ trợ **SDK 58**. Điện thoại và máy tính kết nối cùng Wi-Fi.
+   Nếu bản Expo Go đang cài chưa hỗ trợ SDK 58, dùng bản tương thích từ
+   [Expo Go](https://expo.dev/go) hoặc development build mới; client SDK 57 không
+   chạy được bộ native module SDK 58. Không hạ riêng React Native để né lỗi này.
 2. Bật Docker Desktop, rồi chạy backend trong terminal riêng:
 
    ```powershell
@@ -28,7 +34,7 @@ không cần `adb reverse`, không cần tạo thư mục `android/` hoặc `ios
 5. Mở terminal thứ hai:
 
    ```powershell
-   npm.cmd run start:go
+   npm.cmd run start:go -- --clear
    ```
 
 6. Quét QR code bằng Expo Go trên Android hoặc Camera trên iPhone. Giữ hai terminal
@@ -139,7 +145,7 @@ Tìm địa điểm cần `GEOAPIFY_API_KEY` trong file
 Nếu backend chưa cấu hình khóa này, app hiển thị trạng thái chưa sẵn sàng và cho
 thêm hoạt động thủ công. Giữ khóa ở backend, không đặt trong `EXPO_PUBLIC_*`.
 
-Tài liệu: [Expo SDK 57](https://docs.expo.dev/versions/v57.0.0/),
+Tài liệu: [Expo SDK 58](https://docs.expo.dev/versions/v58.0.0/),
 [Expo CLI](https://docs.expo.dev/more/expo-cli/),
-[GlassEffect SDK 57](https://docs.expo.dev/versions/v57.0.0/sdk/glass-effect/),
-[React Native Maps](https://docs.expo.dev/versions/v57.0.0/sdk/map-view/).
+[GlassEffect SDK 58](https://docs.expo.dev/versions/v58.0.0/sdk/glass-effect/),
+[React Native Maps](https://docs.expo.dev/versions/v58.0.0/sdk/map-view/).

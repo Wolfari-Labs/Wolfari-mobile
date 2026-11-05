@@ -2,12 +2,20 @@
 
 Wolfari Mobile is the mobile application for the **Wolfari** platform.
 
+**Chạy trên máy mới:** xem [hướng dẫn Backend + Mobile từ đầu](docs/local-setup.md)
+(cài công cụ, khởi tạo database, cấu hình môi trường, 3 terminal và xử lý lỗi Wi-Fi).
+
 It provides a mobile experience for users to access Wolfari's travel features, manage trips, explore travel information, track expenses, and interact with other Wolfari services.
 
 ## Tech Stack
 
-- Expo SDK 57 / Expo Router
+- Expo SDK 58 / Expo Router
 - React Native / TypeScript
+- NativeWind 4 / Reanimated 4 / Skia 2
+
+Use Node.js 22.13+ (22.x), 24.3+ (24.x), or 26+. After the SDK 58 upgrade,
+clear Metro's cache and use a matching Expo Go version or rebuild your native
+client. See [SDK 58 migration and verification](docs/sdk-58-upgrade.md).
 
 ## Project Status
 
@@ -29,16 +37,23 @@ plan permissions, profile updates and session revocation.
 Additional Gateway flows include password recovery/change, email verification,
 avatar upload/removal, LINK invitations, selected-editor permissions and member
 history. Leave/remove-member screens track asynchronous operation receipts; the
-backend feature remains disabled by default pending Finance integration. See the
-source-audit notes in `docs/mobile-api.md` for backend boundaries.
+backend now has Trip–Finance obligation checks but its lifecycle flag remains off
+by default. Mobile persists lookup receipts across restarts and links financial
+blockers to the group fund. See [Finance integration](docs/mobile-finance.md).
 
-The interface uses Liquid Glass floating controls, grouped cards, system typography,
-native page sheets and system date/time pickers. Capable iOS 26+ devices use
-`expo-glass-effect`; older iOS/web use blur, and Android uses a lightweight opaque
-gradient fallback. Forms keep the save action
-inside keyboard avoidance; tab spacing follows its measured height for larger
-text. Reduce Motion and Reduce Transparency preferences are respected.
-These modules are included in Expo Go.
+The current mobile UI follows **D · Pastel mềm 3D**: a blue/lilac/mint canvas,
+opaque rounded clay surfaces, local Nunito fonts, exported Figma artwork and
+blue-to-mint actions. Guest, authentication, Home, My Trips, overview and the
+demo share the existing NativeWind/StyleSheet theme; see
+[design D implementation and QA](docs/mobile-design-d.md) for coverage and differences.
+Existing native sheets/date pickers, keyboard avoidance, measured tab clearance
+and reduced-motion behavior remain. Skia is not loaded for Home/My Trips decoration.
+
+Cold launch now uses a matching native/animated mascot splash, with a short
+Reanimated orbit and fade, bounded auth waiting and accessibility fallbacks.
+The original mascot asset is reused; the app icon is unchanged. Native splash
+configuration requires a new build. See the [splash guide](docs/mobile-splash.md)
+for timing, tests and release-device QA.
 
 Login and registration have independent password visibility controls, hidden by
 default and reset when the app goes into the background. In an itinerary, choose
@@ -49,8 +64,13 @@ concurrent edits preserve the local draft and require an explicit reload instead
 of overwriting another member. The editor checks for updates every 15 seconds
 while foregrounded and not dragging; this is polling, not live presence/WebSocket sync.
 
-Packing and dress code show the shared plan in read-only mode. Finance, fare
-tracking, export and notification preferences await public Gateway APIs.
+Packing and dress code show the shared plan in read-only mode. Group funds now use
+the Finance Gateway for setup, destinations, budgets, contributions, expenses,
+refunds, ledger and closure confirmations. Receipt image upload and explicit-consent
+VietQR TEST instructions are included; this does not transfer or verify bank money.
+Existing private fund drafts remain under **Bản nháp dự trù riêng** and the demo
+stays isolated. Fare tracking, exports and notifications are not integrated on mobile;
+the current backend does contain notification and price-watch proxies.
 
 Run on your phone with **Expo Go over Wi-Fi**, without USB debugging:
 

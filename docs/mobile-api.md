@@ -18,6 +18,12 @@ See [Expo Go over Wi-Fi](expo-go.md) for networking and the development LAN brid
 | Places | `GET /travel/places?trip_id=&q=` and plan selected locations | Actual coordinates, native map, external maps, provider attribution/stale/mock metadata |
 | Members | `GET /trips/:id/members?include_left=` | All pages; active/history filters; own profile name and short user IDs for others (endpoint does not return names) |
 | Leave/remove member | `POST /trips/:id/leave`, `DELETE /trips/:id/members/:memberId`, `GET /operations/:operationId` | Confirmation/reason, role checks, frozen idempotency key/body/revision on uncertain reply; foreground polling, success only for SUCCEEDED + COMMITTED; backend feature remains disabled by default |
+| Group fund | `GET/POST /trips/:id/fund`, `/funds/:id/budget`, `/destinations`, `/transactions` | Server balances, exact decimal-string VND, Owner setup, separate Holder consent, cursor ledger |
+| Contributions | `/funds/:id/contribution-requests`, `/contributions`, `/contributions/:id/*` | Create requests, edit amounts, Self transfer reporting, Holder confirmation/rejection/reversal, Owner waiver/cancellation |
+| Expenses | `/funds/:id/expenses`, `/expenses/:id/*` | Server drafts, edit/delete/submit/withdraw, Holder paid confirmation/reject/reverse; trip-local date/time |
+| Refunds | `/funds/:id/refunds`, `/refunds/:id/*` | Owner creates/cancels, Holder reports paid, recipient confirms receipt/nonreceipt, requested/consented reversal |
+| Closures | `/funds/:id/closures`, `/closures/:id`, `/closures/:id/{confirm,cancel,remind}` | Immutable snapshot, per-user confirmations bound to hash, cancel/remind; accepted reminder does not mean delivered |
+| Evidence / VietQR | `POST /funds/:id/receipts`, `GET /contributions/:id/vietqr` | Private JPEG/PNG upload, TEST warning, consent before external QR fetch; no automatic bank transfer/verification |
 | Invite | `GET/POST /trips/:id/invitations`, `POST .../:invitationId/resend`, `POST .../:invitationId/revoke` | Owner controls, EMAIL/LINK creation, one-time link shown for manual sharing, revision/version checks, revoke confirmation |
 | Respond to invite | `POST /invitations/preview`, `/invitations/accept`, `/invitations/decline` | Paste token or fragment link, preview before responding, memory-only pending token through login |
 | Plan permissions | `PUT /trips/:id/plan-policy` | OWNER_ONLY, ALL_MEMBERS, SELECTED_MEMBERS with real active membership IDs; explicit confirmation replaces the editor list because the current read API does not return it |
@@ -31,27 +37,31 @@ saves supported fields only. Trip pictures are bundled Figma illustrations.
 Provider search IDs are not selected-location UUIDs: search results can prefill
 activity title/note; existing selected locations attach using actual Trip IDs.
 
-## Backend gaps
+## Integration boundaries — updated 2026-10-28
 
-The inspected Gateway has no mutation endpoints for packing/dress code and no
-public finance, fare-tracking, export/share, notification-preference, archive,
-trip-delete or ownership-transfer routes. The app does not simulate successful
-saves or call speculative endpoints. Packing/dress code stay read-only, and
-future tools are marked as coming later.
+The earlier statement that Finance had no public Gateway routes is superseded.
+The current Finance API is integrated; see [coverage and limitations](mobile-finance.md).
+The backend also has NotificationProxy and PriceWatchProxy, not yet integrated by
+this change. Packing/dress code edits remain local, and export, archive/delete and
+ownership transfer still have no mobile implementation. Do not infer backend gaps
+from missing mobile screens or from the older source audit.
 
-### Source audit — 2026-10-18
+### Source audit — 2026-10-18, amended 2026-10-28
 
 Compared the sibling `Wolfari-backend/apps/api-gateway/src/{identity,trip,plan,invitation,membership}-proxy.ts`
 against mobile and checked Identity controller/service/avatar validation plus the
 membership lifecycle handoff. Backend source/configuration were not modified.
 
-- Membership lifecycle is Trip-side implementation only. The backend defaults to
-  `TRIP_MEMBERSHIP_LIFECYCLE_ENABLED=false` and explicitly requires Finance/shared
-  protocol readiness before enabling it for real users. Mobile implements the
-  contract, not that missing dependency. A 503 is not reported as success.
-- Pending membership requests keep the same key, reason and revision in memory
-  across navigation during the current app process. They are not an offline queue
-  and do not survive an app restart; the UI shows the operation ID to retain.
+- Membership lifecycle now includes Finance obligations, eligible PENDING waivers
+  and durable backend recovery. Local Trip `.env` still has
+  `TRIP_MEMBERSHIP_LIFECYCLE_ENABLED=false`; demo config explicitly enables it.
+  Rollout/Automation/Export caveats remain in the backend runbook. No backend
+  source or configuration was changed by this mobile implementation.
+- Finance and membership share one pending-operation controller per Gateway,
+  account and trip. The exact body/key stays in memory for explicit retry. Only
+  a minimal lookup receipt survives restart, without bank fields, reason, amount,
+  file keys or tokens. Unknown/404/review outcomes block new writes. It is not an
+  offline mutation queue and does not automatically retry writes after restart.
 - Current-session logout cannot safely infer `refresh_sessions.id` from JWT `sid`.
   Local sign-out remains local; session management revokes actual IDs with DELETE.
   The alternative POST `/auth/logout` takes that same server session ID and is not
