@@ -56,6 +56,7 @@ const trip = {
 };
 let editable = true,
   failNext = false,
+  revokeOnNextWrite = false,
   commits = 0;
 let activities = ["Ăn sáng", "Tham quan", "Ăn trưa", "Ngày khác"].map(
   (title, index) => ({
@@ -130,6 +131,9 @@ await context.route("**/api/v1/**", async (route) => {
     const body = req.postDataJSON(),
       key = req.headers()["idempotency-key"];
     writes.push({ body, key });
+    // Revoke at the write boundary so background polling cannot consume this
+    // specific server-rejection scenario before the user presses Save.
+    if (revokeOnNextWrite) { revokeOnNextWrite = false; editable = false; }
     if (!editable) return fail(403, "PERMISSION_DENIED");
     if (receipts.has(key)) return respond(receipts.get(key));
     if (body.expected_plan_version !== trip.plan_version)
@@ -366,9 +370,11 @@ try {
   await button("Đưa Ăn sáng xuống").click();
   await button("Đóng").click();
   await button("Tiếp tục sắp xếp").click();
-  editable = false;
+  revokeOnNextWrite = true;
+  const beforeRevocation = commits;
   await button("Lưu thứ tự cho nhóm").click();
   await page.getByText(/Bạn không còn quyền sửa kế hoạch này/).waitFor();
+  assert.equal(commits, beforeRevocation);
   assert.equal(await button("Lưu thứ tự cho nhóm").isDisabled(), true);
   assert.ok(
     await page.evaluate(

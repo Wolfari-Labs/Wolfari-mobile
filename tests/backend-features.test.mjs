@@ -12,8 +12,8 @@ test("account links are parsed locally and password rules count Unicode code poi
   assert.equal(accountToken(`https://gateway.test/api/v1/auth/local/reset?token=${token}`), token);
   assert.equal(accountToken(`wolfarimobile://verify-email#token=${token}`), token);
   for (const invalid of ["", "bad", "http://a.test?token=", "https://a.test/no-token", "a".repeat(201)]) assert.equal(accountToken(invalid), undefined);
-  assert.equal(passwordError("😀".repeat(15), "😀".repeat(15)), undefined);
-  assert.ok(passwordError("😀".repeat(14), "😀".repeat(14)));
+  assert.equal(passwordError("😀".repeat(8), "😀".repeat(8)), undefined);
+  assert.ok(passwordError("😀".repeat(7), "😀".repeat(7)));
   assert.ok(passwordError("a".repeat(129), "a".repeat(129)));
   assert.ok(passwordError("a".repeat(15), "b".repeat(15)));
 });

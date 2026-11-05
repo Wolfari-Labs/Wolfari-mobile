@@ -28,7 +28,7 @@ export default function ProfileScreen() {
       await signOut();
       router.replace("/");
     } catch {
-      setError("Chưa thể xóa phiên trên thiết bị. Vui lòng thử lại.");
+      setError("Chưa xác nhận được đăng xuất. Kiểm tra kết nối rồi thử lại; phiên trên máy chủ có thể vẫn còn hiệu lực.");
     } finally {
       setBusy(false);
     }
@@ -104,8 +104,8 @@ export default function ProfileScreen() {
         onClose={() => setConfirm(false)}
       >
         <Text style={typography.body}>
-          Phiên đã lưu trên thiết bị này sẽ được xóa. Bạn có thể đăng nhập lại
-          bất cứ lúc nào.
+          Phiên đăng nhập này sẽ được thu hồi trên máy chủ và xóa khỏi thiết bị.
+          Các thiết bị khác vẫn đăng nhập. Cần kết nối mạng để hoàn tất.
         </Text>
         {error && <Feedback message={error} />}
         <Button

@@ -1,4 +1,4 @@
-import { router, useLocalSearchParams } from "expo-router";
+import { Redirect, router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { Keyboard, Pressable, StyleSheet, Text, View, type TextInputInstance } from "react-native";
 
@@ -16,7 +16,7 @@ import { pendingInvitation } from "@/features/trips/pending-invitation";
 
 export default function SignInScreen() {
   const { notice } = useLocalSearchParams<{ notice?: string }>();
-  const { signIn, status, profile } = useSession();
+  const { signIn, status } = useSession();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [errors, setErrors] = useState<AuthFieldErrors>({});
@@ -50,16 +50,13 @@ export default function SignInScreen() {
     }
   }
 
+  // The form is not a second landing page for an existing session.
+  if (status === "authenticated") return <Redirect href={pendingInvitation.get() ? "/invitation" : "/(tabs)"} />;
   return (
     <Screen title="Đăng nhập">
       <AuthIntro />
       {notice === "password-updated" && <Feedback success message="Đã cập nhật mật khẩu. Hãy đăng nhập lại bằng mật khẩu mới." />}
-      {status === "authenticated" && profile ? (
-        <>
-          <Feedback success message={`Bạn đã đăng nhập với tài khoản ${profile.email}.`} />
-          <Button label="Về trang khám phá" onPress={() => router.replace("/")} />
-        </>
-      ) : (
+      {(
         <>
           <View style={[layered.panel, { gap: 16 }]}>
           <FormField label="Email" icon="mail" placeholder="name@example.com" value={email} editable={!loading} error={errors.email} autoCapitalize="none" autoCorrect={false} keyboardType="email-address" autoComplete="email" textContentType="emailAddress" returnKeyType="next" submitBehavior="submit" maxLength={255}
