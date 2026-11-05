@@ -10,6 +10,7 @@ type SessionDependencies = {
   storage: TokenStorage;
   login: (input: LoginInput) => Promise<AuthTokens>;
   refresh: (refreshToken?: string) => Promise<AuthTokens>;
+  logout?: (accessToken: string, sessionId: string) => Promise<void>;
   web?: boolean;
   now?: () => number;
 };
@@ -24,7 +25,7 @@ function unauthorized(error: unknown): boolean {
   return error instanceof Error && "status" in error && error.status === 401;
 }
 
-export function createAuthSession({ storage, login, refresh, web = false, now = Date.now }: SessionDependencies) {
+export function createAuthSession({ storage, login, refresh, logout, web = false, now = Date.now }: SessionDependencies) {
   let snapshot: SessionSnapshot = { status: "loading", profile: null, error: null };
   let tokens: AuthTokens | null = null;
   let expiresAt = 0;
@@ -32,6 +33,7 @@ export function createAuthSession({ storage, login, refresh, web = false, now = 
   let generation = 0;
   let refreshing: { generation: number; promise: Promise<string> } | null = null;
   let restoring: Promise<void> | null = null;
+  let signingOut: Promise<void> | null = null;
   let storageQueue: Promise<void> = Promise.resolve();
   const listeners = new Set<() => void>();
 
@@ -142,14 +144,36 @@ export function createAuthSession({ storage, login, refresh, web = false, now = 
     },
 
     refreshAccessToken,
+    signOut(): Promise<void> {
+      if (signingOut) return signingOut;
+      const expectedGeneration = generation;
+      signingOut = (async () => {
+        try {
+          if (refreshing?.generation === expectedGeneration) await refreshing.promise;
+          if (generation !== expectedGeneration) return;
+          if (tokens && expiresAt - now() <= 30_000) await refreshAccessToken();
+          if (generation !== expectedGeneration) return;
+          if (tokens) {
+            // The real row ID is returned by login/refresh. JWT sid is a family ID.
+            if (!logout || !tokens.session_id || !/^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i.test(tokens.session_id))
+              throw new Error("Thiếu mã phiên đăng nhập. Hãy tải lại phiên rồi thử đăng xuất.");
+            await logout(tokens.access_token, tokens.session_id);
+          }
+        } catch (cause) {
+          // A retry after a lost logout response can legitimately return 401.
+          if (!unauthorized(cause)) throw cause;
+        }
+        if (generation === expectedGeneration) await clearLocalSession();
+      })().finally(() => { signingOut = null; });
+      return signingOut;
+    },
     updateProfile(profile: Profile) {
       if (tokens && tokens.profile.id === profile.id) {
         tokens = { ...tokens, profile };
         update({ ...snapshot, profile });
       }
     },
-    // Only local cleanup. Server logout requires an actual refresh_sessions.id;
-    // the JWT sid is a family ID and must not be sent as session_id.
+    // Password reset/change and an already-revoked session only need local cleanup.
     clearLocalSession,
   };
 }

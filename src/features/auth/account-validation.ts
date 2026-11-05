@@ -12,6 +12,6 @@ export function accountToken(input: string): string | undefined {
 
 export function passwordError(password: string, confirmation: string): string | undefined {
   const length = [...password].length;
-  if (length < 15 || length > 128) return "Mật khẩu phải có từ 15 đến 128 ký tự.";
+  if (length < 8 || length > 128) return "Mật khẩu phải có từ 8 đến 128 ký tự.";
   if (password !== confirmation) return "Mật khẩu xác nhận chưa khớp.";
 }

@@ -6,7 +6,7 @@ See [Expo Go over Wi-Fi](expo-go.md) for networking and the development LAN brid
 | Screen / flow | Gateway endpoints | Behavior |
 | --- | --- | --- |
 | Register / login / restore | `POST /auth/register`, `/auth/login`, `/auth/refresh` | Registration returns 202 without login; native refresh token in SecureStore |
-| Password recovery | `POST /auth/password-reset-requests`, `/auth/password-resets` | Generic anti-enumeration response; paste email link/token; validate 15–128 Unicode characters and confirmation; clear local session after reset |
+| Password recovery | `POST /auth/password-reset-requests`, `/auth/password-resets` | Generic anti-enumeration response; paste email link/token; validate 8–128 Unicode code points and confirmation; clear local session after reset; ambiguous writes require sign-in/recovery instead of blind retry |
 | Password change | `POST /me/password-change` | Current/new password; credential 401 does not trigger a refresh/replay; backend revokes all sessions, then mobile returns to sign-in |
 | Email verification | `POST /auth/email-verifications`, `/auth/email-verifications/confirm` | Authenticated resend, public token confirmation, refresh own profile; links parsed locally and never fetched |
 | Avatar | `POST/GET /me/avatar`, `PATCH /me` | System image picker, JPEG/PNG up to 10 MB/40 MP, multipart upload then versioned profile save, preview/remove; private image fetched with auth into memory |
@@ -70,10 +70,11 @@ membership lifecycle handoff. Backend source/configuration were not modified.
   a minimal lookup receipt survives restart, without bank fields, reason, amount,
   file keys or tokens. Unknown/404/review outcomes block new writes. It is not an
   offline mutation queue and does not automatically retry writes after restart.
-- Current-session logout cannot safely infer `refresh_sessions.id` from JWT `sid`.
-  Local sign-out remains local; session management revokes actual IDs with DELETE.
-  The alternative POST `/auth/logout` takes that same server session ID and is not
-  treated as a current-session discovery API.
+- Sign-out uses the actual `session_id` returned by login/refresh with POST
+  `/auth/logout`; it never derives a row ID from JWT `sid`. Web includes CSRF
+  when a refresh cookie exists, allowing Gateway to clear that cookie. Local
+  cleanup follows confirmed revocation or 401; network errors remain retryable
+  and do not claim success. Password reset/change uses separate local cleanup.
 - Existing mobile place search targets `/travel/places`, but the inspected sibling
   Gateway source does not currently route that path. Do not infer working search
   from a UI fixture; verify the deployed Gateway/provider separately. Manual
@@ -137,6 +138,25 @@ explains that the request may already have succeeded; reopening loads the server
 state. There is no offline write queue or persisted draft.
 
 ## Checks
+
+### Auth and UI review — 2026-11-05
+
+Registration 202 replaces the form with email instructions; it does not create a
+session. Existing sessions skip sign-in/sign-up. After email verification, guests
+can sign in and authenticated users can return to their account or pending invite.
+Opening `/verify-email?token=...` or `/reset-password?token=...` only prepares the
+form; the token is removed from navigation parameters and is not submitted until
+the user confirms. Pasting a token/link remains supported.
+
+Archived Trips keep member/invitation history visible but do not offer invitation
+creation/resend/revocation or editor-policy changes, matching existing backend
+guards. Reload failures disable writes until the current Trip state is available.
+Trip tools label Price Watch as simulated prices and no longer open an unrelated
+sample Trip from the current Trip's tools.
+
+The auth and backend-feature UI suites cover these transitions, duplicate-submit
+prevention, session logout and uncertain password writes. These checks use browser
+HTTP fixtures, not native-device or real email-delivery evidence.
 
 `npm run test:ui:features` uses contract fixtures (no real emails or backend writes)
 for recovery, email verification, password change/credential-401 handling, avatar

@@ -23,15 +23,17 @@ export default function InviteScreen() {
   const [email, setEmail] = useState("");
   const [validation, setValidation] = useState<string>();
   const [result, setResult] = useState<InvitationResult>();
+  const archived = data?.trip.lifecycle === "ARCHIVED";
+  const allowed = data?.trip.current_membership.role === "OWNER" && !archived;
+  const writable = allowed && !resource.loading && !resource.error;
   async function submit() {
-    if (!data || data.trip.current_membership.role !== "OWNER") return;
+    if (!data || !writable) return;
     if (kind === "EMAIL" && (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) || email.trim().length > 255)) { setValidation("Vui lòng nhập địa chỉ email hợp lệ."); return; }
     setValidation(undefined);
     const response = await command.run({ kind, email: kind === "EMAIL" ? email.trim().toLowerCase() : undefined, revision: data.trip.membership_revision }, key => kind === "EMAIL" ? api.trips.invite(data.trip, email, key) : api.trips.inviteLink(data.trip, key));
     if (response) setResult(response);
   }
-  const allowed = data?.trip.current_membership.role === "OWNER";
-  return <Screen title="Mời thành viên" bottomPadding={24} footer={allowed && !result ? <Button label={kind === "EMAIL" ? "Gửi lời mời" : "Tạo liên kết mời"} loading={command.busy} onPress={() => { void submit(); }} /> : undefined}>
+  return <Screen title="Mời thành viên" bottomPadding={24} footer={allowed && !result ? <Button label={kind === "EMAIL" ? "Gửi lời mời" : "Tạo liên kết mời"} loading={command.busy} disabled={!writable} onPress={() => { void submit(); }} /> : undefined}>
     <ResourceFeedback {...resource} hasData={!!data} onRetry={() => { void resource.reload(); }} />
     {data && (allowed ? <>
       <Heading title={"Đi cùng nhau,\nvui hơn nhiều!"} aside={<Image source={designAssets.mascot} style={{ width: 84, height: 84 }} contentFit="contain" />} subtitle={"Mời bạn bè tham gia " + data.trip.name + "."} />
@@ -50,6 +52,6 @@ export default function InviteScreen() {
         {kind === "EMAIL" ? <FormField label="Email người được mời" icon="mail" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" autoComplete="email" placeholder="banbe@email.com" editable={!command.busy} /> : <Notice>Người có liên kết hợp lệ và đáp ứng điều kiện tài khoản của hệ thống có thể nhận lời mời. Không đăng liên kết công khai.</Notice>}
         <Text style={typography.footnote}>Người nhận cần đăng nhập để phản hồi. Bạn có thể thu hồi lời mời trong danh sách thành viên.</Text>
       </>}
-    </> : <EmptyState title="Cùng mời bạn bè" message="Người tổ chức chuyến đi có quyền gửi lời mời cho nhóm." icon="users" />)}
+    </> : <EmptyState title={archived ? "Chuyến đi đã lưu trữ" : "Cùng mời bạn bè"} message={archived ? "Không thể tạo lời mời cho chuyến đi đã lưu trữ. Bạn vẫn có thể xem danh sách thành viên." : "Người tổ chức chuyến đi có quyền gửi lời mời cho nhóm."} icon="users" />)}
   </Screen>;
 }

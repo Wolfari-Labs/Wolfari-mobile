@@ -30,6 +30,8 @@ export default function MembersScreen() {
   const { profile } = useSession();
   const command = useCommand();
   const owner = data?.trip.current_membership.role === "OWNER";
+  const archived = data?.trip.lifecycle === "ARCHIVED";
+  const canManage = owner && !archived && !resource.loading && !resource.error;
   const [includeLeft, setIncludeLeft] = useState(false);
   const members = useResource(
     useCallback(
@@ -54,7 +56,7 @@ export default function MembersScreen() {
   const pending =
     invitations.data?.filter((item) => item.status === "PENDING") ?? [];
   async function manage() {
-    if (!selected) return;
+    if (!selected || !canManage || invitations.loading || invitations.error) return;
     const result = await command.run(
       { id: selected.id, action, version: selected.version },
       (key) => api.trips.manageInvitation(id, selected, action, key),
@@ -79,7 +81,7 @@ export default function MembersScreen() {
         title="Bạn đồng hành"
         subtitle={`${members.data ? `${members.data.length} thành viên · ` : ""}${data?.trip.name ?? "Hành trình của nhóm"}`}
         aside={
-          owner ? (
+          canManage ? (
             <IconButton
               icon="plus"
               label="Mời thành viên"
@@ -125,7 +127,7 @@ export default function MembersScreen() {
               gia {dateLabel(member.joined_at)}
               {member.left_at ? ` · Đã rời ${dateLabel(member.left_at)}` : ""}
             </Text>
-            {owner && member.role === "MEMBER" && !member.left_at && data?.trip.lifecycle !== "ARCHIVED" && <Button label={`Xóa ${member.user_id.slice(0, 8)}`} variant="destructive" compact style={{ alignSelf: "flex-start", marginTop: 8 }} onPress={() => router.push({ pathname: "/trip/[id]/membership-action", params: { id, memberId: member.id } })} />}
+            {canManage && member.role === "MEMBER" && !member.left_at && <Button label={`Xóa ${member.user_id.slice(0, 8)}`} variant="destructive" compact style={{ alignSelf: "flex-start", marginTop: 8 }} onPress={() => router.push({ pathname: "/trip/[id]/membership-action", params: { id, memberId: member.id } })} />}
           </View>
           {member.role === "OWNER" && (
             <Text style={[typography.footnote, { color: colors.teal }]}>
@@ -164,10 +166,11 @@ export default function MembersScreen() {
               <Text style={typography.footnote}>
                 Hết hạn {dateLabel(invitation.expires_at)}
               </Text>
-              <View style={ui.row}>
+              {canManage && <View style={ui.row}>
                 {invitation.invitation_type === "EMAIL" && (
                   <Button
                     label="Gửi lại"
+                    disabled={invitations.loading || !!invitations.error || command.busy}
                     compact
                     variant="soft"
                     onPress={() => {
@@ -179,6 +182,7 @@ export default function MembersScreen() {
                 )}
                 <Button
                   label="Thu hồi"
+                  disabled={invitations.loading || !!invitations.error || command.busy}
                   compact
                   variant="destructive"
                   onPress={() => {
@@ -187,7 +191,7 @@ export default function MembersScreen() {
                     setSelected(invitation);
                   }}
                 />
-              </View>
+              </View>}
             </View>
           ))}
           {!pending.length && invitations.data && (
@@ -207,7 +211,7 @@ export default function MembersScreen() {
       )}
       <Sheet
         dismissible={!command.busy}
-        visible={!!selected}
+        visible={!!selected && !!owner && !archived}
         title={action === "resend" ? "Gửi lại lời mời?" : "Thu hồi lời mời?"}
         onClose={() => {
           if (!command.busy) setSelected(undefined);
@@ -238,6 +242,7 @@ export default function MembersScreen() {
           label={action === "resend" ? "Gửi lại lời mời" : "Xác nhận thu hồi"}
           variant={action === "revoke" ? "destructive" : "primary"}
           loading={command.busy}
+          disabled={!canManage || invitations.loading || !!invitations.error}
           onPress={() => {
             void manage();
           }}

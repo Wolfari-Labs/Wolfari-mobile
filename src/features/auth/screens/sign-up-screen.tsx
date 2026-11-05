@@ -1,8 +1,8 @@
-import { router } from "expo-router";
+import { Redirect, router } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { Keyboard, Modal, Pressable, StyleSheet, Text, View, type TextInputInstance } from "react-native";
+import { Keyboard, Pressable, StyleSheet, Text, View, type TextInputInstance } from "react-native";
 
-import { colors, radii, typography } from "@/shared/theme/tokens";
+import { colors, typography } from "@/shared/theme/tokens";
 import { Button } from "@/shared/ui/button";
 import { layered } from "@/shared/ui/page-intro";
 import { AuthIntro } from "@/shared/ui/auth-intro";
@@ -13,8 +13,11 @@ import { Screen } from "@/shared/ui/screen";
 import { authApi } from "../api/auth.api";
 import { authErrorMessage } from "../auth-errors";
 import { validateRegistration, type AuthFieldErrors } from "../validation";
+import { useSession } from "../session/session-provider";
+import { pendingInvitation } from "@/features/trips/pending-invitation";
 
 export default function SignUpScreen() {
+  const { status } = useSession();
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -63,13 +66,23 @@ export default function SignUpScreen() {
     }
   }
 
+  if (status === "authenticated") return <Redirect href={pendingInvitation.get() ? "/invitation" : "/(tabs)"} />;
+  if (accepted) return <Screen title="Kiểm tra email" onBack={() => router.replace("/sign-in")}>
+    <Text accessibilityRole="header" style={typography.section}>Kiểm tra email của bạn</Text>
+    <Text style={typography.body}>Yêu cầu đăng ký đã được tiếp nhận. Kiểm tra hộp thư và thư mục thư rác để lấy liên kết xác minh.</Text>
+    <Text style={typography.footnote}>Xác minh email không tự đăng nhập. Sau khi xác minh, hãy dùng email và mật khẩu để vào Wolfari.</Text>
+    <Button label="Xác minh email" onPress={() => router.replace("/verify-email")} />
+    <Pressable accessibilityRole="link" onPress={() => router.replace("/sign-in")} style={styles.linkAction}>
+      <Text style={[typography.body, styles.link]}>Đã có tài khoản? Đăng nhập</Text>
+    </Pressable>
+  </Screen>;
   return (
     <Screen title="Tạo tài khoản">
       <AuthIntro registration />
       <View style={[layered.panel, { gap: 16 }]}>
       <FormField label="Họ và tên" icon="edit" placeholder="Nguyễn Minh Anh" value={fullName} editable={!loading} error={errors.full_name} autoComplete="name" textContentType="name" autoCapitalize="words" maxLength={150} returnKeyType="next" submitBehavior="submit" onSubmitEditing={() => emailInput.current?.focus()} onChangeText={(value) => { setFullName(value); clearFieldError("full_name"); }} />
       <FormField ref={emailInput} label="Email" icon="mail" placeholder="name@example.com" value={email} editable={!loading} error={errors.email} autoComplete="email" textContentType="emailAddress" autoCapitalize="none" autoCorrect={false} keyboardType="email-address" maxLength={255} returnKeyType="next" submitBehavior="submit" onSubmitEditing={() => passwordInput.current?.focus()} onChangeText={(value) => { setEmail(value); clearFieldError("email"); }} />
-      <FormField ref={passwordInput} label="Mật khẩu" icon="lock" placeholder="15–128 ký tự" value={password} editable={!loading} error={errors.password} secureTextEntry autoComplete="new-password" textContentType="newPassword" autoCapitalize="none" autoCorrect={false} returnKeyType="next" submitBehavior="submit" onSubmitEditing={() => confirmationInput.current?.focus()} onChangeText={(value) => { setPassword(value); clearFieldError("password"); }} />
+      <FormField ref={passwordInput} label="Mật khẩu" icon="lock" placeholder="8–128 ký tự" value={password} editable={!loading} error={errors.password} secureTextEntry autoComplete="new-password" textContentType="newPassword" autoCapitalize="none" autoCorrect={false} returnKeyType="next" submitBehavior="submit" onSubmitEditing={() => confirmationInput.current?.focus()} onChangeText={(value) => { setPassword(value); clearFieldError("password"); }} />
       <FormField ref={confirmationInput} label="Nhập lại mật khẩu" icon="lock" placeholder="Nhập lại mật khẩu" value={confirmation} editable={!loading} error={errors.confirm_password} secureTextEntry autoComplete="new-password" textContentType="newPassword" autoCapitalize="none" autoCorrect={false} returnKeyType="go" onSubmitEditing={() => { void submit(); }} onChangeText={(value) => { setConfirmation(value); clearFieldError("confirm_password"); }} />
       <Pressable accessibilityRole="checkbox" accessibilityLabel="Tôi đồng ý với Điều khoản sử dụng và Chính sách bảo mật" accessibilityState={{ checked: consent, disabled: loading }} disabled={loading} onPress={() => { setConsent((current) => !current); setConsentError(false); }} style={styles.consent}>
         <View style={[styles.checkbox, consent && styles.checked]}>{consent && <DesignIcon name="check" />}</View>
@@ -82,17 +95,6 @@ export default function SignUpScreen() {
       <Pressable disabled={loading} accessibilityRole="link" onPress={() => router.replace("/sign-in")} style={styles.linkAction}>
         <Text style={[typography.body, styles.link]}>Đã có tài khoản?  Đăng nhập →</Text>
       </Pressable>
-      <Modal visible={accepted} transparent animationType="fade" onRequestClose={() => setAccepted(false)}>
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard} accessibilityViewIsModal>
-            <Text accessibilityRole="header" style={typography.section}>Kiểm tra email của bạn</Text>
-            <Text style={[typography.body, styles.muted]}>Yêu cầu đăng ký đã được tiếp nhận. Hãy kiểm tra email để xác minh tài khoản, hoặc đăng nhập nếu bạn đã có tài khoản.</Text>
-            <Button label="Xác minh email" variant="soft" onPress={() => router.push("/verify-email")} />
-            <Button label="Đăng nhập" onPress={() => { setAccepted(false); router.replace("/sign-in"); }} />
-            <Button label="Đóng" variant="soft" onPress={() => setAccepted(false)} />
-          </View>
-        </View>
-      </Modal>
     </Screen>
   );
 }
@@ -106,6 +108,4 @@ const styles = StyleSheet.create({
   link: { color: colors.teal },
   linkAction: { minHeight: 44, justifyContent: "center" },
   error: { color: colors.error },
-  modalBackdrop: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "rgba(9,33,41,0.4)", padding: 24 },
-  modalCard: { width: "100%", maxWidth: 354, backgroundColor: colors.surface, borderRadius: radii.card, padding: 24, gap: 16 },
 });

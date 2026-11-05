@@ -27,10 +27,12 @@ export default function TripSettingsScreen() {
   const [success, setSuccess] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const owner = data?.trip.current_membership.role === "OWNER";
+  const archived = data?.trip.lifecycle === "ARCHIVED";
+  const writable = owner && !archived && !resource.loading && !resource.error;
   const members = useResource(useCallback((signal: AbortSignal) => collectPages(cursor => api.trips.members(id, cursor, signal), signal), [api, id]), owner && choice === "SELECTED_MEMBERS");
   const eligible = members.data?.filter(member => !member.left_at && member.role !== "OWNER") ?? [];
   async function save() {
-    if (!data || !choice || !owner) return;
+    if (!data || !choice || !writable) return;
     const editors = choice === "SELECTED_MEMBERS" ? selected : [];
     if (editors.some(editor => !eligible.some(member => member.id === editor))) return;
     const result = await command.run({ policy: choice, editors, revision: data.trip.membership_revision }, key => api.trips.policy(data.trip, choice, editors, key));
@@ -45,7 +47,7 @@ export default function TripSettingsScreen() {
       <Text accessibilityRole="header" style={typography.section}>Quyền trong nhóm</Text>
       <Text style={typography.body}>Ai có thể chỉnh sửa lịch trình?</Text>
       <Text style={typography.footnote}>Hiện tại: {policyLabels[data.trip.plan_edit_policy]}</Text>
-      {owner ? <>
+      {owner && !archived ? <>
         <Segments scroll items={[{ value: "OWNER_ONLY", label: "Chỉ chủ nhóm" }, { value: "ALL_MEMBERS", label: "Cả nhóm" }, { value: "SELECTED_MEMBERS", label: "Chọn thành viên" }]} value={choice ?? data.trip.plan_edit_policy} onChange={value => { if (command.busy) return; setChoice(value); setSelected([]); setSuccess(false); }} />
         {data.trip.plan_edit_policy === "SELECTED_MEMBERS" && !choice && <Notice>Ứng dụng chưa hiển thị danh sách người đang có quyền sửa. Chọn “Chọn thành viên” để thiết lập danh sách thay thế.</Notice>}
         {choice === "SELECTED_MEMBERS" && <>
@@ -58,15 +60,15 @@ export default function TripSettingsScreen() {
         </>}
         {command.error && <><Feedback message={command.error} /><Button label="Tải thông tin mới nhất" variant="soft" onPress={() => { setChoice(undefined); setSelected([]); command.clearError(); void resource.reload(); }} /></>}
         {success && <Feedback success message="Đã cập nhật quyền chỉnh sửa của nhóm." />}
-        <Button label="Lưu quyền của nhóm" loading={command.busy} disabled={!choice || (choice === "SELECTED_MEMBERS" && (!members.data || members.loading || !!members.error))} onPress={() => { if (choice === "SELECTED_MEMBERS") setConfirm(true); else void save(); }} />
-      </> : <Text style={typography.footnote}>Người tổ chức quản lý quyền sửa kế hoạch của các thành viên.</Text>}
+        <Button label="Lưu quyền của nhóm" loading={command.busy} disabled={!writable || !choice || (choice === "SELECTED_MEMBERS" && (!members.data || members.loading || !!members.error))} onPress={() => { if (choice === "SELECTED_MEMBERS") setConfirm(true); else void save(); }} />
+      </> : <Text style={typography.footnote}>{archived ? "Chuyến đi đã lưu trữ. Quyền của nhóm chỉ có thể xem." : "Người tổ chức quản lý quyền sửa kế hoạch của các thành viên."}</Text>}
       <SectionLink title="Bạn đồng hành" subtitle="Thành viên và lời mời" icon="users" onPress={() => router.push({ pathname: "/trip/[id]/members", params: { id } })} />
       {!owner && data.trip.lifecycle !== "ARCHIVED" && <Button label="Rời chuyến đi" variant="destructive" onPress={() => router.push({ pathname: "/trip/[id]/membership-action", params: { id } })} />}
     </>}
-    <Sheet visible={confirm} dismissible={!command.busy} title="Thay thế quyền chỉnh sửa?" onClose={() => setConfirm(false)}>
+    <Sheet visible={confirm && !!owner && !archived} dismissible={!command.busy} title="Thay thế quyền chỉnh sửa?" onClose={() => setConfirm(false)}>
       <Text style={typography.body}>Chỉ chủ nhóm và {selected.length} thành viên vừa chọn sẽ được chỉnh sửa lịch trình. Quyền cũ của những người khác sẽ bị gỡ.</Text>
       {command.error && <Feedback message={command.error} />}
-      <Button label="Xác nhận thay thế quyền" loading={command.busy} onPress={() => { void save(); }} />
+      <Button label="Xác nhận thay thế quyền" loading={command.busy} disabled={!writable} onPress={() => { void save(); }} />
     </Sheet>
   </Screen>;
 }
