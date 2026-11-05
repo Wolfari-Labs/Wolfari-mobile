@@ -8,7 +8,7 @@ import {
   moneyLabel,
   sandboxPaymentUrl,
   instructionQrUrl,
-} from '../src/features/finance/model.ts';
+} from '../src/features/finance/extended-model.ts';
 import { createCommandJournal } from '../src/features/finance/command.ts';
 import { chunkedStorage } from '../src/features/finance/chunked-storage.ts';
 import { createPriceWatchApi, watchInput } from '../src/features/price-watch/api.ts';

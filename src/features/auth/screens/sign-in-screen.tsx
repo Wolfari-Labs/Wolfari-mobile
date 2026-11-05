@@ -1,11 +1,11 @@
-import { Image } from "expo-image";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { Keyboard, Pressable, StyleSheet, Text, View, type TextInputInstance } from "react-native";
 
-import { colors, radii, typography } from "@/shared/theme/tokens";
+import { colors, typography } from "@/shared/theme/tokens";
 import { Button } from "@/shared/ui/button";
-import { designAssets } from "@/shared/ui/design-assets";
+import { layered } from "@/shared/ui/page-intro";
+import { AuthIntro } from "@/shared/ui/auth-intro";
 import { Feedback } from "@/shared/ui/feedback";
 import { FormField } from "@/shared/ui/form-field";
 import { Screen } from "@/shared/ui/screen";
@@ -52,12 +52,7 @@ export default function SignInScreen() {
 
   return (
     <Screen title="Đăng nhập">
-      <Image source={designAssets.logo} style={styles.logo} contentFit="contain" accessibilityLabel="Wolfari" />
-      <View style={styles.welcome}>
-        <Text accessibilityRole="header" style={[typography.title, styles.greeting]}>{"Chào mừng\ntrở lại!"}</Text>
-        <Image source={designAssets.mascot} style={styles.mascot} contentFit="contain" accessible={false} />
-      </View>
-      <Text style={[typography.body, styles.muted]}>Tiếp tục những hành trình của bạn.</Text>
+      <AuthIntro />
       {notice === "password-updated" && <Feedback success message="Đã cập nhật mật khẩu. Hãy đăng nhập lại bằng mật khẩu mới." />}
       {status === "authenticated" && profile ? (
         <>
@@ -66,34 +61,36 @@ export default function SignInScreen() {
         </>
       ) : (
         <>
+          <View style={[layered.panel, { gap: 16 }]}>
           <FormField label="Email" icon="mail" placeholder="name@example.com" value={email} editable={!loading} error={errors.email} autoCapitalize="none" autoCorrect={false} keyboardType="email-address" autoComplete="email" textContentType="emailAddress" returnKeyType="next" submitBehavior="submit" maxLength={255}
             onChangeText={(value) => { setEmail(value); setErrors((current) => ({ ...current, email: undefined })); setError(null); }} onSubmitEditing={() => passwordInput.current?.focus()} />
           <FormField ref={passwordInput} label="Mật khẩu" icon="lock" placeholder="••••••••" value={password} editable={!loading} error={errors.password} secureTextEntry autoCapitalize="none" autoCorrect={false} autoComplete="current-password" textContentType="password" returnKeyType="go" onSubmitEditing={() => { void submit(); }}
             onChangeText={(value) => { setPassword(value); setErrors((current) => ({ ...current, password: undefined })); setError(null); }} />
           {error && <Feedback message={error} />}
+          <Pressable cssInterop={false} accessibilityRole="button" accessibilityState={{ disabled: loading }} disabled={loading} onPress={() => router.push("/forgot-password")} style={({ pressed }) => [styles.forgotAction, pressed && styles.pressed]}>
+            <Text style={[typography.footnote, styles.forgotLabel]}>Quên mật khẩu?</Text>
+          </Pressable>
           <Button label="Đăng nhập" loading={loading} onPress={() => { void submit(); }} />
-          <Button label="Quên mật khẩu?" variant="soft" disabled={loading} onPress={() => router.push("/forgot-password")} />
+          </View>
           <View style={styles.signUpPrompt}>
             <Text style={[typography.body, styles.muted, styles.promptCopy]}>Bạn chưa có tài khoản?</Text>
-            <Pressable disabled={loading} accessibilityRole="link" onPress={() => router.replace("/sign-up")}>
+            <Pressable disabled={loading} accessibilityRole="link" onPress={() => router.replace("/sign-up")} style={styles.linkAction}>
               <Text style={[typography.body, styles.link]}>Đăng ký</Text>
             </Pressable>
           </View>
         </>
       )}
-      <Image source={designAssets.lake} style={styles.lake} contentFit="cover" accessibilityLabel="Minh họa hồ nước xanh và núi" />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  logo: { width: 114, height: 38 },
-  welcome: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 92 },
-  greeting: { flex: 1 },
-  mascot: { width: 92, height: 92 },
   muted: { color: colors.muted },
   signUpPrompt: { flexDirection: "row", alignItems: "center", gap: 8 },
   promptCopy: { flex: 1 },
-  link: { color: colors.teal, fontWeight: "600", minWidth: 116, textAlign: "left" },
-  lake: { height: 150, width: "100%", borderRadius: radii.card },
+  link: { color: colors.teal },
+  linkAction: { minHeight: 44, justifyContent: "center", paddingHorizontal: 4 },
+  forgotAction: { minHeight: 44, alignItems: "flex-end", justifyContent: "center", marginTop: -8 },
+  forgotLabel: { color: colors.teal },
+  pressed: { opacity: 0.7 },
 });

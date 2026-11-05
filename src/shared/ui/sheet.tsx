@@ -15,6 +15,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { useAccessibilityPreferences } from "@/shared/hooks/use-accessibility-preferences";
 import { colors, typography } from "@/shared/theme/tokens";
 import { GlassSurface } from "./glass-surface";
+import { webSafeArea } from "./web-safe-area";
 
 type Props = PropsWithChildren<{
   visible: boolean;
@@ -78,6 +79,7 @@ export function Sheet({
               {title}
             </Text>
             <Pressable
+              cssInterop={false}
               onPress={close}
               disabled={!dismissible}
               accessibilityRole="button"
@@ -100,6 +102,7 @@ export function Sheet({
               contentContainerStyle={[
                 styles.content,
                 { paddingBottom: Math.max(insets.bottom, 24) },
+                webSafeArea.sheetContent,
               ]}
             >
               {children}
@@ -109,6 +112,7 @@ export function Sheet({
               style={[
                 styles.content,
                 { flexShrink: 1, paddingBottom: Math.max(insets.bottom, 24) },
+                webSafeArea.sheetContent,
               ]}
             >
               {children}
@@ -124,7 +128,7 @@ export function Sheet({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.3)",
+    backgroundColor: "rgba(23, 63, 99, 0.38)",
     justifyContent: "flex-end",
     alignItems: "center",
   },
@@ -138,18 +142,22 @@ const styles = StyleSheet.create({
     maxWidth: 480,
     flexShrink: 1,
     overflow: "hidden",
+    borderWidth: 1.5,
+    borderBottomWidth: 0,
+    borderColor: colors.ink,
   },
   nativeSheet: {
     flex: 1,
     maxHeight: "100%",
+    borderWidth: 0,
     borderTopLeftRadius: 0,
     borderTopRightRadius: 0,
   },
   handle: {
-    width: 36,
+    width: 40,
     height: 5,
     borderRadius: 99,
-    backgroundColor: "#C7C7CC",
+    backgroundColor: "rgba(23, 63, 99, 0.3)",
     alignSelf: "center",
     marginTop: 10,
   },
@@ -171,7 +179,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  closeText: { color: colors.teal, fontSize: 17, fontWeight: "600" },
+  closeText: { color: colors.ink, fontSize: 16, fontWeight: "800", textDecorationLine: "underline" },
   scroll: { flexShrink: 1 },
   content: { padding: 24, gap: 16 },
 });

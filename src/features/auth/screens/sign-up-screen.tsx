@@ -4,6 +4,8 @@ import { Keyboard, Modal, Pressable, StyleSheet, Text, View, type TextInputInsta
 
 import { colors, radii, typography } from "@/shared/theme/tokens";
 import { Button } from "@/shared/ui/button";
+import { layered } from "@/shared/ui/page-intro";
+import { AuthIntro } from "@/shared/ui/auth-intro";
 import { DesignIcon } from "@/shared/ui/design-icon";
 import { Feedback } from "@/shared/ui/feedback";
 import { FormField } from "@/shared/ui/form-field";
@@ -63,10 +65,8 @@ export default function SignUpScreen() {
 
   return (
     <Screen title="Tạo tài khoản">
-      <View style={styles.heading}>
-        <Text accessibilityRole="header" style={typography.title}>{"Cùng Wolfari\nlên đường"}</Text>
-        <Text style={[typography.body, styles.muted]}>Lưu kế hoạch và kết nối với nhóm bạn.</Text>
-      </View>
+      <AuthIntro registration />
+      <View style={[layered.panel, { gap: 16 }]}>
       <FormField label="Họ và tên" icon="edit" placeholder="Nguyễn Minh Anh" value={fullName} editable={!loading} error={errors.full_name} autoComplete="name" textContentType="name" autoCapitalize="words" maxLength={150} returnKeyType="next" submitBehavior="submit" onSubmitEditing={() => emailInput.current?.focus()} onChangeText={(value) => { setFullName(value); clearFieldError("full_name"); }} />
       <FormField ref={emailInput} label="Email" icon="mail" placeholder="name@example.com" value={email} editable={!loading} error={errors.email} autoComplete="email" textContentType="emailAddress" autoCapitalize="none" autoCorrect={false} keyboardType="email-address" maxLength={255} returnKeyType="next" submitBehavior="submit" onSubmitEditing={() => passwordInput.current?.focus()} onChangeText={(value) => { setEmail(value); clearFieldError("email"); }} />
       <FormField ref={passwordInput} label="Mật khẩu" icon="lock" placeholder="15–128 ký tự" value={password} editable={!loading} error={errors.password} secureTextEntry autoComplete="new-password" textContentType="newPassword" autoCapitalize="none" autoCorrect={false} returnKeyType="next" submitBehavior="submit" onSubmitEditing={() => confirmationInput.current?.focus()} onChangeText={(value) => { setPassword(value); clearFieldError("password"); }} />
@@ -78,7 +78,8 @@ export default function SignUpScreen() {
       {consentError && <Text accessibilityRole="alert" style={[typography.footnote, styles.error]}>Vui lòng đồng ý với điều khoản trước khi tạo tài khoản.</Text>}
       {error && <Feedback message={error} />}
       <Button label="Tạo tài khoản" loading={loading} onPress={() => { void submit(); }} />
-      <Pressable disabled={loading} accessibilityRole="link" onPress={() => router.replace("/sign-in")}>
+      </View>
+      <Pressable disabled={loading} accessibilityRole="link" onPress={() => router.replace("/sign-in")} style={styles.linkAction}>
         <Text style={[typography.body, styles.link]}>Đã có tài khoản?  Đăng nhập →</Text>
       </Pressable>
       <Modal visible={accepted} transparent animationType="fade" onRequestClose={() => setAccepted(false)}>
@@ -97,13 +98,13 @@ export default function SignUpScreen() {
 }
 
 const styles = StyleSheet.create({
-  heading: { gap: 6 },
   muted: { color: colors.muted },
-  consent: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 36 },
+  consent: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 44 },
   checkbox: { width: 22, height: 22, borderRadius: 6, borderColor: colors.line, borderWidth: 1, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center" },
   checked: { backgroundColor: colors.teal, borderWidth: 0 },
   consentCopy: { flex: 1 },
-  link: { color: colors.teal, fontWeight: "600" },
+  link: { color: colors.teal },
+  linkAction: { minHeight: 44, justifyContent: "center" },
   error: { color: colors.error },
   modalBackdrop: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "rgba(9,33,41,0.4)", padding: 24 },
   modalCard: { width: "100%", maxWidth: 354, backgroundColor: colors.surface, borderRadius: radii.card, padding: 24, gap: 16 },

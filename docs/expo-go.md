@@ -1,5 +1,8 @@
 # Chạy Wolfari bằng Expo Go qua Wi-Fi
 
+**Máy mới hoặc chưa cài dependencies/database:** làm theo
+[hướng dẫn Backend + Mobile từ đầu](local-setup.md) trước.
+
 Project dùng Expo SDK 58 và Expo Router trong `src/app`. Không cần bật USB debugging,
 không cần `adb reverse`, không cần tạo thư mục `android/` hoặc `ios/`.
 
@@ -7,7 +10,10 @@ Máy Windows tại `D:\Wolfari` dùng bộ demo Gateway13000: xem [hướng dẫ
 
 ## Chạy trên điện thoại
 
-1. Cài Expo Go hỗ trợ SDK 58. Điện thoại và máy tính kết nối cùng Wi-Fi.
+1. Cài Expo Go hỗ trợ **SDK 58**. Điện thoại và máy tính kết nối cùng Wi-Fi.
+   Nếu bản Expo Go đang cài chưa hỗ trợ SDK 58, dùng bản tương thích từ
+   [Expo Go](https://expo.dev/go) hoặc development build mới; client SDK 57 không
+   chạy được bộ native module SDK 58. Không hạ riêng React Native để né lỗi này.
 2. Bật Docker Desktop, rồi chạy backend trong terminal riêng:
 
    ```powershell
@@ -30,7 +36,7 @@ Máy Windows tại `D:\Wolfari` dùng bộ demo Gateway13000: xem [hướng dẫ
 5. Mở terminal thứ hai:
 
    ```powershell
-   npm.cmd run start:go
+   npm.cmd run start:go -- --clear
    ```
 
 6. Trên iPhone, đăng nhập cùng tài khoản Expo trên CLI (`npx.cmd expo login`) và Expo Go.
@@ -41,8 +47,8 @@ Máy Windows tại `D:\Wolfari` dùng bộ demo Gateway13000: xem [hướng dẫ
 `dev:gateway` chuyển tiếp cổng LAN 3001 đến Gateway trên máy tính ở cổng 3000.
 Backend hiện chỉ nghe `127.0.0.1`, vì thế điện thoại không gọi trực tiếp IP LAN:3000.
 Script không sửa backend. Expo Go lấy `Constants.expoConfig.hostUri` và gọi
-`http://<IP-máy-chạy-Expo>:3001/api/v1`. Module Crypto và Maps được cài bằng
-`expo install` theo SDK; đều hỗ trợ Expo Go.
+`http://<IP-máy-chạy-Expo>:3001/api/v1`. UUID dùng API core của Expo qua adapter
+`operation-id`, không cần native module ExpoCrypto riêng. Maps dùng bản theo SDK.
 
 ## Khi không kết nối được
 
@@ -141,15 +147,6 @@ Tìm địa điểm cần `GEOAPIFY_API_KEY` trong file
 `Wolfari-backend/apps/travel-intelligence-service/.env`, sau đó restart backend.
 Nếu backend chưa cấu hình khóa này, app hiển thị trạng thái chưa sẵn sàng và cho
 thêm hoạt động thủ công. Giữ khóa ở backend, không đặt trong `EXPO_PUBLIC_*`.
-
-Preview Web của repo mobile dùng `web.output=single` và `asyncRoutes.web=false`:
-renderer HTML của SDK 58 từng gây lỗi Metro `Requiring unknown module` khi mở nhiều
-route trên Windows, kể cả khi đã tắt async routes. Các màn hình riêng tư tải dữ
-liệu sau đăng nhập, nên dùng ứng dụng phía client thay vì prerender từng route.
-Web export vì vậy là SPA; máy chủ triển khai phải fallback về index.html. Repo
-Wolfari-web riêng không thay đổi. iOS/Android vẫn dùng bundle native. Khi cập nhật
-SDK/config, chạy `npx.cmd expo start --clear` một lần. Xem
-[hướng dẫn chuyển Router 57 → 58](https://docs.expo.dev/router/migrate/sdk-57-to-58/).
 
 Tài liệu: [Expo SDK 58](https://docs.expo.dev/versions/v58.0.0/),
 [Expo CLI](https://docs.expo.dev/more/expo-cli/),

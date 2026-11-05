@@ -1,11 +1,12 @@
-import { Image } from "expo-image";
 import { router } from "expo-router";
 import { useState } from "react";
-import { Animated, Pressable, StyleSheet, View } from "react-native";
+import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { useAccessibilityPreferences } from "@/shared/hooks/use-accessibility-preferences";
-import { colors, radii, shadows } from "@/shared/theme/tokens";
-import { designAssets, type DesignIconName } from "./design-assets";
+import { useSession } from "@/features/auth/session/session-provider";
+import { ProfileAvatar } from "@/features/auth/components/profile-avatar";
+import { colors, radii, typography } from "@/shared/theme/tokens";
+import { type DesignIconName } from "./design-assets";
 import { DesignIcon } from "./design-icon";
 import { GlassSurface } from "./glass-surface";
 
@@ -17,18 +18,20 @@ type Props = {
 
 export function AppHeader({
   onPressNotification = () => router.push("/invitation"),
-  onPressAdd = () => router.push("/create-trip"),
+  onPressAdd,
   hasUnreadNotifications = false,
 }: Props) {
+  const { profile } = useSession();
+  const name = profile?.full_name.trim().split(/\s+/).at(-1) ?? "bạn";
   return (
     <View style={styles.header}>
-      <Image
-        source={designAssets.logo}
-        style={styles.logo}
-        contentFit="contain"
-        accessibilityLabel="Wolfari"
-      />
-      <View style={styles.spacer} />
+      <Pressable accessibilityRole="button" accessibilityLabel="Mở tài khoản" onPress={() => router.navigate("/(tabs)/profile")} style={styles.avatar}>
+        <ProfileAvatar profile={profile} size={42} />
+      </Pressable>
+      <View style={styles.greeting}>
+        <Text style={typography.footnote}>Chào {name},</Text>
+        <Text accessibilityRole="header" style={styles.title}>Đi đâu tiếp nhỉ?</Text>
+      </View>
       <View style={styles.actions}>
         <HeaderButton
           icon="bell"
@@ -37,11 +40,11 @@ export function AppHeader({
         >
           {hasUnreadNotifications && <View style={styles.unreadDot} />}
         </HeaderButton>
-        <HeaderButton
+        {onPressAdd && <HeaderButton
           icon="plus"
           label="Tạo chuyến đi mới"
           onPress={onPressAdd}
-        />
+        />}
       </View>
     </View>
   );
@@ -102,15 +105,15 @@ function HeaderButton({
 
 const styles = StyleSheet.create({
   header: {
-    height: 52,
+    minHeight: 52,
+    gap: 12,
     flexDirection: "row",
     alignItems: "center",
     width: "100%",
   },
-  logo: {
-    width: 114,
-    height: 38,
-  },
+  avatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center" },
+  greeting: { flex: 1, minWidth: 0, gap: 2 },
+  title: { ...typography.title, fontSize: 22, lineHeight: 28 },
   spacer: {
     flex: 1,
   },
@@ -128,7 +131,6 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     alignItems: "center",
     justifyContent: "center",
-    ...shadows.floating,
   },
   unreadDot: {
     position: "absolute",
@@ -140,5 +142,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.orange,
     borderWidth: 1.5,
     borderColor: colors.surface,
+    boxShadow: "0 0 0 1px #173F63",
   },
 });

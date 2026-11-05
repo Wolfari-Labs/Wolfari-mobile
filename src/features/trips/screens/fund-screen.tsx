@@ -13,12 +13,12 @@ import { Sheet } from '@/shared/ui/sheet';
 import {
   ActionSheet,
   Card,
-  CommandFeedback,
   Line,
   type ActionForm,
   type Field,
 } from '../../finance/components';
-import { useFinanceCommand } from '../../finance/use-finance-command';
+import { useFundCommand } from '../../finance/use-fund-command';
+import { OperationFeedback } from '@/shared/operations/operation-feedback';
 import {
   contributionActions,
   money,
@@ -31,7 +31,7 @@ import {
   type Page,
   type PaymentAttempt,
   type PaymentInstruction,
-} from '../../finance/model';
+} from '../../finance/extended-model';
 import type { WriteIntent } from '../../finance/api';
 import { collectPages } from '../api/pagination';
 
@@ -94,7 +94,7 @@ function FundWorkspace({ id, userId }: { id: string; userId: string }) {
           api.trips.get(id, signal),
           api.finance.fund(id, signal),
         ]);
-        return { trip, fund };
+        return { trip: fund ? trip : await api.trips.get(id, signal), fund };
       },
       [api, id],
     ),
@@ -111,7 +111,7 @@ function FundWorkspace({ id, userId }: { id: string; userId: string }) {
     !resource.loading &&
     !resource.error;
   const reload = resource.reload;
-  const command = useFinanceCommand(userId, id, 'finance', reload);
+  const command = useFundCommand(id, reload);
   const returnedPayment =
     command.lastResult &&
     typeof command.lastResult === 'object' &&
@@ -351,7 +351,8 @@ function FundWorkspace({ id, userId }: { id: string; userId: string }) {
         }}
         disabled={resource.loading}
       />
-      <CommandFeedback command={command} />
+      <OperationFeedback operation={command.operation} onFinish={async () => { await reload(); }} />
+      <Button label="Quay lại quỹ" variant="soft" onPress={() => router.push({ pathname: '/trip/[id]/fund', params: { id } })} />
       {readError && <Notice>{readError}</Notice>}
       {trip && (
         <>

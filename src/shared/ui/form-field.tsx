@@ -10,7 +10,7 @@ import {
   type TextInputInstance,
 } from "react-native";
 
-import { colors, radii, typography } from "@/shared/theme/tokens";
+import { colors, fonts, radii, typography } from "@/shared/theme/tokens";
 import { DesignIcon } from "./design-icon";
 import type { DesignIconName } from "./design-assets";
 
@@ -45,6 +45,7 @@ export function FormField({
     <View style={styles.field}>
       <Text style={[typography.body, styles.label]}>{label}</Text>
       <View
+        collapsable={false}
         style={[
           styles.inputContainer,
           input.multiline && styles.multilineContainer,
@@ -54,7 +55,7 @@ export function FormField({
         ]}
       >
         <View style={styles.icon}>
-          <DesignIcon name={icon} />
+          <DesignIcon name={icon} size={18} tintColor={colors.teal} />
         </View>
         <TextInput
           {...input}
@@ -81,6 +82,7 @@ export function FormField({
         />
         {secureTextEntry && (
           <Pressable
+            cssInterop={false}
             accessibilityRole="button"
             accessibilityLabel={`${passwordVisible ? "Ẩn" : "Hiện"} ${label.toLowerCase()}`}
             accessibilityState={{ disabled: input.editable === false }}
@@ -88,13 +90,13 @@ export function FormField({
             onPress={() => setPasswordVisible((value) => !value)}
             style={({ pressed }) => [
               styles.visibility,
-              pressed && { backgroundColor: colors.tealSoft },
+              pressed && { backgroundColor: colors.fill },
             ]}
           >
             <DesignIcon
               name={passwordVisible ? "eyeOff" : "eye"}
               size={22}
-              tintColor={colors.teal}
+              tintColor={colors.ink}
             />
           </Pressable>
         )}
@@ -120,19 +122,22 @@ const styles = StyleSheet.create({
     borderRadius: 22,
   },
   field: { gap: 8 },
-  label: { minHeight: 22, fontSize: 15, lineHeight: 22, fontWeight: "500" },
+  label: { minHeight: 20, fontSize: 13, lineHeight: 20, fontFamily: fonts.bold, color: colors.muted },
   inputContainer: {
     minHeight: 54,
     borderRadius: radii.control,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.line,
+    backgroundColor: colors.fill,
+    borderWidth: 2,
+    borderColor: "transparent",
+    // Focus only deepens the ink. Never toggle transform/shadow/transition here:
+    // restructuring the native view under a focused TextInput drops focus and
+    // makes the keyboard open and close in a loop.
     paddingHorizontal: 14,
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
   },
-  icon: { width: 18, height: 18, justifyContent: "center" },
+  icon: { width: 32, height: 32, borderRadius: 12, backgroundColor: colors.tealSoft, alignItems: "center", justifyContent: "center" },
   input: {
     flex: 1,
     minWidth: 0,
@@ -144,7 +149,7 @@ const styles = StyleSheet.create({
   multilineContainer: { alignItems: "flex-start", paddingTop: 14 },
   multiline: { minHeight: 104, paddingTop: 0, textAlignVertical: "top" },
   disabled: { opacity: 0.55 },
-  focused: { borderColor: colors.teal },
+  focused: { borderColor: colors.blue, backgroundColor: colors.surface },
   invalid: { borderColor: colors.error },
   error: { color: colors.error },
 });

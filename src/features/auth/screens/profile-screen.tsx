@@ -7,7 +7,8 @@ import { AppHeader } from "@/shared/ui/app-header";
 import { Button } from "@/shared/ui/button";
 import { ProfileAvatar } from "../components/profile-avatar";
 import { Feedback } from "@/shared/ui/feedback";
-import { Heading, IconButton, SectionLink, ui } from "@/shared/ui/journal";
+import { IconButton, SectionLink, ui } from "@/shared/ui/journal";
+import { PageIntro, layered } from "@/shared/ui/page-intro";
 import { Screen } from "@/shared/ui/screen";
 import { Sheet } from "@/shared/ui/sheet";
 import { pendingInvitation } from "@/features/trips/pending-invitation";
@@ -34,12 +35,12 @@ export default function ProfileScreen() {
   }
   return (
     <Screen header={<AppHeader />} tab="account">
-      <Heading
-        large
+      <PageIntro
+        eyebrow="KHÔNG GIAN CỦA BẠN"
+        icon="users"
         title="Tài khoản"
         subtitle="Những hành trình bắt đầu từ đây."
-      />
-      <View style={[ui.card, ui.row]}>
+        summary={<View style={ui.row}>
         <ProfileAvatar profile={profile} />
         <View style={ui.flex}>
           <Text style={typography.section}>{profile?.full_name}</Text>
@@ -52,8 +53,9 @@ export default function ProfileScreen() {
           label="Chỉnh sửa hồ sơ"
           onPress={() => router.push("/edit-profile")}
         />
-      </View>
-      <View style={ui.group}>
+      </View>}
+      />
+      <View style={[layered.tint, layered.rows]}>
         <SectionLink grouped title="Đổi mật khẩu" subtitle="Bảo vệ tài khoản của bạn" icon="lock" onPress={() => router.push("/change-password")} />
         <SectionLink grouped title="Xác minh email" subtitle={profile?.email_verified_at ? "Đã xác minh" : "Xác minh để nhận lời mời qua email"} icon="mail" onPress={() => router.push("/verify-email")} />
         <SectionLink

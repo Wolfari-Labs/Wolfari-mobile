@@ -10,8 +10,8 @@ import {
   View,
   useWindowDimensions,
   type LayoutChangeEvent,
-  type ViewInstance,
   type ScrollViewInstance,
+  type ViewInstance,
 } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue, type SharedValue } from "react-native-reanimated";
 

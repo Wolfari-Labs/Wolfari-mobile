@@ -1,10 +1,9 @@
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
-import { useState } from "react";
-import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
-
-import { useAccessibilityPreferences } from "@/shared/hooks/use-accessibility-preferences";
-import { colors, shadows, typography } from "@/shared/theme/tokens";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import Animated from "react-native-reanimated";
+import { usePressMotion } from "@/shared/hooks/use-press-motion";
+import { colors, gradients, radii, shadows, typography } from "@/shared/theme/tokens";
 import { designAssets } from "@/shared/ui/design-assets";
 import { DesignIcon } from "@/shared/ui/design-icon";
 import { GlassSurface } from "@/shared/ui/glass-surface";
@@ -13,156 +12,62 @@ import { lifecycleLabels, tripDates } from "../utils";
 import { openTrip } from "./trip-navigation";
 
 export function coverFor(trip: Pick<Trip, "name">) {
-  const name = trip.name
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[đĐ]/g, "d")
-    .toLowerCase();
-  return /da lat/.test(name)
-    ? designAssets.dalat
-    : /da nang/.test(name)
-      ? designAssets.tripCover
-      : designAssets.coast;
+  const name = trip.name.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[đĐ]/g, "d").toLowerCase();
+  return /da lat/.test(name) ? designAssets.dalat : /da nang/.test(name) ? designAssets.pastelDestination : /hoi an/.test(name) ? designAssets.pastelBridge : designAssets.pastelCoast;
 }
 
-export function TripCard({
-  trip,
-  ticket = false,
-}: {
-  trip: Trip;
-  ticket?: boolean;
+export function TripCard({ trip, ticket = false, interactive = true, compact = false }: {
+  trip: Trip; ticket?: boolean; interactive?: boolean; compact?: boolean;
 }) {
-  const { reduceMotion } = useAccessibilityPreferences();
-  const [scale] = useState(() => new Animated.Value(1));
-
-  const handlePressIn = () => {
-    if (reduceMotion) return;
-    Animated.spring(scale, {
-      toValue: 0.982,
-      damping: 16,
-      stiffness: 350,
-      useNativeDriver: true,
-    }).start();
-  };
-
-  const handlePressOut = () => {
-    if (reduceMotion) return;
-    Animated.spring(scale, {
-      toValue: 1,
-      damping: 12,
-      stiffness: 240,
-      useNativeDriver: true,
-    }).start();
-  };
-
-  return (
-    <Animated.View style={{ transform: [{ scale }] }}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`Mở chuyến đi ${trip.name}`}
-        onPress={() => openTrip(trip.id)}
-        onPressIn={handlePressIn}
-        onPressOut={handlePressOut}
-        style={[
-          styles.card,
-          ticket && styles.ticket,
-        ]}
-      >
-        <Image
-          source={coverFor(trip)}
-          style={ticket ? styles.ticketImage : StyleSheet.absoluteFill}
-          contentFit="cover"
-        />
-        {!ticket && (
-          <LinearGradient
-            colors={["transparent", "rgba(5,31,61,0.12)", "rgba(5,31,61,0.88)"]}
-            style={StyleSheet.absoluteFill}
-          />
-        )}
-        <GlassSurface variant="subtle" style={styles.badge}>
-          <Text style={styles.badgeText}>
-            {ticket ? "✈  " : "•  "}
-            {lifecycleLabels[trip.lifecycle]}
-          </Text>
-        </GlassSurface>
-        <View style={[styles.details, ticket && styles.ticketDetails]}>
-          <View style={{ flex: 1 }}>
-            <Text
-              style={[
-                ticket ? typography.headline : typography.title,
-                !ticket && { color: colors.surface },
-              ]}
-              numberOfLines={2}
-            >
-              {trip.name}
-            </Text>
-            <Text
-              style={[
-                typography.footnote,
-                { marginTop: 4 },
-                !ticket && { color: "#FFFFFFDD" },
-              ]}
-            >
-              {tripDates(trip)}
-            </Text>
-          </View>
-          {!ticket && (
-            <GlassSurface variant="subtle" style={styles.arrow}>
-              <DesignIcon name="chevron" size={18} tintColor={colors.teal} />
-            </GlassSurface>
-          )}
-        </View>
-        {ticket && (
-          <View style={styles.continue}>
-            <Text style={[typography.body, { color: colors.teal, fontWeight: "500" }]}>
-              Tiếp tục lên kế hoạch
-            </Text>
-            <DesignIcon name="chevron" size={18} tintColor={colors.teal} />
-          </View>
-        )}
-      </Pressable>
-    </Animated.View>
-  );
+  const press = usePressMotion(!interactive);
+  const content = compact ? <>
+    <Image source={coverFor(trip)} style={styles.thumb} contentFit="cover" accessible={false} />
+    <View style={styles.copy}>
+      <Text style={typography.headline} numberOfLines={2}>{trip.name}</Text>
+      <Text style={typography.footnote}>{tripDates(trip)}</Text>
+      <Text style={styles.rowStatus}>{lifecycleLabels[trip.lifecycle]}</Text>
+    </View>
+    <View style={styles.arrow}><DesignIcon name="chevron" size={18} tintColor={colors.ink} /></View>
+  </> : <>
+    <LinearGradient pointerEvents="none" colors={gradients.card} style={[StyleSheet.absoluteFill, styles.background]} />
+    <View style={[styles.cover, !interactive && styles.overviewCover]}>
+      <Image source={coverFor(trip)} style={StyleSheet.absoluteFill} contentFit="cover" accessibilityLabel={trip.name} />
+      <GlassSurface variant="subtle" style={styles.badge}>
+        <View style={[styles.dot, { backgroundColor: trip.lifecycle === "ONGOING" ? colors.pinGreen : colors.blue }]} />
+        <Text style={styles.badgeText}>{lifecycleLabels[trip.lifecycle]}</Text>
+      </GlassSurface>
+    </View>
+    {interactive && <View style={styles.details}>
+      <Text style={typography.section} numberOfLines={2}>{trip.name}</Text>
+      <Text style={typography.footnote}>{tripDates(trip)}</Text>
+      {ticket && <View style={styles.continue}>
+        <Text style={[typography.footnote, styles.link]}>Tiếp tục lên kế hoạch</Text>
+        <DesignIcon name="chevron" size={18} tintColor={colors.teal} />
+      </View>}
+    </View>}
+  </>;
+  if (!interactive) return <View style={styles.overview}>{content}</View>;
+  return <Animated.View style={press.animatedStyle}>
+    <Pressable accessibilityRole="button" accessibilityLabel={`Mở chuyến đi ${trip.name}`}
+      onPress={() => openTrip(trip.id)} onPressIn={press.onPressIn} onPressOut={press.onPressOut}
+      style={[styles.card, compact && styles.row]}>{content}</Pressable>
+  </Animated.View>;
 }
-
 const styles = StyleSheet.create({
-  card: {
-    minHeight: 254,
-    borderRadius: 24,
-    overflow: "hidden",
-    justifyContent: "flex-end",
-    backgroundColor: colors.tealSoft,
-    ...shadows.card,
-  },
-  ticket: {
-    minHeight: 0,
-    backgroundColor: colors.surface,
-    ...shadows.card,
-  },
-  ticketImage: { height: 144, width: "100%" },
-  badge: {
-    position: "absolute",
-    top: 14,
-    right: 14,
-    borderRadius: 99,
-    paddingVertical: 7,
-    paddingHorizontal: 12,
-  },
-  badgeText: { fontSize: 12, color: colors.teal, fontWeight: "600" },
-  details: { flexDirection: "row", alignItems: "center", gap: 12, padding: 16 },
-  ticketDetails: { paddingBottom: 8 },
-  arrow: {
-    width: 36,
-    height: 36,
-    borderRadius: 99,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  continue: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingBottom: 16,
-  },
+  card: { padding: 12, paddingBottom: 18, gap: 12, borderRadius: radii.cardLarge, backgroundColor: colors.surface, ...shadows.card },
+  background: { borderRadius: radii.cardLarge },
+  cover: { height: 176, borderRadius: 26, overflow: "hidden", backgroundColor: colors.tealSoft },
+  overview: { borderRadius: 32, padding: 5, backgroundColor: colors.surface, ...shadows.card },
+  overviewCover: { height: 196, borderRadius: 28 },
+  details: { paddingHorizontal: 6, gap: 6 },
+  badge: { position: "absolute", top: 12, left: 12, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 10, paddingVertical: 6, borderRadius: radii.pill },
+  badgeText: { ...typography.footnote, color: colors.ink, fontSize: 12 },
+  dot: { width: 8, height: 8, borderRadius: 4 },
+  continue: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 6 },
+  link: { color: colors.teal },
+  row: { flexDirection: "row", alignItems: "center", borderRadius: radii.card, padding: 10, paddingRight: 14, minHeight: 88 },
+  thumb: { width: 68, height: 68, borderRadius: 22 },
+  copy: { flex: 1, minWidth: 0, gap: 2 },
+  rowStatus: { ...typography.footnote, color: colors.teal, fontSize: 12 },
+  arrow: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.mint, alignItems: "center", justifyContent: "center" },
 });

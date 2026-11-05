@@ -307,7 +307,7 @@ page.on('pageerror', (error) => errors.push(error.message));
 const button = (name) => page.getByRole('button', { name, exact: true }),
   field = (name) => page.getByLabel(name, { exact: true });
 const tab = (name) => page.getByRole('tab', { name, exact: true });
-const goto = async (feature = 'fund') => {
+const goto = async (feature = 'fund-tools') => {
   await page.goto(`${appUrl}/trip/${tripId}/${feature}`, { waitUntil: 'networkidle' });
   await page.getByText('Finance & Price Watch', { exact: true }).waitFor();
 };
@@ -318,7 +318,9 @@ const save = async () => {
 const shots = path.resolve('.cache/visual/finance-price-watch');
 await mkdir(shots, { recursive: true });
 try {
-  await goto();
+  await goto('fund');
+  await button('Công cụ quỹ mở rộng').click();
+  await page.waitForURL(`**/trip/${tripId}/fund-tools`);
   await page.getByText('Số dư: 0 ₫', { exact: true }).waitFor();
   assert.equal(await button('Xác nhận đã nhận đủ').count(), 0, 'Owner does not gain Holder rights');
   actor = memberId;
@@ -344,14 +346,14 @@ try {
   await goto();
   await button('Xác nhận đã nhận đủ').first().click();
   await save();
-  await page.getByText('Yêu cầu chưa có kết quả cuối', { exact: true }).waitFor();
+  await button('Gửi lại cùng yêu cầu').waitFor();
   assert.equal(fund.current_balance, '200000');
   assert.equal(ledger.length, 1);
+  await button('Gửi lại cùng yêu cầu').click();
+  await button('Tải lại dữ liệu').waitFor();
   await page.reload({ waitUntil: 'networkidle' });
-  await button('Gửi lại yêu cầu đã lưu').click();
-  await page
-    .getByText('Yêu cầu chưa có kết quả cuối', { exact: true })
-    .waitFor({ state: 'hidden' });
+  assert.equal(await button('Gửi lại cùng yêu cầu').count(), 0, 'No sensitive command body is restored after restart');
+  await button('Tải lại dữ liệu').click();
   await button('Xác nhận đã nhận đủ').click();
   await save();
   await page.getByText('Số dư: 500.000 ₫', { exact: true }).waitFor();
@@ -416,7 +418,7 @@ try {
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
   assert.deepEqual(errors, []);
   console.log(
-    'PASS mobile UI HTTP fixtures: role permissions; report/reject/re-report; lost-reply reload+same-key replay; 500000 VND/2 IN; expense/notes; watch create/edit/pause/resume/stop; stale history. Not physical iOS evidence.',
+    'PASS mobile UI HTTP fixtures: role permissions; report/reject/re-report; lost-reply same-key replay then receipt-only restart; 500000 VND/2 IN; expense/notes; watch create/edit/pause/resume/stop; stale history. Not physical iOS evidence.',
   );
 } finally {
   await browser.close();

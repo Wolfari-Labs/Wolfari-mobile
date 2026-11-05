@@ -1,6 +1,6 @@
 import { ApiError, type ApiClient } from '../../shared/api/api-client.ts';
 import { decodeRow, object, pageQuery, validateMoney } from '../finance/api.ts';
-import { money, type Page } from '../finance/model.ts';
+import { money, type Page } from '../finance/extended-model.ts';
 export type WatchInput = {
   provider: 'MOCK_FLIGHT';
   origin: string;

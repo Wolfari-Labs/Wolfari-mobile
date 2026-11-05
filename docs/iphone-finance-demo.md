@@ -96,7 +96,8 @@ Nếu dùng tunnel cho Expo, tunnel đó chỉ chuyển bundle JS; backend cũng
 
 Đăng nhập Wolfari → Chuyến đi → chọn Trip mà tài khoản đang là thành viên → Tiện ích.
 
-- **Quỹ nhóm**: có số dư/ngân sách/trạng thái từ server. Owner bật quỹ nếu chưa có,
+- **Quỹ nhóm**: có số dư/ngân sách/trạng thái từ server. Mở **Công cụ quỹ mở rộng**
+  để dùng ngoài quỹ, lịch sử kiểm toán, Sandbox và đối soát. Owner bật quỹ nếu chưa có,
   chọn Holder và nơi nhận TEST. Holder đăng nhập, mở Thiết lập, xác nhận nơi nhận.
   Owner tạo đợt đóng, nhập 200000 cho Member và 300000 cho Owner. Member/Owner
   lần lượt báo chuyển khoản của mình. Holder thử từ chối khoản đầu, Member báo

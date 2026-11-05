@@ -30,14 +30,25 @@ khác nhau. App không tự áp dụng quy tắc 5%/24 giờ để phát cảnh 
 vẫn được giữ và gắn nhãn; giá cũ không được tô như một giá mới dưới ngưỡng. Không có
 quan sát không có nghĩa là giá bằng 0. Lọc danh sách áp dụng trên các trang đã tải.
 
+## Hợp nhất với giao diện D (05/11/2026)
+
+Quỹ nhóm giữ màn hình chính hiện tại. Liên kết **Công cụ quỹ mở rộng** mở
+`/trip/:id/fund-tools` để dùng ngoài quỹ, lịch sử kiểm toán, MoMo Sandbox và đối
+soát. Bản nháp riêng dùng `/trip/:id/fund-drafts`, không ghi vào sổ quỹ.
+Hai màn quỹ và quản lý thành viên dùng chung khóa thao tác theo Gateway/tài
+khoản/Trip. API Price Watch cũng đi qua client kiểm tra đúng phiên đăng nhập.
+
 ## Mất phản hồi và phiên bản cũ
 
-Trước khi ghi, app lưu nguyên nội dung + Idempotency-Key theo tài khoản/Trip/module.
-Native dùng SecureStore chia nhỏ dữ liệu, công bố con trỏ sau khi lưu đủ các phần;
-preview Web dùng sessionStorage. Không lưu token trong nhật ký lệnh. Lỗi lưu trữ
-chặn HTTP mutation. Khi chưa rõ kết quả, không tạo yêu cầu mới và không thay key.
-`202`, `PENDING_RECOVERY`, `NEEDS_REVIEW` không phải thành công. Sau trạng thái
-COMMITTED, app có thể gửi lại đúng lệnh để lấy receipt và tải lại dữ liệu.
+Finance lưu mã tra cứu tối thiểu trước khi gửi, không lưu nội dung ngân hàng,
+số tiền hoặc chứng từ xuống thiết bị. Trong phiên hiện tại có thể gửi lại nguyên
+body/key; sau khởi động lại chỉ tra cứu kết quả, không tự gửi giao dịch mới.
+`202`, `PENDING_RECOVERY`, `NEEDS_REVIEW` không phải thành công. Lỗi lưu trữ chặn
+ghi; sau kết quả cuối cần đối chiếu/tải lại trước khi mở khóa.
+
+Price Watch giữ nhật ký body/key riêng: SecureStore chia nhỏ dữ liệu trên native,
+sessionStorage trên Web. Nhật ký không chứa token; không dùng để thay thế cơ chế
+khóa Finance/thành viên.
 
 Price Watch chỉ idempotent ở API tạo; cập nhật dùng expected_version. Sau mất phản
 hồi rồi 409, người dùng tải lại/đối chiếu danh sách trước khi đóng yêu cầu cũ.
@@ -45,22 +56,38 @@ Thao tác đóng nhật ký này không được thông báo thành công như m
 
 ## Kiểm chứng và cách chạy lại
 
+Kiểm chứng bản merge ngày 05/11/2026: typecheck, lint, kiểm tra phiên bản SDK,
+150/150 unit tests và export Android/iOS/Web đều đạt. Bảy bộ UI (auth, trips,
+finance, finance-price-watch, backend-features, mobile-parity, design-D) đạt trên
+bản export `.cache/merge-verified` với HTTP fixtures. Đã xem ảnh sổ quỹ và giá cũ.
+Không chạy ghi dữ liệu lên backend thật, chuyển tiền hoặc thử thiết bị vật lý.
+
+Web hiện dùng `output: single`, `asyncRoutes.web: false`; máy chủ phục vụ export
+phải fallback các deep link về `index.html`. `expo serve` không fallback trong
+lượt kiểm tra này nên trả 404 cho `/trip/...`; dùng máy chủ SPA local để kiểm thử
+export, hoặc khởi động Expo Web như bên dưới để chạy lại fixtures.
+
 ```powershell
 npm.cmd run typecheck
 npm.cmd run lint
 npm.cmd test
-# Expo preview đang chạy cổng 8082:
+# Terminal riêng, endpoint giả lập; không dùng cho deployment thật:
+$env:EXPO_PUBLIC_API_URL='https://api.wolfari.test/api/v1'
+npx.cmd expo start --web --port 8082
+# Trong terminal chạy test:
 $env:WOLFARI_PREVIEW_URL='http://localhost:8082'
 npm.cmd run test:ui
 npm.cmd run test:ui:trips
 npm.cmd run test:ui:features
 npm.cmd run test:ui:order
 npm.cmd run test:ui:finance
+npm.cmd run test:ui:finance-price-watch
 npm.cmd run test:ui:parity
 ```
 
-`test:ui:finance` chặn mọi API bằng HTTP fixtures: Owner/Holder, báo/từ chối/báo
-lại, mất phản hồi sau ghi + tải lại trang + cùng key, 500.000 VND/2 IN, nháp chi,
+`test:ui:finance` kiểm tra màn quỹ chính và phục hồi mã thao tác.
+`test:ui:finance-price-watch` chặn mọi API bằng HTTP fixtures: Owner/Holder, báo/từ chối/báo
+lại, mất phản hồi + gửi lại cùng key + tải lại mã tra cứu, 500.000 VND/2 IN, nháp chi,
 ngoài quỹ, tạo/sửa/tạm dừng/tiếp tục/dừng watch, giá cũ. Đây là giao diện React Native
 chạy qua Expo Web, không phải bằng chứng trên iPhone/Android thật.
 

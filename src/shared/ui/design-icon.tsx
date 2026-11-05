@@ -17,7 +17,8 @@ export function DesignIcon({
   return (
     <Image
       source={designIcons[name]}
-      style={{ width: size, height: size, ...(tintColor ? { tintColor } : {}) }}
+      style={{ width: size, height: size }}
+      tintColor={tintColor}
       contentFit="contain"
       accessible={false}
     />

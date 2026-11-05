@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Text, View } from "react-native";
-import { colors, typography } from "@/shared/theme/tokens";
+import { typography } from "@/shared/theme/tokens";
 import { Heading, Progress, ResourceFeedback, Segments, ui } from "@/shared/ui/journal";
 import { Screen } from "@/shared/ui/screen";
 import { Button } from "@/shared/ui/button";
@@ -42,7 +42,7 @@ export default function PackingScreen() {
         toggle={{ key: "status", on: "COMPLETED", off: "TODO", onLabel: "Đánh dấu chưa chuẩn bị (nháp)", offLabel: "Đã chuẩn bị (nháp)" }}
         summary={rows => {
           const done = rows.filter(r => r.status === "COMPLETED").length;
-          return <View style={[ui.card, { backgroundColor: colors.mint }]}>
+          return <View style={ui.section}>
             <Text style={typography.headline}>Tiến độ danh sách đang xem</Text>
             <Text style={typography.largeTitle}>{done} / {rows.length}</Text><Progress done={done} total={rows.length} />
             {!!rows.length && done === rows.length && <Button label="Danh sách đã sẵn sàng!" onPress={() => { setCompletedCount(rows.length); setCelebrate(true); }} />}

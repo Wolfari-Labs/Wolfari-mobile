@@ -1,21 +1,24 @@
+import { LinearGradient } from "expo-linear-gradient";
 import { useEffect, useState, type ReactNode } from "react";
 import {
   ActivityIndicator,
-  Animated,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
+import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withRepeat, withSpring, withTiming } from "react-native-reanimated";
 
 import { useAccessibilityPreferences } from "@/shared/hooks/use-accessibility-preferences";
-import { colors, radii, shadows, typography } from "@/shared/theme/tokens";
+import { usePressMotion } from "@/shared/hooks/use-press-motion";
+import { colors, fonts, gradients, radii, shadows, springs, typography } from "@/shared/theme/tokens";
 import { Button } from "./button";
 import { DesignIcon } from "./design-icon";
 import type { DesignIconName } from "./design-assets";
 import { Feedback } from "./feedback";
-import { GlassSurface } from "./glass-surface";
+import { Wolfi } from "./carto/wolfi";
+import { useMotionActive } from "@/shared/hooks/use-motion-active";
 
 export function Heading({
   title,
@@ -59,38 +62,22 @@ export function IconButton({
   disabled?: boolean;
   variant?: "soft" | "glass";
 }) {
-  const { reduceMotion } = useAccessibilityPreferences();
-  const [scale] = useState(() => new Animated.Value(1));
-
-  const handlePressIn = () => {
-    if (disabled || reduceMotion) return;
-    Animated.spring(scale, {
-      toValue: 0.92,
-      damping: 16,
-      stiffness: 350,
-      useNativeDriver: true,
-    }).start();
-  };
-
-  const handlePressOut = () => {
-    if (disabled || reduceMotion) return;
-    Animated.spring(scale, {
-      toValue: 1,
-      damping: 12,
-      stiffness: 240,
-      useNativeDriver: true,
-    }).start();
-  };
+  const motion = usePressMotion(disabled, 0.92);
 
   return (
-    <Animated.View style={{ transform: [{ scale }] }}>
+    <Animated.View style={motion.animatedStyle}>
       <Pressable
+        cssInterop={false}
         accessibilityRole="button"
         accessibilityLabel={label}
         disabled={disabled}
+        accessibilityState={{ disabled }}
+        aria-disabled={disabled}
         onPress={onPress}
-        onPressIn={handlePressIn}
-        onPressOut={handlePressOut}
+        onPressIn={motion.onPressIn}
+        onPressOut={motion.onPressOut}
+        hitSlop={4}
+        pressRetentionOffset={16}
         style={({ pressed }) => [
           ui.iconButton,
           variant === "glass" && ui.iconButtonGlass,
@@ -98,7 +85,7 @@ export function IconButton({
           disabled && { opacity: 0.4 },
         ]}
       >
-        <DesignIcon name={icon} tintColor={colors.teal} />
+        <DesignIcon name={icon} tintColor={colors.ink} />
       </Pressable>
     </Animated.View>
   );
@@ -119,73 +106,57 @@ export function Segments<T extends string>({
   const [containerWidth, setContainerWidth] = useState(0);
 
   const selectedIndex = items.findIndex((it) => it.value === value);
-  const [slideAnim] = useState(
-    () => new Animated.Value(Math.max(0, selectedIndex)),
-  );
+  const slideAnim = useSharedValue(Math.max(0, selectedIndex));
 
   useEffect(() => {
-    if (reduceMotion) {
-      slideAnim.setValue(Math.max(0, selectedIndex));
-      return;
-    }
-    Animated.spring(slideAnim, {
-      toValue: Math.max(0, selectedIndex),
-      damping: 18,
-      stiffness: 240,
-      mass: 0.75,
-      useNativeDriver: true,
-    }).start();
+    slideAnim.set(reduceMotion ? Math.max(0, selectedIndex) : withSpring(Math.max(0, selectedIndex), springs.gentle));
+    return () => cancelAnimation(slideAnim);
   }, [selectedIndex, reduceMotion, slideAnim]);
 
+  // The rail has four-point padding on each side.
   const itemWidth =
     containerWidth > 0 && items.length > 0
       ? (containerWidth - 8) / items.length
       : 0;
+  const indicatorStyle = useAnimatedStyle(() => ({ transform: [{ translateX: slideAnim.get() * itemWidth }] }));
 
   const controls = (
-    <GlassSurface
-      variant="subtle"
+    <View
       style={[ui.segments, scroll && { alignSelf: "flex-start" }]}
       onLayout={(e) => setContainerWidth(e.nativeEvent.layout.width)}
     >
-      {/* Sliding white card indicator for non-scrolling tabs */}
       {!scroll && itemWidth > 0 && (
         <Animated.View
           pointerEvents="none"
           style={[
             ui.segmentPill,
-            {
-              width: itemWidth,
-              transform: [
-                {
-                  translateX: slideAnim.interpolate({
-                    inputRange: items.map((_, i) => i),
-                    outputRange: items.map((_, i) => i * itemWidth),
-                  }),
-                },
-              ],
-            },
+            { width: itemWidth },
+            indicatorStyle,
           ]}
-        />
+        ><LinearGradient colors={gradients.primary} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={StyleSheet.absoluteFill} /></Animated.View>
       )}
       {items.map((item) => (
         <Pressable
+          cssInterop={false}
           key={item.value}
           accessibilityRole="tab"
           accessibilityState={{ selected: value === item.value }}
+          aria-selected={value === item.value}
           onPress={() => onChange(item.value)}
-          style={[
+          style={({ pressed }) => [
             ui.segment,
             scroll ? { flexShrink: 0, paddingHorizontal: 16 } : { flex: 1 },
             scroll && value === item.value && ui.segmentActive,
+            pressed && ui.pressed,
           ]}
         >
+          {scroll && value === item.value && <LinearGradient pointerEvents="none" colors={gradients.primary} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={StyleSheet.absoluteFill} />}
           <Text
             style={[
               ui.segmentLabel,
               {
-                color: value === item.value ? colors.ink : colors.muted,
-                fontWeight: value === item.value ? "600" : "400",
+                color: value === item.value ? colors.onAccent : colors.muted,
+                fontFamily: value === item.value ? fonts.heading : fonts.body,
               },
             ]}
           >
@@ -193,7 +164,7 @@ export function Segments<T extends string>({
           </Text>
         </Pressable>
       ))}
-    </GlassSurface>
+    </View>
   );
   return scroll ? (
     <ScrollView
@@ -221,7 +192,7 @@ export function EmptyState({
   return (
     <View style={ui.empty}>
       <View style={ui.emptyIcon}>
-        <DesignIcon name={icon} size={30} tintColor={colors.teal} />
+        <Wolfi pose={icon === "bag" ? "walk" : "map"} size={96} />
       </View>
       <Text style={[typography.headline, ui.center]}>{title}</Text>
       <Text style={[typography.body, ui.center, { color: colors.muted }]}>
@@ -245,9 +216,9 @@ export function ResourceFeedback({
   return (
     <>
       {loading && !hasData && (
-        <View style={ui.loading}>
-          <ActivityIndicator color={colors.teal} />
-          <Text style={typography.footnote}>Đang mở hành trình…</Text>
+        <View style={ui.loading} accessibilityRole="progressbar" accessibilityLabel="Đang mở hành trình">
+          <SpinningCompass />
+          <Text style={typography.footnote}>Đang mở bản đồ hành trình…</Text>
         </View>
       )}
       {error && (
@@ -259,6 +230,26 @@ export function ResourceFeedback({
     </>
   );
 }
+/** Loading state: a compass needle hunting for north. Falls back to a spinner under Reduce Motion. */
+function SpinningCompass() {
+  const active = useMotionActive();
+  const turn = useSharedValue(0);
+  useEffect(() => {
+    if (active) turn.set(withRepeat(withTiming(1, { duration: 1400, easing: Easing.inOut(Easing.cubic) }), -1));
+    else { cancelAnimation(turn); turn.set(0); }
+    return () => cancelAnimation(turn);
+  }, [active, turn]);
+  const style = useAnimatedStyle(() => ({ transform: [{ rotate: `${turn.get() * 360}deg` }] }));
+  if (!active) return <ActivityIndicator color={colors.ink} />;
+  return (
+    <View style={ui.compass}>
+      <Animated.View style={style}>
+        <DesignIcon name="compass" size={26} tintColor={colors.ink} />
+      </Animated.View>
+    </View>
+  );
+}
+
 export function SectionLink({
   title,
   subtitle,
@@ -279,10 +270,12 @@ export function SectionLink({
   const content = (
     <>
       <View style={ui.rowIcon}>
-        <DesignIcon name={icon} tintColor={colors.teal} />
+        <View style={ui.rowBadge}>
+          <DesignIcon name={icon} size={19} tintColor={colors.ink} />
+        </View>
       </View>
       <View style={ui.flex}>
-        <Text style={typography.body}>{title}</Text>
+        <Text style={[typography.body, ui.linkTitle]}>{title}</Text>
         {subtitle && (
           <Text style={[typography.footnote, { marginTop: 4 }]}>
             {subtitle}
@@ -294,6 +287,7 @@ export function SectionLink({
   );
   return onPress ? (
     <Pressable
+      cssInterop={false}
       accessibilityRole="button"
       accessibilityLabel={title}
       accessibilityHint={subtitle}
@@ -329,18 +323,29 @@ export function Notice({ children }: { children: ReactNode }) {
   );
 }
 export function Progress({ done, total }: { done: number; total: number }) {
+  const { reduceMotion } = useAccessibilityPreferences();
+  const percent = total > 0 ? Math.max(0, Math.min(100, (done / total) * 100)) : 0;
+  const progress = useSharedValue(percent);
+  useEffect(() => {
+    progress.set(reduceMotion ? percent : withSpring(percent, springs.gentle));
+    return () => cancelAnimation(progress);
+  }, [percent, progress, reduceMotion]);
+  const progressStyle = useAnimatedStyle(() => ({ width: `${progress.get()}%` as `${number}%` }));
   return (
     <View
       accessibilityRole="progressbar"
       accessibilityValue={{ min: 0, max: Math.max(total, 1), now: done }}
+      aria-valuemin={0}
+      aria-valuemax={Math.max(total, 1)}
+      aria-valuenow={done}
       style={ui.track}
     >
-      <View
+      <Animated.View
         style={[
           ui.progress,
-          { width: `${total ? Math.min(100, (done / total) * 100) : 0}%` },
+          progressStyle,
         ]}
-      />
+      ><LinearGradient colors={gradients.primary} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={StyleSheet.absoluteFill} /></Animated.View>
     </View>
   );
 }
@@ -360,65 +365,64 @@ export const ui = StyleSheet.create({
   iconButton: {
     width: 44,
     height: 44,
-    backgroundColor: colors.tealSoft,
+    backgroundColor: colors.surface,
     borderRadius: radii.pill,
     alignItems: "center",
     justifyContent: "center",
+    ...shadows.floating,
   },
   iconButtonGlass: {
-    backgroundColor: "rgba(255, 255, 255, 0.78)",
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.88)",
-    ...shadows.floating,
+    backgroundColor: colors.surface,
+    ...shadows.glass,
   },
   pressed: { opacity: 0.65 },
   segments: {
     flexDirection: "row",
-    borderRadius: 22,
-    padding: 4,
-    minHeight: 48,
+    minHeight: 52,
     position: "relative",
+    padding: 4,
+    gap: 0,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surface,
+    ...shadows.floating,
   },
   segmentPill: {
     position: "absolute",
-    top: 4,
     left: 4,
+    top: 4,
     bottom: 4,
-    borderRadius: 18,
-    backgroundColor: colors.surface,
-    ...shadows.segmentActive,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(0,0,0,0.04)",
+    borderRadius: radii.pill,
+    backgroundColor: colors.gradientBlue,
+    overflow: "hidden",
   },
   segment: {
     minHeight: 44,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: 18,
+    borderRadius: radii.pill,
     paddingHorizontal: 5,
     zIndex: 1,
+    overflow: "hidden",
   },
   segmentActive: {
-    backgroundColor: colors.surface,
-    ...shadows.segmentActive,
+    backgroundColor: colors.gradientBlue,
+    overflow: "hidden",
   },
-  segmentLabel: { fontSize: 13, lineHeight: 18, textAlign: "center" },
+  segmentLabel: { fontFamily: fonts.bold, fontSize: 13, lineHeight: 18, textAlign: "center" },
+  compass: { width: 48, height: 48, borderRadius: 24, borderWidth: 1.5, borderColor: colors.ink, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center" },
+  linkTitle: { fontFamily: fonts.bold },
+  rowBadge: { width: 36, height: 36, borderRadius: 14, backgroundColor: colors.tealSoft, alignItems: "center", justifyContent: "center" },
   empty: {
     alignItems: "center",
     padding: 24,
     paddingVertical: 32,
     gap: 12,
-    backgroundColor: colors.surface,
-    borderRadius: radii.cardLarge,
-    ...shadows.card,
   },
   emptyIcon: {
-    width: 64,
-    height: 64,
+    width: 104,
+    height: 104,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.mint,
-    borderRadius: radii.card,
   },
   loading: { padding: 32, gap: 12, alignItems: "center" },
   link: {
@@ -426,42 +430,47 @@ export const ui = StyleSheet.create({
     alignItems: "center",
     gap: 12,
     paddingVertical: 16,
-    paddingHorizontal: 16,
+    paddingHorizontal: 0,
     minHeight: 76,
-    borderRadius: radii.card,
-    backgroundColor: colors.surface,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.line,
   },
   group: {
-    borderRadius: radii.card,
-    backgroundColor: colors.surface,
-    overflow: "hidden",
-    ...shadows.card,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.line,
   },
-  groupedLink: { borderRadius: 0 },
+  groupedLink: { borderBottomWidth: 0 },
   separator: {
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.line,
   },
   rowIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    backgroundColor: colors.tealSoft,
+    width: 38,
+    height: 38,
     alignItems: "center",
     justifyContent: "center",
   },
   notice: {
-    padding: 16,
-    borderRadius: radii.card,
-    backgroundColor: colors.peach,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: colors.fill,
+    borderRadius: radii.control,
   },
   track: {
-    height: 6,
+    height: 10,
     borderRadius: 99,
     backgroundColor: colors.line,
     overflow: "hidden",
   },
-  progress: { height: 6, borderRadius: 99, backgroundColor: colors.teal },
+  progress: { position: "absolute", left: 0, top: 0, bottom: 0, borderRadius: 99, backgroundColor: colors.gradientMint, overflow: "hidden" },
+  // Reading content stays on the page; reserve cards for bounded form/selection surfaces.
+  section: { gap: 12, paddingVertical: 4 },
+  record: {
+    gap: 12,
+    paddingVertical: 18,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.line,
+  },
   card: {
     padding: 20,
     borderRadius: radii.cardLarge,

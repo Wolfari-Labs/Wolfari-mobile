@@ -1,8 +1,4 @@
-import type { MembershipOperation, Trip } from "./types";
-
-export type MembershipRequest = { key: string; trip: Trip; memberId?: string; reason: string; operation?: MembershipOperation };
-// Preserve uncertain requests when navigating away/back. Never persist reason text or tokens.
-export const pendingMembershipRequests = new Map<string, MembershipRequest>();
+import type { MembershipOperation } from "./types";
 
 export function membershipCommitted(operation?: MembershipOperation) {
   return operation?.state === "SUCCEEDED" && operation.outcome?.status === "COMMITTED";

@@ -23,6 +23,7 @@
       "package": "com.tanthanh_67.Wolfarimobile"
     },
     "web": {
+      "bundler": "metro",
       "output": "single",
       "favicon": "./assets/images/wolfari-app-icon.png"
     },
@@ -36,10 +37,14 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#DDF7EF",
-          "image": "./assets/images/wolfari-splash-icon.png",
-          "imageWidth": 160,
-          "resizeMode": "contain"
+          "backgroundColor": "#073B49",
+          "image": "./assets/figma/mascot.png",
+          "imageWidth": 176,
+          "resizeMode": "contain",
+          "dark": {
+            "backgroundColor": "#073B49",
+            "image": "./assets/figma/mascot.png"
+          }
         }
       ],
       "expo-secure-store",

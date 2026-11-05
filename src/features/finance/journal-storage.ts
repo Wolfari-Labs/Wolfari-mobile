@@ -1,5 +1,5 @@
 import * as SecureStore from 'expo-secure-store';
-import { randomUUID } from 'expo-crypto';
+import { randomUUID } from '../../shared/operations/operation-id';
 import { chunkedStorage } from './chunked-storage';
 import type { JournalStorage } from './command';
 export const journalStorage: JournalStorage = chunkedStorage(

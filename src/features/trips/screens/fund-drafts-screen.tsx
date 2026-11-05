@@ -15,11 +15,11 @@ export default function FundDraftsScreen() {
   const resource = useTrip(), { data, id } = resource;
   const [tab, setTab] = useState("expense");
   const [demo, setDemo] = useState(false);
-  return <Screen title="Quỹ nhóm" tab="trips" onRefresh={() => { void resource.reload(); }} refreshing={resource.loading && !!data}>
+  return <Screen title="Bản nháp dự trù" tab="trips" onRefresh={() => { void resource.reload(); }} refreshing={resource.loading && !!data}>
     <Heading title="Dự trù cùng cả nhóm" subtitle={data?.trip.name} />
     <ResourceFeedback {...resource} hasData={!!data} onRetry={() => { void resource.reload(); }} />
     {data && <>
-      <Notice>Đây là các bản dự toán lưu trên thiết bị, tách riêng với Quỹ nhóm trên server. Bản nháp không làm thay đổi số dư.</Notice>
+      <Notice>Đây là bản nháp dự trù riêng, không ghi vào sổ quỹ trên máy chủ. Mở Quỹ nhóm trong công cụ chuyến đi để quản lý đóng góp, chi và hoàn tiền.</Notice>
       <PaymentQrEntry key={id} />
       <Button label={demo ? "Ẩn ví dụ quỹ" : "Xem ví dụ quỹ (dữ liệu mẫu)"} variant="soft" onPress={() => setDemo(!demo)} />
       {demo && <View style={[ui.card, { backgroundColor: colors.mint }]}>
@@ -31,7 +31,7 @@ export default function FundDraftsScreen() {
         <Text style={typography.body}>Số dư sổ mẫu: {moneyLabel(750000)}</Text>
         <Text style={typography.body}>Dự phòng hoàn mẫu: {moneyLabel(250000)}</Text>
         <Text style={typography.headline}>Khả dụng mẫu: {moneyLabel(500000)}</Text>
-        <Text style={typography.footnote}>Khi kết nối quỹ: Đang mở → Đang đóng (CLOSING) → Đã đóng (CLOSED). Ứng dụng hiện không thực hiện những chuyển trạng thái này.</Text>
+        <Text style={typography.footnote}>Đang mở → Đang đóng (CLOSING) → Đã đóng (CLOSED). Ví dụ tại đây không thay đổi quỹ thật; dùng màn Quỹ nhóm để thao tác với máy chủ.</Text>
       </View>}
       <Segments scroll items={[...kinds, { value: "history", label: "Lịch sử nháp" }]} value={tab} onChange={setTab} />
       <DraftCollection key={id} scope={id} feature="fund" title="khoản dự kiến" editable={data.plan.permissions.can_edit}

@@ -11,8 +11,8 @@ export function Feedback({ message, success = false }: { message: string; succes
 }
 
 const styles = StyleSheet.create({
-  container: { borderRadius: radii.control, padding: 14, backgroundColor: colors.errorSurface },
-  success: { backgroundColor: "#E6F1F0" },
+  container: { borderRadius: radii.control, padding: 14, backgroundColor: colors.errorSurface, borderWidth: 1.5, borderColor: colors.error },
+  success: { backgroundColor: colors.mint, borderColor: colors.pinGreen },
   text: { color: colors.error },
-  successText: { color: colors.teal },
+  successText: { color: colors.pinGreen, fontWeight: "600" },
 });

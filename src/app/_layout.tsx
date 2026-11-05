@@ -1,17 +1,25 @@
+import "../../global.css";
 import { Stack } from "expo-router";
-import { StatusBar } from "expo-status-bar";
-import { SafeAreaProvider } from "react-native-safe-area-context";
+import { useFonts } from "expo-font";
 
 import { SessionProvider } from "@/features/auth/session/session-provider";
 import { useAccessibilityPreferences } from "@/shared/hooks/use-accessibility-preferences";
 import { colors } from "@/shared/theme/tokens";
+import { AppLaunch } from "@/shared/ui/launch/app-launch";
+import { prepareNativeSplash } from "@/shared/ui/launch/native-splash";
+
+prepareNativeSplash();
 
 export default function RootLayout() {
+  const [fontsLoaded, fontError] = useFonts({
+    "Nunito-SemiBold": require("@/assets/fonts/Nunito-SemiBold.ttf"),
+    "Nunito-Bold": require("@/assets/fonts/Nunito-Bold.ttf"),
+    "Nunito-ExtraBold": require("@/assets/fonts/Nunito-ExtraBold.ttf"),
+  });
   const { reduceMotion } = useAccessibilityPreferences();
   return (
-    <SafeAreaProvider>
-      <SessionProvider>
-        <StatusBar style="dark" />
+    <SessionProvider>
+      <AppLaunch assetsReady={fontsLoaded || !!fontError}>
         <Stack
           screenOptions={{
             headerShown: false,
@@ -25,7 +33,7 @@ export default function RootLayout() {
           <Stack.Screen name="sign-in" />
           <Stack.Screen name="sign-up" />
         </Stack>
-      </SessionProvider>
-    </SafeAreaProvider>
+      </AppLaunch>
+    </SessionProvider>
   );
 }

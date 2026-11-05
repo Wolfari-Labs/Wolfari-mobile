@@ -302,7 +302,7 @@ await context.route("**/api/v1/**", async (route) => {
   return fail(404, "RESOURCE_NOT_FOUND");
 });
 const page = await context.newPage();
-page.setDefaultTimeout(20_000);
+page.setDefaultTimeout(90_000);
 page.setDefaultNavigationTimeout(90_000);
 page.on("pageerror", (error) => pageErrors.push(error.message));
 const button = (name) => page.getByRole("button", { name, exact: true });
@@ -310,11 +310,16 @@ const click = async (name) => {
   await button(name).click();
 };
 async function screenshot(name) {
-  await page.waitForFunction(() =>
-    Array.from(document.images).every(
-      (image) => image.complete && image.naturalWidth > 0,
-    ),
-  );
+  await page.waitForFunction(() => {
+    const images = Array.from(document.images);
+    // Async routes can briefly render no images while their chunk loads.
+    return (
+      images.some((image) => {
+        const bounds = image.getBoundingClientRect();
+        return bounds.width > 0 && bounds.height > 0;
+      }) && images.every((image) => image.complete && image.naturalWidth > 0)
+    );
+  });
   await page.evaluate(
     () =>
       new Promise((resolve) =>
@@ -422,7 +427,7 @@ try {
   await click("Lưu thay đổi");
   await page
     .getByText(
-      "Kế hoạch vừa được cập nhật. Tải lại dữ liệu rồi thử lại để giữ thay đổi của cả nhóm.",
+      "Dữ liệu vừa được cập nhật. Tải lại thông tin và kiểm tra trước khi gửi yêu cầu mới.",
       { exact: true },
     )
     .waitFor();

@@ -1,4 +1,4 @@
-import { randomUUID } from "expo-crypto";
+import { randomUUID } from "@/shared/operations/operation-id";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { AppState, Text } from "react-native";
 

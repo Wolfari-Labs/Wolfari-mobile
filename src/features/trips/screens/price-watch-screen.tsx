@@ -14,7 +14,7 @@ import {
   type ActionForm,
   type Field,
 } from '../../finance/components';
-import { moneyLabel, statusLabel } from '../../finance/model';
+import { moneyLabel, statusLabel } from '../../finance/extended-model';
 import { useFinanceCommand } from '../../finance/use-finance-command';
 import { watchInput, type Watch, type Observations } from '../../price-watch/api';
 

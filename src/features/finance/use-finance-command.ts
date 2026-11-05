@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { randomUUID } from 'expo-crypto';
+import { randomUUID } from '../../shared/operations/operation-id';
 import { useApi } from '../../shared/api/use-api';
 import { createCommandJournal } from './command';
 import { journalStorage } from './journal-storage';
