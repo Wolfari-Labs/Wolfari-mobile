@@ -45,7 +45,10 @@ function FundWorkspace({ tripId, userId }: { tripId: string; userId: string }) {
   const resource = useResource(useCallback(async (signal: AbortSignal) => {
     if (!/^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i.test(tripId)) throw new Error("Liên kết chuyến đi không hợp lệ.");
     const trip = await api.trips.get(tripId, signal);
-    try { return { trip, fund: await api.finance.fund(tripId, signal) as Fund | null }; }
+    try {
+      const fund = await api.finance.fund(tripId, signal);
+      return { trip: fund ? trip : await api.trips.get(tripId, signal), fund };
+    }
     catch (cause) {
       if (!(cause instanceof ApiError) || cause.status !== 404) throw cause;
       // 404 also conceals membership denial. Recheck Trip before offering setup.
@@ -89,6 +92,7 @@ function FundWorkspace({ tripId, userId }: { tripId: string; userId: string }) {
         {owner && !archived && <Button label="Mở quỹ nhóm" disabled={locked || !members.data || members.loading || !!members.error} onPress={() => open(enableForm(tripId, members.data!, userId))} />}
       </>}
       <SectionLink title="Bản nháp dự trù riêng" subtitle="Giữ các khoản dự kiến cũ · không ghi vào sổ quỹ" icon="edit" onPress={() => router.push({ pathname: "/trip/[id]/fund-drafts", params: { id: tripId } })} />
+      <SectionLink title="Công cụ quỹ mở rộng" subtitle="Ngoài quỹ · lịch sử kiểm toán · thanh toán Sandbox · đối soát" icon="wallet" onPress={() => router.push({ pathname: "/trip/[id]/fund-tools", params: { id: tripId } })} />
     </>}
     {form && <FinanceForm spec={form} busy={operation.busy} onSubmit={operation.run} onClose={() => setForm(undefined)} />}
     {instruction && <InstructionSheet contributionId={instruction} onClose={() => setInstruction(undefined)} />}

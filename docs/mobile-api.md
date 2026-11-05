@@ -37,12 +37,20 @@ saves supported fields only. Trip pictures are bundled Figma illustrations.
 Provider search IDs are not selected-location UUIDs: search results can prefill
 activity title/note; existing selected locations attach using actual Trip IDs.
 
-## Integration boundaries — updated 2026-10-28
+## Finance / Price Watch update — 2026-11-04
+
+The October audit below is historical. Finance and Price Watch now have public
+Gateway endpoints and the mobile screens call them. See
+[the current integration matrix](finance-price-watch-mobile.md) for supported
+actions, recovery, source limits and reproducible checks. API162 history requires
+the newer backend main; a 404 from an older demo branch is an error, not empty history.
+
+## Historical backend gaps (2026-10-18)
 
 The earlier statement that Finance had no public Gateway routes is superseded.
 The current Finance API is integrated; see [coverage and limitations](mobile-finance.md).
-The backend also has NotificationProxy and PriceWatchProxy, not yet integrated by
-this change. Packing/dress code edits remain local, and export, archive/delete and
+Price Watch is now integrated with the MOCK_FLIGHT provider; notification
+preferences are not yet integrated. Packing/dress code edits remain local, and export, archive/delete and
 ownership transfer still have no mobile implementation. Do not infer backend gaps
 from missing mobile screens or from the older source audit.
 

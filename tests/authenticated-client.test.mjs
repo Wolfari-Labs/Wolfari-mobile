@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { ApiError } from "../src/shared/api/api-client.ts";
 import { createAuthenticatedClient } from "../src/shared/api/authenticated-client.ts";
+import { createFinanceApi } from "../src/features/finance/api.ts";
+import { createPriceWatchApi } from "../src/features/price-watch/api.ts";
 
 test("Authenticated clients cannot send/replay the previous account's financial intent after account switch", async () => {
   let user = "A", calls = 0, refreshes = 0;
@@ -30,4 +32,16 @@ test("Ordinary token refresh preserves body and idempotency; credential requests
   assert.equal(calls.length, 2); assert.equal(calls[0].body, calls[1].body); assert.equal(calls[0].headers, calls[1].headers);
   await assert.rejects(api.request("/me/password-change", { method: "POST", retryAuth: false }), { status: 401 });
   assert.equal(refreshes, 1);
+});
+
+test("Merged Finance and Price Watch factories retain account-switch protection", async () => {
+  let calls = 0;
+  const session = { getSessionSnapshot: () => ({ profile: { id: 'new-account' } }),
+    getAccessToken: async () => 'new-token', refreshAccessToken: async () => 'unused' };
+  const client = createAuthenticatedClient({ requestWithMeta: async () => { calls++; return { data: {}, meta: {} }; } }, session, 'old-account');
+  const finance = createFinanceApi(client), watches = createPriceWatchApi(client);
+  await assert.rejects(watches.list('trip'), { code: 'SESSION_CHANGED' });
+  await assert.rejects(finance.write({ path: '/price-watches/watch/pause', method: 'POST', body: { expected_version: 1 }, key: 'same-key' }), { code: 'SESSION_CHANGED' });
+  await assert.rejects(finance.execute({ path: '/funds/fund/budget', method: 'PATCH', body: { budget_amount: '10' } }, 'same-key'), { code: 'SESSION_CHANGED' });
+  assert.equal(calls, 0);
 });

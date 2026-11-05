@@ -6,6 +6,8 @@
 Project dùng Expo SDK 58 và Expo Router trong `src/app`. Không cần bật USB debugging,
 không cần `adb reverse`, không cần tạo thư mục `android/` hoặc `ios/`.
 
+Máy Windows tại `D:\Wolfari` dùng bộ demo Gateway13000: xem [hướng dẫn iPhone Finance/Price Watch](iphone-finance-demo.md) cho đầy đủ ba terminal và tài khoản Expo. Các lệnh bên dưới là cấu hình backend dev mặc định3000.
+
 ## Chạy trên điện thoại
 
 1. Cài Expo Go hỗ trợ **SDK 58**. Điện thoại và máy tính kết nối cùng Wi-Fi.
@@ -37,15 +39,16 @@ không cần `adb reverse`, không cần tạo thư mục `android/` hoặc `ios
    npm.cmd run start:go -- --clear
    ```
 
-6. Quét QR code bằng Expo Go trên Android hoặc Camera trên iPhone. Giữ hai terminal
+6. Trên iPhone, đăng nhập cùng tài khoản Expo trên CLI (`npx.cmd expo login`) và Expo Go.
+7. Quét QR code bằng Expo Go trên Android hoặc Camera trên iPhone. Giữ hai terminal
    mở trong khi sử dụng app. Nếu PowerShell không chặn npm scripts, có thể dùng `npm`
    thay cho `npm.cmd`.
 
 `dev:gateway` chuyển tiếp cổng LAN 3001 đến Gateway trên máy tính ở cổng 3000.
 Backend hiện chỉ nghe `127.0.0.1`, vì thế điện thoại không gọi trực tiếp IP LAN:3000.
 Script không sửa backend. Expo Go lấy `Constants.expoConfig.hostUri` và gọi
-`http://<IP-máy-chạy-Expo>:3001/api/v1`. Module Crypto và Maps được cài bằng
-`expo install` theo SDK; đều hỗ trợ Expo Go.
+`http://<IP-máy-chạy-Expo>:3001/api/v1`. UUID dùng API core của Expo qua adapter
+`operation-id`, không cần native module ExpoCrypto riêng. Maps dùng bản theo SDK.
 
 ## Khi không kết nối được
 

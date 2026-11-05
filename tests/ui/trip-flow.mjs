@@ -391,6 +391,7 @@ try {
     "2026-11-11T17:00:00.000Z",
   );
   await page.getByRole("tab", { name: "Lịch trình", exact: true }).click();
+  await page.getByRole("tab", { name: "Chưa xếp lịch", exact: true }).waitFor();
   await click("Thêm hoạt động");
   await page
     .getByLabel("Địa điểm / hoạt động", { exact: true })
@@ -487,6 +488,7 @@ try {
   await click(`Mở chuyến đi ${trip.name}`);
   await page.getByRole("tab", { name: "Tiện ích", exact: true }).click();
   await click("Hành lý");
+  await button("Danh sách đã sẵn sàng!").waitFor();
   await screenshot("m13-packing.png");
   await click("Danh sách đã sẵn sàng!");
   await page.getByText("Sẵn sàng lên đường!", { exact: true }).waitFor();

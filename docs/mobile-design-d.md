@@ -56,7 +56,9 @@ The SDK 58 development server intermittently returned `Requiring unknown module`
 ```powershell
 $env:EXPO_PUBLIC_API_URL='https://api.wolfari.test/api/v1'
 npx.cmd expo export --platform all --output-dir .cache/design-d-verified
-npx.cmd expo serve .cache/design-d-verified --port 8085
+# Serve the export on port 8085 with a static host that falls back to index.html.
+# After the Finance merge, web output is single (SPA); expo serve alone returned
+# 404 for direct nested routes in the merge verification.
 # In the test terminal:
 $env:WOLFARI_PREVIEW_URL='http://localhost:8085'
 ```

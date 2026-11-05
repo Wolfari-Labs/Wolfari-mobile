@@ -87,7 +87,11 @@ not load the external image until the user consents to send these fields to Cass
 Host is constrained to `https://img.vietqr.io`; web images have `no-referrer`, native
 image caching is disabled. No analytics/logging of QR URLs is added. TEST is **not**
 a bank sandbox: real accounts may receive real transfers. No real transfer is part
-of verification. MoMo sandbox payment initiation is deliberately not included.
+of verification. The primary screen does not initiate MoMo payments. After the
+Finance/Price Watch merge, **Công cụ quỹ mở rộng** provides explicit Sandbox-only
+payment tools, outside-fund notes and audit/reconciliation views; see
+[the integration matrix](finance-price-watch-mobile.md). Both fund screens and
+membership changes share the same receipt-only operation lock described above.
 
 Refund reversal reason is also absent from public projections. The UI asks the
 Holder to re-enter the agreed reason and warns the recipient to check it with the

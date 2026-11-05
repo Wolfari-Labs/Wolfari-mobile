@@ -1,4 +1,5 @@
 import type { MembershipOperation, Page } from "../trips/types";
+export type { Page } from "../trips/types";
 
 // Money and ledger sequence are int64 decimal strings, never JS numbers.
 export type Money = string;
@@ -23,6 +24,7 @@ export type Contribution = {
   self_contribution: boolean; version: number; finance_version: number;
   member_reported_at: string | null; confirmed_at: string | null;
   confirmed_by_user_id: string | null; waived_reason: string | null; cancelled_reason: string | null;
+  rejected_reason?: string | null;
 };
 export type ContributionRequest = {
   id: string; fund_id: string; title: string; status: "OPEN" | "CLOSED" | "CANCELLED";
@@ -61,8 +63,8 @@ export type Closure = {
   snapshot: {
     schema_version: number; fund: Pick<Fund, "id" | "trip_id" | "holder_user_id" | "currency" | "budget_amount" | "current_balance" | "finance_version">;
     required_user_ids: string[]; contribution_requests: Record<string, unknown>[];
-    contributions: Record<string, unknown>[]; expenses: Record<string, unknown>[];
-    financial_notes: Record<string, unknown>[]; refunds: Record<string, unknown>[]; ledger: Record<string, unknown>[];
+    contributions: Contribution[]; expenses: Expense[];
+    financial_notes: FinancialNote[]; refunds: Refund[]; ledger: Transaction[];
   };
   confirmations: { user_id: string; confirmed_at: string | null }[];
   requested_by_user_id: string; requested_at: string; cancelled_at: string | null;
@@ -77,7 +79,54 @@ export type Receipt = { object_key: string; mime_type: string; size_bytes: numbe
 export type FinanceCollections = {
   "contribution-requests": ContributionRequest; contributions: Contribution;
   expenses: Expense; refunds: Refund; transactions: Transaction; closures: Closure;
+  notes: FinancialNote; history: AuditEntry; "payment-exceptions": PaymentException;
 };
 export type FinancePage<K extends keyof FinanceCollections> = Page<FinanceCollections[K]>;
 export type WriteResult = Fund | Destination | ContributionRequest | Contribution | Expense | Refund | Closure
-  | MembershipOperation | { accepted: true; operation_id: string; closure_id: string };
+  | FinancialNote | PaymentAttempt | PaymentException | MembershipOperation | { deleted: true }
+  | { accepted: true; operation_id?: string; closure_id: string };
+
+export type Versioned = { id: string; fund_id: string; version: number; finance_version: number };
+
+export type FinancialNote = Versioned & {
+  description: string;
+  amount: string | null;
+  payer_user_id: string | null;
+  created_by_user_id: string;
+};
+
+export type AuditEntry = {
+  id: string;
+  fund_id: string;
+  action: string;
+  entity_type: string;
+  entity_id: string;
+  actor_user_id: string | null;
+  from_version: number | null;
+  to_version: number | null;
+  reason: string | null;
+  occurred_at: string;
+};
+
+export type PaymentAttempt = {
+  id: string;
+  contribution_id: string;
+  provider: 'MOMO_SANDBOX';
+  environment: 'SANDBOX';
+  amount: string;
+  currency: 'VND';
+  status: string;
+  payment_url: string | null;
+  needs_reconciliation: boolean;
+  error_code: string | null;
+  expires_at: string | null;
+};
+
+export type PaymentException = {
+  id: string;
+  payment_attempt_id: string | null;
+  processing_status: string;
+  review_reason: string | null;
+  received_at: string;
+  reviewed_at: string | null;
+};

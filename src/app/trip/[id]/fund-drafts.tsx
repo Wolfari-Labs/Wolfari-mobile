@@ -1,1 +1,1 @@
-export { default } from "@/features/trips/screens/fund-screen";
+export { default } from "@/features/trips/screens/fund-drafts-screen";

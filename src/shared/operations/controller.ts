@@ -8,7 +8,7 @@ export type OperationReceipt = Pick<OperationCommand, "kind" | "title" | "target
   key: string; tripId: string; operation?: MembershipOperation; rejection?: string;
 };
 type Pending = OperationReceipt & { command?: OperationCommand };
-type Snapshot = { ready: boolean; busy: boolean; pending?: Pending; error?: string };
+type Snapshot = { ready: boolean; busy: boolean; pending?: Pending; error?: string; result?: unknown };
 type Dependencies = {
   tripId: string; storageKey: string;
   storage: { getItem(key: string): Promise<string | null>; setItem(key: string, value: string): Promise<unknown>; removeItem(key: string): Promise<unknown> };
@@ -93,12 +93,16 @@ export function createOperationController(deps: Dependencies) {
     if (!pending.command) return;
     try {
       const result = await deps.execute(pending.command, pending.key);
+      if (result && typeof result === "object" && "operation_id" in result && result.operation_id !== pending.key)
+        throw new Error("Kết quả thao tác không khớp yêu cầu. Giữ mã yêu cầu để kiểm tra.");
       if (isOperation(result)) await receive(result);
       else {
         // Reminder's {accepted:true} means queued, not a delivered notification.
-        if (!result || typeof result !== "object" || !("id" in result || ("accepted" in result && result.accepted === true && "operation_id" in result && result.operation_id === pending.key))) throw new Error("Phản hồi chưa xác định. Kiểm tra bằng mã yêu cầu.");
+        if (!result || typeof result !== "object" || !("id" in result || ("deleted" in result && result.deleted === true) || ("accepted" in result && result.accepted === true && "closure_id" in result && (!('operation_id' in result) || result.operation_id === pending.key)))) throw new Error("Phản hồi chưa xác định. Kiểm tra bằng mã yêu cầu.");
         await receive({ operation_id: pending.key, trip_id: deps.tripId, state: "SUCCEEDED", outcome: { status: "COMMITTED" } });
       }
+      // Keep response details in memory only (for example a Sandbox payment URL).
+      if (operationCommitted(snapshot.pending)) update({ result });
     } catch (cause) {
       const error = cause as { status?: number; code?: string };
       // A denial during replay cannot disprove a previously committed request.
@@ -116,7 +120,7 @@ export function createOperationController(deps: Dependencies) {
     load,
     async run(command: OperationCommand) {
       if (!snapshot.ready || snapshot.busy || snapshot.pending) return false;
-      update({ busy: true, error: undefined });
+      update({ busy: true, error: undefined, result: undefined });
       try {
         const frozen = JSON.parse(JSON.stringify(command)) as OperationCommand;
         const pending: Pending = { ...receiptForStorage({ ...frozen, key: deps.uuid(), tripId: deps.tripId }), command: frozen };

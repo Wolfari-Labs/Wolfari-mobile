@@ -190,7 +190,7 @@ try {
   await page.getByText(/Lưu Bữa tối dự kiến/).waitFor();
   await screenshot("fund");
 
-  await goto(tripRoute("price-watch"));
+  await goto(tripRoute("price-watch-drafts"));
   await button("Thêm yêu cầu giá vé").click();
   await field("Điểm đi").fill("Hà Nội");
   await field("Điểm đến").fill("Đà Nẵng");

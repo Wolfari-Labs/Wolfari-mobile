@@ -1,6 +1,6 @@
 # Expo SDK 58 migration
 
-The project now uses Expo 58.0.20, React Native 0.88.0, React 19.3.0,
+The merged project uses Expo ~58.0.23, React Native 0.88.1, React 19.3.0,
 Reanimated 4.7.1, Worklets 0.13.0, Skia 2.14.0 and Gesture Handler 3.3.0.
 NativeWind stays on 4.2.7 with Tailwind 3. All Expo-managed versions were aligned
 with `expo install --fix`; the package lock was updated alongside the source changes.
@@ -15,7 +15,9 @@ Node.js must be 22.13+ on 22.x, 24.3+ on 24.x, or 26+.
 - Expo Router owns the safe-area provider. Web uses CSS `env()` insets, with no
   additional measuring provider that could interrupt streamed hydration. Native
   still uses measured safe-area insets. Screen-specific minimum padding is retained.
-- Web remains a static export, with SDK 58's default asynchronous route chunks.
+- Web uses a single-page export with Router web async routes disabled, retaining
+  the Finance/Price Watch branch's Metro compatibility configuration. Static
+  hosting must fall back to index.html for deep links.
 - Existing Gesture builder code is retained through RNGH 3's compatibility path.
   Native dragging and modal interaction still require physical-device QA.
 

@@ -64,13 +64,16 @@ concurrent edits preserve the local draft and require an explicit reload instead
 of overwriting another member. The editor checks for updates every 15 seconds
 while foregrounded and not dragging; this is polling, not live presence/WebSocket sync.
 
-Packing and dress code show the shared plan in read-only mode. Group funds now use
-the Finance Gateway for setup, destinations, budgets, contributions, expenses,
-refunds, ledger and closure confirmations. Receipt image upload and explicit-consent
-VietQR TEST instructions are included; this does not transfer or verify bank money.
-Existing private fund drafts remain under **Bản nháp dự trù riêng** and the demo
-stays isolated. Fare tracking, exports and notifications are not integrated on mobile;
-the current backend does contain notification and price-watch proxies.
+Finance and Price Watch now call the real Gateway. Fund setup, destinations,
+contributions, expenses, refunds, outside-fund notes, ledger, closure snapshots,
+member audit history and Sandbox payment commands are connected. Price Watch has
+create/edit/pause/resume/stop, per-user thresholds, observation history and stale
+source labels. The provider remains `MOCK_FLIGHT`, not live airline prices.
+Private drafts remain available from separate links; they never alter server balances.
+Export and notification-preference integration are outside this increment.
+
+See [Finance / Price Watch coverage and verification](docs/finance-price-watch-mobile.md)
+and [Windows + iPhone demo, step by step](docs/iphone-finance-demo.md).
 
 Run on your phone with **Expo Go over Wi-Fi**, without USB debugging:
 

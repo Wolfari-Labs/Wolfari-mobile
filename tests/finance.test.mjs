@@ -242,3 +242,25 @@ test("Reminder accepted receipt is success only for the matching operation, not 
   await c.load(); await c.run(write); assert.equal(operationCommitted(c.getSnapshot().pending), false);
   assert.deepEqual(receiptForStorage({ key, tripId, kind: "finance", title: "Test", command: write }).command, undefined);
 });
+
+test("Extended finance responses share the operation lock and never persist payment details", async () => {
+  for (const result of [{ id: 'attempt', payment_url: 'https://test-payment.momo.vn/private' }, { deleted: true }, { accepted: true, closure_id: 'closure' }]) {
+    const { controller: c, values, deps } = harness({ execute: async () => result });
+    await c.load(); await c.run(write);
+    assert.equal(operationCommitted(c.getSnapshot().pending), true);
+    assert.deepEqual(c.getSnapshot().result, result);
+    assert.equal(await c.run({ ...write, kind: 'leave' }), false);
+    assert.ok(!values.get('scope').includes('payment_url'));
+    const restored = createOperationController(deps);
+    await restored.load();
+    assert.equal(restored.getSnapshot().result, undefined);
+    assert.equal(restored.getSnapshot().pending.command, undefined);
+  }
+});
+
+test("Extended entity responses cannot bypass operation identity validation", async () => {
+  const { controller: c } = harness({ execute: async () => ({ id: 'attempt', operation_id: 'wrong' }) });
+  await c.load(); await c.run(write);
+  assert.equal(operationCommitted(c.getSnapshot().pending), false);
+  assert.equal(c.getSnapshot().result, undefined);
+});
