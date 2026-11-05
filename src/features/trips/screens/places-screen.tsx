@@ -1,6 +1,6 @@
 import { openURL } from "expo-linking";
 import { router } from "expo-router";
-import { randomUUID } from "expo-crypto";
+import { randomUUID } from "@/shared/operations/operation-id";
 import { useEffect, useRef, useState } from "react";
 import { Platform, Text, View } from "react-native";
 import { useLocalDraft } from "@/shared/storage/use-local-draft";

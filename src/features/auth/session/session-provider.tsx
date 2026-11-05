@@ -33,5 +33,6 @@ export function useSession() {
     getAccessToken: session.getAccessToken,
     refreshAccessToken: session.refreshAccessToken,
     updateProfile: session.updateProfile,
+    getSessionSnapshot: session.getSnapshot,
   };
 }

@@ -1,4 +1,4 @@
-import { randomUUID } from "expo-crypto";
+import { randomUUID } from "@/shared/operations/operation-id";
 import { useRef, useState } from "react";
 
 import { ApiError } from "@/shared/api/api-client";
@@ -15,9 +15,9 @@ export function useCommand() {
     locked.current = true;
     setBusy(true);
     setError(undefined);
-    const signature = JSON.stringify(intent);
-    if (pending.current?.intent !== signature) pending.current = { intent: signature, key: randomUUID() };
     try {
+      const signature = JSON.stringify(intent);
+      if (pending.current?.intent !== signature) pending.current = { intent: signature, key: randomUUID() };
       const value = await work(pending.current.key);
       pending.current = null;
       return value;
