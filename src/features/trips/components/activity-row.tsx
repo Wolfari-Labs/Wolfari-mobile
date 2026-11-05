@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
-import { colors, typography } from "@/shared/theme/tokens";
+import { colors, radii, shadows, typography } from "@/shared/theme/tokens";
 import { DesignIcon } from "@/shared/ui/design-icon";
 import type { Activity } from "../types";
 import { timeLabel } from "../utils";
@@ -19,6 +19,7 @@ export function ActivityRow({
   const complete = activity.status === "COMPLETED";
   return (
     <Pressable
+      cssInterop={false}
       accessibilityRole="button"
       accessibilityLabel={`${activity.title}, ${timeLabel(activity.starts_at, timezone)}${complete ? ", đã hoàn thành" : ""}`}
       onPress={onPress}
@@ -30,7 +31,7 @@ export function ActivityRow({
       <Text style={[typography.footnote, styles.time]}>
         {timeLabel(activity.starts_at, timezone)}
       </Text>
-      <View style={[styles.icon, complete && { backgroundColor: colors.teal }]}>
+      <View style={[styles.icon, complete && { backgroundColor: colors.pinGreen }]}>
         <DesignIcon
           name={
             complete
@@ -39,8 +40,8 @@ export function ActivityRow({
                 ? "wallet"
                 : "pin"
           }
-          size={24}
-          tintColor={complete ? "white" : colors.teal}
+          size={20}
+          tintColor={complete ? "white" : colors.ink}
         />
       </View>
       <View style={{ flex: 1 }}>
@@ -69,23 +70,30 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
     minHeight: 88,
-    padding: 14,
+    padding: 12,
+    marginVertical: 6,
     backgroundColor: colors.surface,
-    borderRadius: 18,
+    borderRadius: radii.card,
+    ...shadows.glass,
   },
   time: {
-    width: 44,
-    color: colors.teal,
+    minWidth: 54,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: radii.pill,
+    backgroundColor: colors.lilac,
+    color: colors.violet,
     fontSize: 13,
-    fontWeight: "600",
+    fontWeight: "800",
     fontVariant: ["tabular-nums"],
   },
   icon: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+    width: 38,
+    height: 38,
+    borderRadius: 14,
+    backgroundColor: colors.tealSoft,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.tealSoft,
+
   },
 });

@@ -1,10 +1,6 @@
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
-import { router, useNavigation } from "expo-router";
-import {
-  usePreventRemove,
-  type NavigationAction,
-} from "expo-router/react-navigation";
+import { usePreventRemove, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { colors, typography } from "@/shared/theme/tokens";
@@ -13,6 +9,7 @@ import { designAssets } from "@/shared/ui/design-assets";
 import { Feedback } from "@/shared/ui/feedback";
 import { FormField } from "@/shared/ui/form-field";
 import { Segments, ui } from "@/shared/ui/journal";
+import { layered } from "@/shared/ui/page-intro";
 import { ConfirmSheet, DemoScreen, Stat, demoStyles as s } from "./components";
 import { formatMoney, type TripDetails } from "./model";
 import { useTripDemo } from "./provider";
@@ -27,19 +24,20 @@ export default function DemoDetailsScreen() {
   const [form, setForm] = useState({ ...state.details });
   const [error, setError] = useState<string>();
   const [picking, setPicking] = useState(false);
-  const [discardAction, setDiscardAction] = useState<NavigationAction>();
+  const [discardAction, setDiscardAction] = useState<{ repeat: () => void }>();
+  const [discarded, setDiscarded] = useState(false);
   const [saved, setSaved] = useState(false);
-  const navigation = useNavigation();
+  const router = useRouter();
   const pickGuard = useRef(false);
   const mounted = useRef(true);
   const dirty = JSON.stringify(form) !== JSON.stringify(state.details);
   // Guard navigator removals too: Android Back, iOS gestures and parent pops.
-  usePreventRemove(dirty && !saved, ({ data }) => setDiscardAction(data.action));
+  usePreventRemove(dirty && !saved && !discarded, ({ repeat }) => setDiscardAction({ repeat }));
   // Wait for the save and the removal guard to commit before leaving. Trimming
   // fields in the model can otherwise make a successful save still look dirty.
   useEffect(() => {
     if (saved) router.dismissTo("/demo-trip");
-  }, [saved]);
+  }, [saved, router]);
   useEffect(() => {
     mounted.current = true;
     return () => {
@@ -102,6 +100,7 @@ export default function DemoDetailsScreen() {
   return (
     <DemoScreen
       title="Thông tin chuyến đi"
+      intro={{ eyebrow: "HÀNH TRÌNH CỦA CHÚNG MÌNH", title: "Một chuyến đi, một dấu ấn", icon: "edit", tone: "sand" }}
       onBack={() => router.dismissTo("/demo-trip")}
       footer={
         <Button
@@ -111,10 +110,7 @@ export default function DemoDetailsScreen() {
         />
       }
     >
-      <Text style={s.eyebrow}>HÀNH TRÌNH CỦA CHÚNG MÌNH</Text>
-      <Text accessibilityRole="header" style={s.heading}>
-        Một chuyến đi, một dấu ấn
-      </Text>
+      <View style={ui.stack}>
       <Image
         source={
           form.coverUri ? { uri: form.coverUri } : designAssets[form.cover]
@@ -165,6 +161,8 @@ export default function DemoDetailsScreen() {
         Ảnh chỉ dùng trong phiên xem mẫu, không tải lên. Không chọn giấy tờ hoặc
         ảnh có thông tin nhạy cảm.
       </Text>
+      </View>
+      <View style={layered.panel}>
       <FormField
         label="Tên chuyến đi mẫu"
         icon="trip"
@@ -190,12 +188,12 @@ export default function DemoDetailsScreen() {
           />
         ))}
       </View>
-      <View style={[ui.card, { backgroundColor: colors.tealSoft }]}>
+      </View>
+      <View style={layered.tint}>
         <Text style={typography.headline}>12 — 14/11/2026 · 3 ngày, 2 đêm</Text>
         <Text style={typography.footnote}>
           Lịch cố định của bản mẫu, dùng chung với dress code và hoạt động.
         </Text>
-      </View>
       <FormField
         label="Ngân sách cả chuyến (VND)"
         icon="wallet"
@@ -226,6 +224,8 @@ export default function DemoDetailsScreen() {
         Ngân sách là mục tiêu dự kiến, không phải số dư quỹ. Số người dự kiến
         không thêm/xóa thành viên mẫu.
       </Text>
+      </View>
+      <View style={layered.panel}>
       <Text style={typography.headline}>Phong cách chuyến đi</Text>
       <Segments
         value={form.style}
@@ -245,6 +245,7 @@ export default function DemoDetailsScreen() {
         maxLength={1000}
       />
       {error && <Feedback message={error} />}
+      </View>
       <Button
         label="Hủy chỉnh sửa"
         variant="soft"
@@ -259,8 +260,9 @@ export default function DemoDetailsScreen() {
         onClose={() => setDiscardAction(undefined)}
         onConfirm={() => {
           if (!discardAction) return;
+          setDiscarded(true);
           setDiscardAction(undefined);
-          navigation.dispatch(discardAction);
+          discardAction.repeat();
         }}
       />
     </DemoScreen>

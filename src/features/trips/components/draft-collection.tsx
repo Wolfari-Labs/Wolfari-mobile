@@ -1,4 +1,4 @@
-import { randomUUID } from "expo-crypto";
+import { randomUUID } from "@/shared/operations/operation-id";
 import { useState, type ReactNode } from "react";
 import { Text, View } from "react-native";
 import { useLocalDraft } from "@/shared/storage/use-local-draft";
@@ -69,7 +69,7 @@ export function DraftCollection({ scope, feature, title, fields, initial, seed =
       {!draft.value?.history.length && <EmptyState title="Chưa có lịch sử" message="Các thay đổi bản nháp xuất hiện tại đây." />}
     </> : groups.map(group => <View key={group} style={ui.stack}>
       {groupBy && <Button variant="soft" label={(collapsed.includes(group) ? "+ " : "− ") + group} onPress={() => setCollapsed(old => old.includes(group) ? old.filter(g => g !== group) : [...old, group])} />}
-      {!collapsed.includes(group) && visible.filter(row => !groupBy || (row[groupBy] || "Khác") === group).map(row => <View key={row.id} style={ui.card}>
+      {!collapsed.includes(group) && visible.filter(row => !groupBy || (row[groupBy] || "Khác") === group).map(row => <View key={row.id} style={ui.record}>
         {render(row)}
         {toggle && (completable ?? editable) && <Button compact variant="soft" disabled={!enabled} label={row[toggle.key] === toggle.on ? toggle.onLabel : toggle.offLabel} onPress={() => { void saveRows(rows.map(r => r.id === row.id ? { ...r, [toggle.key]: r[toggle.key] === toggle.on ? toggle.off : toggle.on } : r), "Đổi trạng thái " + (row.name || row.origin || title)); }} />}
         {editable && <View style={[ui.row, { flexWrap: "wrap" }]}>

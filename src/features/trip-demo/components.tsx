@@ -6,6 +6,7 @@ import { Button } from "@/shared/ui/button";
 import { Feedback } from "@/shared/ui/feedback";
 import { Segments, ui } from "@/shared/ui/journal";
 import { Screen } from "@/shared/ui/screen";
+import { PageIntro, type PageIntroProps } from "@/shared/ui/page-intro";
 import { Sheet } from "@/shared/ui/sheet";
 import { demoMembers } from "./model";
 
@@ -15,11 +16,15 @@ export function DemoScreen({
   footer,
   home = false,
   onBack,
+  intro,
+  summary,
 }: PropsWithChildren<{
   title: string;
   footer?: ReactNode;
   home?: boolean;
   onBack?: () => void;
+  intro?: Omit<PageIntroProps, "badge" | "summary">;
+  summary?: ReactNode;
 }>) {
   return (
     <Screen
@@ -34,7 +39,7 @@ export function DemoScreen({
         })
       }
     >
-      <View style={styles.banner}>
+      {intro ? <PageIntro {...intro} summary={summary} badge="CHUYẾN ĐI MẪU · Không lưu lên máy chủ" /> : <View style={styles.banner}>
         <View style={styles.dot} />
         <View style={ui.flex}>
           <Text
@@ -49,7 +54,7 @@ export function DemoScreen({
             Thử tự do · Không lưu lên máy chủ
           </Text>
         </View>
-      </View>
+      </View>}
       {children}
     </Screen>
   );
@@ -109,7 +114,7 @@ export function Stat({
   accent?: boolean;
 }) {
   return (
-    <View style={[styles.stat, accent && { backgroundColor: colors.tealSoft }]}>
+    <View style={styles.stat}>
       <Text style={typography.footnote}>{label}</Text>
       <Text
         style={[typography.headline, accent && { color: colors.tealPressed }]}
@@ -158,7 +163,7 @@ export const demoStyles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
   },
-  split: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  split: { flexDirection: "row", flexWrap: "wrap", gap: 20 },
   eyebrow: {
     ...typography.footnote,
     color: colors.tealPressed,
@@ -189,9 +194,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    borderRadius: 16,
-    backgroundColor: colors.tealSoft,
-    padding: 12,
+    paddingVertical: 2,
   },
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.teal },
   member: { flexDirection: "row", alignItems: "center", gap: 8 },
@@ -207,9 +210,9 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     flexBasis: 140,
     minWidth: 0,
-    padding: 14,
+    paddingVertical: 12,
     gap: 6,
-    borderRadius: 16,
-    backgroundColor: colors.surface,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.line,
   },
 });

@@ -7,6 +7,7 @@ import { Feedback } from "@/shared/ui/feedback";
 import { FormField } from "@/shared/ui/form-field";
 import { EmptyState, Segments } from "@/shared/ui/journal";
 import { Sheet } from "@/shared/ui/sheet";
+import { GlassSurface } from "@/shared/ui/glass-surface";
 import { ConfirmSheet, DemoScreen, demoStyles as s } from "./components";
 import { demoActivities, demoDays, palettes, type DemoDress } from "./model";
 import { useTripDemo } from "./provider";
@@ -50,6 +51,7 @@ export default function DemoDressScreen() {
   return (
     <DemoScreen
       title="Dress code"
+      intro={{ eyebrow: "CÙNG DIỆN, CÙNG ĐẸP", title: "Những gam màu của chúng mình", subtitle: "Một chút đồng điệu cho những tấm hình muốn giữ mãi.", icon: "shirt", tone: "sand" }}
       footer={
         <Button
           label="Thêm dress code mẫu"
@@ -58,13 +60,6 @@ export default function DemoDressScreen() {
         />
       }
     >
-      <Text style={s.eyebrow}>CÙNG DIỆN, CÙNG ĐẸP</Text>
-      <Text accessibilityRole="header" style={s.heading}>
-        Những gam màu của chúng mình
-      </Text>
-      <Text style={s.subtle}>
-        Một chút đồng điệu cho những tấm hình muốn giữ mãi.
-      </Text>
       <Segments
         scroll
         value={filter}
@@ -103,11 +98,11 @@ export default function DemoDressScreen() {
               />
             </View>
             <View style={styles.body}>
-              <View style={s.pill}>
+              <GlassSurface variant="regular" style={styles.scope}>
                 <Text style={[s.label, { color: colors.tealPressed }]}>
                   {scopeLabel}
                 </Text>
-              </View>
+              </GlassSurface>
               <Text accessibilityRole="header" style={typography.section}>
                 {code.label}
               </Text>
@@ -121,14 +116,14 @@ export default function DemoDressScreen() {
                   label="Sửa"
                   accessibilityLabel={`Sửa ${code.label}`}
                   compact
-                  variant="soft"
+                  variant="text"
                   onPress={() => open(code)}
                 />
                 <Button
                   label="Xóa"
                   accessibilityLabel={`Xóa ${code.label}`}
                   compact
-                  variant="soft"
+                  variant="text"
                   onPress={() => setDeleting(code)}
                 />
               </View>
@@ -265,12 +260,13 @@ export default function DemoDressScreen() {
 }
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 24,
-    backgroundColor: colors.surface,
-    overflow: "hidden",
+    paddingBottom: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.line,
   },
   paletteHero: {
-    minHeight: 115,
+    borderRadius: 12,
+    minHeight: 150,
     padding: 24,
     flexDirection: "row",
     alignItems: "center",
@@ -286,7 +282,8 @@ const styles = StyleSheet.create({
     borderColor: colors.surface,
     marginLeft: -8,
   },
-  body: { padding: 20, gap: 12 },
+  body: { paddingHorizontal: 4, gap: 10 },
+  scope: { alignSelf: "flex-start", marginTop: -18, marginBottom: 4, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 18 },
   paletteGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   paletteOption: {
     flexGrow: 1,

@@ -6,6 +6,7 @@ import { Feedback } from "@/shared/ui/feedback";
 import { FormField } from "@/shared/ui/form-field";
 import { EmptyState, Progress, Segments, ui } from "@/shared/ui/journal";
 import { Sheet } from "@/shared/ui/sheet";
+import { layered } from "@/shared/ui/page-intro";
 import {
   ConfirmSheet,
   DemoScreen,
@@ -94,10 +95,9 @@ export default function DemoFundScreen() {
   return (
     <DemoScreen
       title="Quỹ nhóm"
+      intro={{ eyebrow: "MINH BẠCH ĐỂ ĐI XA HƠN", title: "Quỹ của chúng mình", icon: "wallet" }}
       footer={<Button label="Thêm khoản mẫu" icon="plus" onPress={open} />}
-    >
-      <Text style={s.eyebrow}>MINH BẠCH ĐỂ ĐI XA HƠN</Text>
-      <View style={styles.balanceCard}>
+      summary={<View style={styles.balanceCard}>
         <View style={s.row}>
           <Text style={styles.balanceLabel}>KHẢ DỤNG MÔ PHỎNG</Text>
           <View style={styles.mockPill}>
@@ -119,11 +119,13 @@ export default function DemoFundScreen() {
           <Text style={styles.balanceFootnote}>Mai · Người giữ quỹ mẫu</Text>
           <Text style={styles.balanceFootnote}>Đang mở</Text>
         </View>
-      </View>
+      </View>}
+    >
       <Text style={typography.footnote}>
         Đây là sổ quỹ mô phỏng, không phải số dư ngân hàng. Không chuyển tiền,
         xác minh thanh toán hay gọi API tài chính.
       </Text>
+      <View style={layered.tint}>
       <View style={s.split}>
         <Stat
           label="Đã góp (mẫu)"
@@ -132,7 +134,7 @@ export default function DemoFundScreen() {
         />
         <Stat label="Đã chi (mẫu)" value={formatMoney(totals.spent)} />
       </View>
-      <View style={ui.card}>
+      <View style={ui.section}>
         <View style={s.row}>
           <Text style={[typography.headline, ui.flex]}>Mục tiêu quỹ</Text>
           <Text style={typography.headline}>
@@ -148,6 +150,7 @@ export default function DemoFundScreen() {
           Chờ xác nhận đóng góp: {formatMoney(totals.pending)}
         </Text>
       </View>
+      </View>
       <Segments
         scroll
         value={tab}
@@ -160,7 +163,7 @@ export default function DemoFundScreen() {
         ]}
       />
       {tab === "contribution" && (
-        <View style={ui.card}>
+        <View style={ui.section}>
           <Text style={typography.headline}>Đóng góp của từng người</Text>
           {demoMembers.map((member) => (
             <View key={member.id} style={s.row}>
@@ -183,8 +186,9 @@ export default function DemoFundScreen() {
           ))}
         </View>
       )}
+      <View style={layered.panel}>
       {tab === "history" ? (
-        <View style={ui.card}>
+        <View style={ui.section}>
           <Text accessibilityRole="header" style={typography.section}>
             Dấu vết thao tác mẫu
           </Text>
@@ -206,7 +210,7 @@ export default function DemoFundScreen() {
       ) : (
         <>
           {visible.map((entry) => (
-            <View key={entry.id} style={ui.card}>
+            <View key={entry.id} style={ui.record}>
               <View style={s.row}>
                 <View style={ui.flex}>
                   <Text style={s.label}>
@@ -278,7 +282,7 @@ export default function DemoFundScreen() {
                   <Button
                     label="Xem xét"
                     accessibilityLabel={`Xem xét ${entry.title}`}
-                    variant="soft"
+                    variant="text"
                     compact
                     onPress={() => {
                       setConfirmError(undefined);
@@ -288,7 +292,7 @@ export default function DemoFundScreen() {
                   <Button
                     label="Hủy khoản"
                     accessibilityLabel={`Hủy ${entry.title}`}
-                    variant="soft"
+                    variant="text"
                     compact
                     onPress={() => {
                       setConfirmError(undefined);
@@ -308,6 +312,7 @@ export default function DemoFundScreen() {
           )}
         </>
       )}
+      </View>
       <Sheet
         visible={!!editing}
         title="Thêm khoản vào quỹ mẫu"
@@ -406,25 +411,23 @@ export default function DemoFundScreen() {
 }
 const styles = StyleSheet.create({
   balanceCard: {
-    padding: 22,
-    borderRadius: 26,
-    backgroundColor: "#15525D",
+    paddingVertical: 8,
     gap: 16,
   },
   balanceLabel: {
     ...typography.footnote,
-    color: "#D0E6E8",
+    color: colors.muted,
     fontWeight: "600",
     letterSpacing: 1,
   },
   balance: {
     ...typography.largeTitle,
-    color: colors.surface,
+    color: colors.teal,
     fontSize: 34,
     lineHeight: 42,
   },
   balanceDetails: { gap: 7 },
-  balanceFootnote: { ...typography.footnote, color: "#E1F0F1" },
+  balanceFootnote: { ...typography.footnote },
   holder: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -432,15 +435,12 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingTop: 14,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: "#67939A",
+    borderTopColor: colors.line,
   },
   mockPill: {
-    borderRadius: 99,
-    paddingHorizontal: 8,
     paddingVertical: 4,
-    backgroundColor: "#326C75",
   },
-  mockText: { color: colors.surface, fontSize: 10, fontWeight: "700" },
+  mockText: { color: colors.teal, fontSize: 10, fontWeight: "700" },
   event: {
     flexDirection: "row",
     gap: 12,

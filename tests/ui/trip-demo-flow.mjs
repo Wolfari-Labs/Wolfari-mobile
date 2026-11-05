@@ -234,7 +234,7 @@ try {
     await page.goto(`${appUrl}/demo-trip${route}`, {
       waitUntil: "networkidle",
     });
-    await text("CHUYẾN ĐI MẪU").waitFor();
+    await page.getByText(/^CHUYẾN ĐI MẪU(?: · Không lưu lên máy chủ)?$/).filter({ visible: true }).waitFor();
     await shot(`small${route.replace("/", "-") || "-overview"}`);
   }
   assert.deepEqual(

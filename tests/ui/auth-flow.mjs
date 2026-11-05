@@ -71,7 +71,7 @@ try {
   await page.goto(`${appUrl}/?preview=1`, { waitUntil: "networkidle" });
   await page.getByRole("button", { name: "Bắt đầu hành trình", exact: true }).waitFor();
   const guestImages = await checkImages(12);
-  assert.ok(guestImages.some((img) => img.naturalWidth === 354 && Math.abs(img.width - 354) < 1 && Math.abs(img.height - 234) < 1), "Destination illustration keeps the 354 x 234 design slot.");
+  assert.ok(guestImages.some((img) => Math.abs(img.width - 342) < 1 && Math.abs(img.height - 268) < 1), "D destination illustration fits inside its white clay frame.");
   await noHorizontalOverflow();
   await page.screenshot({ path: path.join(output, "m01-guest.png") });
   await page.getByRole("button", { name: "Bắt đầu hành trình", exact: true }).click();
@@ -121,9 +121,8 @@ try {
   await page.waitForURL("**/sign-in");
 
   await page.goto(`${appUrl}/sign-in?preview=1`, { waitUntil: "networkidle" });
-  const signInImages = await checkImages(9);
-  assert.ok(signInImages.some((img) => Math.abs(img.width - 92) < 1 && Math.abs(img.height - 92) < 1), "Mascot keeps the 92 x 92 design slot.");
-  assert.ok(signInImages.some((img) => Math.abs(img.width - 354) < 1 && Math.abs(img.height - 150) < 1), "Lake image keeps the 354 x 150 design slot.");
+  const signInImages = await checkImages(8);
+  assert.ok(signInImages.some((img) => Math.abs(img.width - 120) < 1 && Math.abs(img.height - 112.5) < 1), "D sign-in uses the exported mascot inside its circular pastel backdrop.");
   await page.screenshot({ path: path.join(output, "m02-sign-in.png") });
   await page.getByLabel("Email", { exact: true }).fill("demo@example.test");
   await page.getByLabel("Mật khẩu", { exact: true }).fill("wrong password");

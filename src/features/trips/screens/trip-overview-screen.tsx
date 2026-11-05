@@ -1,22 +1,23 @@
 import { router } from "expo-router";
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
 
 import { colors, typography } from "@/shared/theme/tokens";
 import { Button } from "@/shared/ui/button";
 import {
   EmptyState,
   IconButton,
-  Progress,
   ResourceFeedback,
   SectionLink,
   ui,
 } from "@/shared/ui/journal";
+import { StatGrid, StatTile } from "@/shared/ui/pastel";
 import { Screen } from "@/shared/ui/screen";
+import { layered } from "@/shared/ui/page-intro";
 import { ActivityRow } from "../components/activity-row";
 import { TripCard } from "../components/trip-card";
 import { openTrip, TripNavigation } from "../components/trip-navigation";
 import { useTrip } from "../hooks/use-trip";
-import { dateKey, sortedActivities } from "../utils";
+import { dateKey, sortedActivities, tripDates } from "../utils";
 
 export default function TripOverviewScreen() {
   const resource = useTrip();
@@ -63,58 +64,21 @@ export default function TripOverviewScreen() {
       />
       {trip && plan && (
         <>
+          <TripCard trip={trip} interactive={false} />
+          <Text selectable style={typography.footnote}>{tripDates(trip)}</Text>
           <TripNavigation id={id} active="overview" />
-          <TripCard trip={trip} />
           {trip.description && (
             <Text style={[typography.body, { color: colors.muted }]}>
               {trip.description}
             </Text>
           )}
-          <View style={[ui.row, { alignItems: "stretch", flexWrap: "wrap" }]}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Xem lịch trình"
-              onPress={() => openTrip(id, "itinerary")}
-              style={({ pressed }) => [
-                ui.card,
-                { flex: 1, minWidth: 128, padding: 16 },
-                pressed && ui.pressed,
-              ]}
-            >
-              <Text style={typography.footnote}>Trải nghiệm</Text>
-              <Text style={typography.largeTitle}>
-                {plan.activities.length}
-              </Text>
-              <Text style={typography.footnote}>
-                {plan.activities.filter((a) => a.status === "COMPLETED").length}{" "}
-                đã hoàn thành
-              </Text>
-              <Text style={[typography.footnote, { color: colors.teal }]}>
-                Xem lịch trình ›
-              </Text>
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Xem đồ"
-              onPress={() =>
-                router.push({ pathname: "/trip/[id]/packing", params: { id } })
-              }
-              style={({ pressed }) => [
-                ui.card,
-                { flex: 1, minWidth: 128, padding: 16 },
-                pressed && ui.pressed,
-              ]}
-            >
-              <Text style={typography.footnote}>Hành lý</Text>
-              <Text style={typography.title}>
-                {done} / {plan.packing_items.length}
-              </Text>
-              <Progress done={done} total={plan.packing_items.length} />
-              <Text style={[typography.footnote, { color: colors.teal }]}>
-                Xem đồ cần mang ›
-              </Text>
-            </Pressable>
-          </View>
+          <StatGrid>
+            <StatTile icon="calendar" tone="blue" value={`${plan.activities.length} hoạt động`} label="Lịch trình chuyến đi" accessibilityLabel="Xem lịch trình" onPress={() => openTrip(id, "itinerary")} />
+            <StatTile icon="wallet" tone="mint" value="Quỹ nhóm" label="Xem đóng góp và số dư" onPress={() => router.push({ pathname: "/trip/[id]/fund", params: { id } })} />
+            <StatTile icon="bag" tone="butter" value={`${done}/${plan.packing_items.length} món`} label="Hành lý đã sẵn sàng" accessibilityLabel="Xem đồ" onPress={() => router.push({ pathname: "/trip/[id]/packing", params: { id } })} />
+            <StatTile icon="shirt" tone="peach" value={`${plan.dress_codes.length} gợi ý`} label="Dress code của nhóm" onPress={() => router.push({ pathname: "/trip/[id]/dress-code", params: { id } })} />
+          </StatGrid>
+          <View style={layered.panel}>
           <View
             style={[ui.row, { justifyContent: "space-between", marginTop: 8 }]}
           >
@@ -127,7 +91,7 @@ export default function TripOverviewScreen() {
             <Button
               label="Xem tất cả"
               compact
-              variant="soft"
+              variant="text"
               onPress={() => openTrip(id, "itinerary")}
             />
           </View>
@@ -158,6 +122,7 @@ export default function TripOverviewScreen() {
               }
             />
           )}
+          </View>
           <SectionLink
             title="Bạn đồng hành"
             subtitle="Thành viên và lời mời của nhóm"

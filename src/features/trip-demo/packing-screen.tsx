@@ -2,11 +2,11 @@ import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { colors, typography } from "@/shared/theme/tokens";
 import { Button } from "@/shared/ui/button";
-import { DesignIcon } from "@/shared/ui/design-icon";
 import { Feedback } from "@/shared/ui/feedback";
 import { FormField } from "@/shared/ui/form-field";
 import { EmptyState, Progress, Segments, ui } from "@/shared/ui/journal";
 import { Sheet } from "@/shared/ui/sheet";
+import { PackingCheck } from "@/shared/ui/packing-check";
 import {
   ConfirmSheet,
   DemoScreen,
@@ -57,32 +57,26 @@ export default function DemoPackingScreen() {
   return (
     <DemoScreen
       title="Hành lý"
+      intro={{ eyebrow: "CHUẨN BỊ CÙNG NHAU", title: "Gọn hành lý, nhẹ tâm trí" }}
       footer={
         <Button label="Thêm vật dụng mẫu" icon="plus" onPress={() => open()} />
       }
-    >
-      <Text style={s.eyebrow}>CHUẨN BỊ CÙNG NHAU</Text>
-      <Text accessibilityRole="header" style={s.heading}>
-        Gọn hành lý, nhẹ tâm trí
-      </Text>
-      <View style={[ui.card, { backgroundColor: colors.mint }]}>
+      summary={<>
         <View style={s.row}>
           <View style={ui.flex}>
-            <Text style={typography.footnote}>CẢ NHÓM ĐÃ CHUẨN BỊ</Text>
-            <Text style={typography.largeTitle}>
+            <Text style={typography.footnote}>Cả nhóm đã chuẩn bị</Text>
+            <Text style={[typography.title, { fontVariant: ["tabular-nums"] }]}>
               {done}
               <Text style={s.subtle}> / {state.packing.length} món</Text>
             </Text>
           </View>
-          <DesignIcon name="bag" size={44} tintColor={colors.teal} />
+          <Text style={styles.remaining}>{state.packing.length - done} món còn lại</Text>
         </View>
         <Progress done={done} total={state.packing.length} />
-        <Text style={typography.footnote}>
-          {state.packing.length && done === state.packing.length
-            ? "Mọi thứ đã sẵn sàng. Hẹn nhau lên đường!"
-            : "Mỗi người chuẩn bị một chút, cả nhóm yên tâm hơn."}
-        </Text>
-      </View>
+        {!!state.packing.length && done === state.packing.length && <Text style={typography.footnote}>Mọi thứ đã sẵn sàng. Hẹn nhau lên đường!</Text>}
+      </>}
+    >
+      <View style={styles.filters}>
       <Segments
         value={filter}
         onChange={setFilter}
@@ -101,21 +95,19 @@ export default function DemoPackingScreen() {
           ...categories.map((value) => ({ value, label: value })),
         ]}
       />
-      <Text style={typography.footnote}>
-        Phân công và tiến độ được mô phỏng trong phiên này, chưa đồng bộ với
-        người khác.
-      </Text>
+      </View>
+      <View style={styles.list}>
       {categories
         .filter((c) => visible.some((p) => p.category === c))
         .map((group) => (
-          <View key={group} style={ui.stack}>
-            <Text accessibilityRole="header" style={typography.headline}>
+          <View key={group} style={styles.category}>
+            <Text accessibilityRole="header" style={[typography.headline, styles.categoryTitle]}>
               {group} · {visible.filter((p) => p.category === group).length}
             </Text>
             {visible
               .filter((p) => p.category === group)
               .map((item) => (
-                <View key={item.id} style={ui.card}>
+                <View key={item.id} style={ui.record}>
                   <Pressable
                     accessibilityRole="checkbox"
                     accessibilityLabel={`Đã chuẩn bị ${item.name}`}
@@ -125,17 +117,7 @@ export default function DemoPackingScreen() {
                     }
                     style={styles.checkRow}
                   >
-                    <View
-                      style={[styles.checkbox, item.done && styles.checked]}
-                    >
-                      {item.done && (
-                        <DesignIcon
-                          name="check"
-                          size={20}
-                          tintColor={colors.surface}
-                        />
-                      )}
-                    </View>
+                    <PackingCheck checked={item.done} />
                     <View style={ui.flex}>
                       <Text
                         style={[
@@ -160,14 +142,14 @@ export default function DemoPackingScreen() {
                       label="Sửa"
                       accessibilityLabel={`Sửa ${item.name}`}
                       compact
-                      variant="soft"
+                      variant="text"
                       onPress={() => open(item)}
                     />
                     <Button
                       label="Xóa"
                       accessibilityLabel={`Xóa ${item.name}`}
                       compact
-                      variant="soft"
+                      variant="text"
                       onPress={() => setDeleting(item)}
                     />
                   </View>
@@ -182,6 +164,7 @@ export default function DemoPackingScreen() {
           icon="bag"
         />
       )}
+      </View>
       <Sheet
         visible={!!editing}
         title="Chuẩn bị một vật dụng"
@@ -270,15 +253,10 @@ const styles = StyleSheet.create({
     gap: 12,
     minHeight: 48,
   },
-  checkbox: {
-    width: 30,
-    height: 30,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: colors.line,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  checked: { backgroundColor: colors.teal, borderColor: colors.teal },
+  remaining: { ...typography.footnote, color: colors.tealPressed, fontWeight: "600" },
+  filters: { gap: 4 },
+  list: { gap: 24 },
+  category: { gap: 0 },
+  categoryTitle: { paddingVertical: 10, paddingHorizontal: 12, borderRadius: 12, backgroundColor: colors.tealSoft },
   completed: { color: colors.muted, textDecorationLine: "line-through" },
 });
