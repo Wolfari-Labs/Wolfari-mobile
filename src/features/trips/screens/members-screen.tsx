@@ -19,6 +19,7 @@ import {
 } from "@/shared/ui/journal";
 import { Screen } from "@/shared/ui/screen";
 import { Sheet } from "@/shared/ui/sheet";
+import { memberName } from "../model/member-name";
 import { collectPages } from "../api/pagination";
 import { useTrip } from "../hooks/use-trip";
 import type { Invitation } from "../types";
@@ -113,21 +114,21 @@ export default function MembersScreen() {
             <Text style={[typography.body, { color: colors.teal }]}>
               {member.user_id === profile?.id
                 ? profile.full_name.charAt(0)
-                : "W"}
+                : (member.display_name?.trim().charAt(0) || "W")}
             </Text>
           </View>
           <View style={ui.flex}>
             <Text style={typography.headline}>
               {member.user_id === profile?.id
                 ? `${profile.full_name} · Bạn`
-                : `Bạn đồng hành · ${member.user_id.slice(0, 8)}`}
+                : memberName(member)}
             </Text>
             <Text style={[typography.footnote, { marginTop: 4 }]}>
               {member.role === "OWNER" ? "Người tổ chức" : "Thành viên"} · Tham
               gia {dateLabel(member.joined_at)}
               {member.left_at ? ` · Đã rời ${dateLabel(member.left_at)}` : ""}
             </Text>
-            {canManage && member.role === "MEMBER" && !member.left_at && <Button label={`Xóa ${member.user_id.slice(0, 8)}`} variant="destructive" compact style={{ alignSelf: "flex-start", marginTop: 8 }} onPress={() => router.push({ pathname: "/trip/[id]/membership-action", params: { id, memberId: member.id } })} />}
+            {canManage && member.role === "MEMBER" && !member.left_at && <Button label="Xóa khỏi nhóm" accessibilityLabel={`Xóa ${member.user_id.slice(0, 8)}`} variant="destructive" compact style={{ alignSelf: "flex-start", marginTop: 8 }} onPress={() => router.push({ pathname: "/trip/[id]/membership-action", params: { id, memberId: member.id } })} />}
           </View>
           {member.role === "OWNER" && (
             <Text style={[typography.footnote, { color: colors.teal }]}>

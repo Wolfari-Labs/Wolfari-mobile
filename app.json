@@ -31,7 +31,9 @@
       [
         "expo-router",
         {
-          "asyncRoutes": { "web": false }
+          "asyncRoutes": {
+            "web": false
+          }
         }
       ],
       [
@@ -65,7 +67,14 @@
           "barcodeScannerEnabled": true
         }
       ],
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/wolfari-adaptive-foreground.png",
+          "color": "#0E8C8C"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

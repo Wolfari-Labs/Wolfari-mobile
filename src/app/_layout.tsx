@@ -3,6 +3,7 @@ import { Stack } from "expo-router";
 import { useFonts } from "expo-font";
 
 import { SessionProvider } from "@/features/auth/session/session-provider";
+import { PushRegistration } from "@/features/notifications/push-registration";
 import { useAccessibilityPreferences } from "@/shared/hooks/use-accessibility-preferences";
 import { colors } from "@/shared/theme/tokens";
 import { AppLaunch } from "@/shared/ui/launch/app-launch";
@@ -19,6 +20,7 @@ export default function RootLayout() {
   const { reduceMotion } = useAccessibilityPreferences();
   return (
     <SessionProvider>
+      <PushRegistration />
       <AppLaunch assetsReady={fontsLoaded || !!fontError}>
         <Stack
           screenOptions={{

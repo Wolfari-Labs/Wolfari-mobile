@@ -12,6 +12,7 @@ import { FormField } from "@/shared/ui/form-field";
 import { Heading, Notice, ResourceFeedback } from "@/shared/ui/journal";
 import { Screen } from "@/shared/ui/screen";
 import { Sheet } from "@/shared/ui/sheet";
+import { memberName } from "../model/member-name";
 import { collectPages } from "../api/pagination";
 import { useTrip } from "../hooks/use-trip";
 
@@ -54,7 +55,7 @@ function MembershipWorkspace({ memberId }: { memberId?: string }) {
       <ResourceFeedback {...resource} hasData={!!data} onRetry={() => { void resource.reload(); }} />
       {!!memberId && <ResourceFeedback {...members} hasData={!!members.data} onRetry={() => { void members.reload(); }} />}
       {data && <>
-        {target && <Text selectable style={typography.body}>Tài khoản thành viên: {target.user_id}</Text>}
+        {target && <Text style={typography.headline}>Thành viên: {memberName(target)}</Text>}
         <Notice>Máy chủ kiểm tra nghĩa vụ tài chính trước khi cho rời/xóa. Giao dịch đang chờ, hoàn tiền chưa xử lý, phiên đóng quỹ hoặc người đang giữ quỹ chưa đóng có thể chặn thao tác. Chủ nhóm không được tự rời hay bị xóa qua chức năng này.</Notice>
         <Notice>Khoản đóng góp PENDING đủ điều kiện sẽ được miễn tự động khi rời nhóm; lịch sử đóng góp, chi và hoàn tiền không bị xóa. Không được xem là đã rời cho đến khi máy chủ xác nhận hoàn tất.</Notice>
         <FormField icon="edit" label="Lý do" value={reason} onChangeText={setReason} maxLength={1000} multiline editable={allowed} />
@@ -63,9 +64,8 @@ function MembershipWorkspace({ memberId }: { memberId?: string }) {
       </>}
     </>}
     {!(pending?.kind === "leave" && operationCommitted(pending)) && <Button label="Kiểm tra quỹ và nghĩa vụ" variant="soft" onPress={() => router.push({ pathname: "/trip/[id]/fund", params: { id } })} />}
-    <Notice>Nếu backend đang tắt TRIP_MEMBERSHIP_LIFECYCLE_ENABLED, cần bật trong môi trường đã được kiểm thử. Mobile không tự thay cấu hình backend.</Notice>
     <Sheet visible={confirm} title="Xác nhận thay đổi thành viên?" dismissible={!operation.busy} onClose={() => { if (!operation.busy) setConfirm(false); }}>
-      {target && <Text selectable style={typography.body}>Tài khoản: {target.user_id}</Text>}
+      {target && <Text style={typography.body}>Thành viên: {memberName(target)}</Text>}
       <Text style={typography.body}>{memberId ? "Thành viên sẽ mất quyền truy cập chuyến đi sau khi thao tác hoàn tất." : "Bạn sẽ mất quyền truy cập chuyến đi sau khi yêu cầu hoàn tất."}</Text>
       <Text style={typography.body}>Lý do: {reason.trim()}</Text>
       <Button label="Xác nhận thực hiện" variant="destructive" loading={operation.busy} disabled={!allowed || !validReason} onPress={() => { void submit(); }} />

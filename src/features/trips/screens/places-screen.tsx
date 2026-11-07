@@ -25,7 +25,7 @@ import { TripNavigation } from "../components/trip-navigation";
 import { useTrip } from "../hooks/use-trip";
 import type { TravelMeta, TravelPlace } from "../types";
 import { emptyPlaceDraft, isPlaceDraft, validCoordinates, type LocalPlace } from "../model/place-draft";
-import { dateKey, tripDays } from "../utils";
+import { activityDay, tripDays } from "../utils";
 
 const travelWarnings: Record<string, string> = {
   OPENING_HOURS_NOT_AVAILABLE:
@@ -93,14 +93,14 @@ export default function PlacesScreen() {
           attribution: [],
         })), ...local.places]
       : (result?.data ?? []).map((p) => ({ id: "search:" + p.id, name: p.name, address: p.address, ...p.coordinates, source: (result?.meta.is_mock ? "Dữ liệu mô phỏng · " : "") + (result?.meta.provider ?? "") + " · " + (result?.meta.fetched_at ?? "") + (result?.meta.stale ? " · Có thể đã cũ" : ""), attribution: result?.meta.attribution ?? [] }));
-  const scheduled = (placeId: string) => (data?.plan.activities ?? []).filter(a => a.selected_location_id === placeId && !!a.starts_at);
+  const scheduled = (placeId: string) => (data?.plan.activities ?? []).filter(a => a.selected_location_id === placeId && !!(a.starts_at || a.scheduled_date));
   const places = allPlaces.filter(place => {
     const activities = scheduled(place.id);
     if (local.hidden.includes(place.id) && !activities.length) return false;
     if (placeFilter === "picked" && !local.selected.includes(place.id)) return false;
     if (placeFilter === "scheduled" && !activities.length) return false;
     if (placeFilter === "unscheduled" && activities.length) return false;
-    return dayFilter === "all" || activities.some(a => dateKey(a.starts_at!, data!.trip.timezone) === dayFilter);
+    return dayFilter === "all" || activities.some(a => activityDay(a, data!.trip.timezone) === dayFilter);
   });
   const points: MapPoint[] = places.flatMap(p => validCoordinates(p.latitude, p.longitude) ? [{ id: p.id, name: p.name, latitude: p.latitude!, longitude: p.longitude! }] : []);
   async function togglePlace(place: LocalPlace) {

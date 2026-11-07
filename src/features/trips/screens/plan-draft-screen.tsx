@@ -7,7 +7,7 @@ import { Screen } from "@/shared/ui/screen";
 import { DraftCollection } from "../components/draft-collection";
 import { useTrip } from "../hooks/use-trip";
 import { isPlaceDraft } from "../model/place-draft";
-import { dateKey, timeLabel, tripDays } from "../utils";
+import { activityDay, timeLabel, tripDays } from "../utils";
 
 export default function PlanDraftScreen() {
   const resource = useTrip(), { data, id } = resource;
@@ -30,7 +30,7 @@ export default function PlanDraftScreen() {
       <DraftCollection key={id} scope={id} feature="plan" title="hoạt động nháp"
         editable={data.plan.permissions.can_edit}
         base={JSON.stringify([data.plan.plan_version, data.trip.start_at, data.trip.end_at, data.trip.timezone])}
-        seed={data.plan.activities.map(a => ({ id: a.id, name: a.title, day: a.starts_at ? dateKey(a.starts_at, data.trip.timezone) : "", time: a.starts_at ? timeLabel(a.starts_at, data.trip.timezone) : "", note: a.description ?? "", location: a.selected_location_id ?? "" }))}
+        seed={data.plan.activities.map(a => ({ id: a.id, name: a.title, day: activityDay(a, data.trip.timezone) ?? "", time: a.starts_at ? timeLabel(a.starts_at, data.trip.timezone) : "", note: a.description ?? "", location: a.selected_location_id ?? "" }))}
         initial={{ name: "", day: day !== "all" ? day : "", time: "", note: "", location: "" }}
         fields={[
           { key: "name", label: "Tên hoạt động nháp", suggestions: selectedLocations.map(p => p.name).slice(0, 10) },

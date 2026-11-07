@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
+import { useSession } from "@/features/auth/session/session-provider";
+import { useResource } from "@/shared/hooks/use-resource";
 import { Text, View } from "react-native";
 import { typography } from "@/shared/theme/tokens";
 import { Heading, Progress, ResourceFeedback, Segments, ui } from "@/shared/ui/journal";
@@ -9,16 +11,27 @@ import { PackingCompletion } from "../components/packing-completion";
 import { DraftCollection } from "../components/draft-collection";
 import { packingError } from "../model/local-parity";
 import { dateKey } from "../utils";
+import { collectPages } from "../api/pagination";
+import { memberName } from "../model/member-name";
 
 export default function PackingScreen() {
-  const resource = useTrip(), { data, id } = resource;
+  const resource = useTrip(), { data, id, api } = resource;
+  const { profile } = useSession();
+  const members = useResource(useCallback((signal: AbortSignal) => collectPages(cursor => api.trips.members(id, cursor, signal), signal), [api, id]));
+  // assigned_member_id is a membership id, not a user id.
+  const nameOf = (membershipId: string) => {
+    if (membershipId === data?.trip.current_membership.id) return "Tôi chuẩn bị";
+    const member = members.data?.find(m => m.id === membershipId);
+    return member ? memberName(member) : "Thành viên đã rời nhóm";
+  };
+  const assignees = (members.data ?? []).filter(m => !m.left_at && m.id !== data?.trip.current_membership.id && m.user_id !== profile?.id);
   const [filter, setFilter] = useState<"all" | "mine" | "todo">("all");
   const [category, setCategory] = useState("all");
   const [celebrate, setCelebrate] = useState(false);
   const [completedCount, setCompletedCount] = useState(0);
   const categories = ["Quần áo", "Vệ sinh", "Giấy tờ", "Điện tử", "Y tế", "Khác"];
   return <Screen title="Hành lý" tab="trips" onRefresh={() => { void resource.reload(); }} refreshing={resource.loading && !!data}>
-    <Heading title="Sẵn sàng lên đường" subtitle="Chuẩn bị hành lý từ danh sách chung hoặc bản nháp riêng." />
+    <Heading title="Sẵn sàng lên đường" subtitle="Danh sách chung lấy từ kế hoạch chuyến đi. Thay đổi của bạn được lưu thành bản nháp riêng trên máy." />
     <ResourceFeedback {...resource} hasData={!!data} onRetry={() => { void resource.reload(); }} />
     {data && <>
       <Segments items={[{ value: "all", label: "Tất cả" }, { value: "mine", label: "Của tôi" }, { value: "todo", label: "Chưa xong" }]} value={filter} onChange={setFilter} />
@@ -32,7 +45,7 @@ export default function PackingScreen() {
           { key: "name", label: "Tên vật dụng", suggestions: ["Áo khoác", "Kem chống nắng", "Sạc dự phòng"] },
           { key: "category", label: "Danh mục", suggestions: categories },
           { key: "quantity", label: "Số lượng", numeric: true }, { key: "unit", label: "Đơn vị" },
-          { key: "assignee", label: "Phân công", options: [{ value: "", label: "Chưa phân công" }, { value: data.trip.current_membership.id, label: "Tôi chuẩn bị" }, ...[...new Set(data.plan.packing_items.map(p => p.assigned_member_id).filter((v): v is string => !!v && v !== data.trip.current_membership.id))].map(value => ({ value, label: "Thành viên " + value.slice(-6) }))] },
+          { key: "assignee", label: "Phân công", options: [{ value: "", label: "Chưa phân công" }, { value: data.trip.current_membership.id, label: "Tôi chuẩn bị" }, ...assignees.map(m => ({ value: m.id, label: memberName(m) }))] },
           { key: "due", label: "Hạn chuẩn bị", placeholder: "YYYY-MM-DD (không bắt buộc)" },
           { key: "reminder", label: "Lời nhắc (chỉ ghi chú, không gửi thông báo)" },
           { key: "note", label: "Ghi chú", multiline: true },
@@ -49,7 +62,7 @@ export default function PackingScreen() {
           </View>;
         }}
         render={row => <><Text style={typography.headline}>{row.name}</Text><Text style={typography.footnote}>{row.quantity} {row.unit} · {row.status === "COMPLETED" ? "Đã chuẩn bị" : "Chưa chuẩn bị"}</Text>
-          <Text style={typography.footnote}>{row.assignee === data.trip.current_membership.id ? "Tôi chuẩn bị" : row.assignee ? "Thành viên " + row.assignee.slice(-6) : "Chưa phân công"}</Text>
+          <Text style={typography.footnote}>{row.assignee ? nameOf(row.assignee) : "Chưa phân công"}</Text>
           {!!row.due && <Text style={typography.footnote}>Hạn: {row.due}</Text>}{!!row.reminder && <Text style={typography.footnote}>Nhắc: {row.reminder}</Text>}{!!row.note && <Text style={typography.body}>{row.note}</Text>}
         </>} />
       <PackingCompletion visible={celebrate} count={completedCount} onClose={() => setCelebrate(false)} />
