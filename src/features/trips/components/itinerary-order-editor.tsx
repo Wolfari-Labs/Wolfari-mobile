@@ -9,7 +9,7 @@ import { Feedback } from "@/shared/ui/feedback";
 import { ResourceFeedback } from "@/shared/ui/journal";
 import { Sheet } from "@/shared/ui/sheet";
 import { createOrderSession } from "../order-session";
-import { dateKey } from "../utils";
+import { activityDay } from "../utils";
 import { ActivityOrderList } from "./activity-order-list";
 
 export function ItineraryOrderEditor({
@@ -66,8 +66,8 @@ export function ItineraryOrderEditor({
     if (!activity) return [];
     return (
       day === "unscheduled"
-        ? !activity.starts_at
-        : !!activity.starts_at && dateKey(activity.starts_at, timezone) === day
+        ? !activityDay(activity, timezone)
+        : activityDay(activity, timezone) === day
     )
       ? [activity]
       : [];

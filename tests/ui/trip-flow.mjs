@@ -382,6 +382,21 @@ try {
     .getByLabel("Lời nhắn cho nhóm", { exact: true })
     .fill("Cùng nhau khám phá Đà Nẵng");
   await screenshot("m07-create-details.png");
+  // Invalid step-2 draft fields must not trap the user on step 1 after going back.
+  await page.getByLabel("Số người dự kiến", { exact: true }).fill("0");
+  await page.getByRole("tab", { name: "1  Thông tin", exact: true }).click();
+  await page.getByLabel("Tên chuyến đi", { exact: true }).waitFor();
+  await click("Tiếp tục");
+  await page.getByLabel("Số người dự kiến", { exact: true }).waitFor();
+  await click("Tạo chuyến đi");
+  await page
+    .getByText("Số người dự kiến phải là số nguyên từ 1 trở lên.", { exact: true })
+    .waitFor();
+  assert.equal(
+    requests.filter((r) => r.pathname === "/trips" && r.method === "POST").length,
+    0,
+  );
+  await page.getByLabel("Số người dự kiến", { exact: true }).fill("2");
   await click("Tạo chuyến đi");
   await page.getByRole("tab", { name: "Tổng quan", exact: true }).waitFor();
   await screenshot("m08-overview.png");
@@ -444,6 +459,25 @@ try {
   );
   await click("Lưu thay đổi");
   await button("Mỹ Khê lúc bình minh, 08:00, đã hoàn thành").waitFor();
+  // PLAN-03: timed → day-only sends both timestamps null with the calendar date.
+  await click("Mỹ Khê lúc bình minh, 08:00, đã hoàn thành");
+  await click("Chỉnh sửa hoạt động");
+  await page.getByRole("tab", { name: "Cả ngày", exact: true }).click();
+  await page.getByLabel("Ngày", { exact: true }).fill("13/12/2026");
+  await click("Lưu thay đổi");
+  await page
+    .getByText("Chọn một ngày nằm trong thời gian của chuyến đi.", { exact: true })
+    .waitFor();
+  await page.getByLabel("Ngày", { exact: true }).fill("12/11/2026");
+  await click("Lưu thay đổi");
+  await button("Mỹ Khê lúc bình minh, Cả ngày, đã hoàn thành").waitFor();
+  const dayOnly = requests
+    .filter((r) => /\/activities\/.+$/.test(r.pathname) && r.method === "PATCH")
+    .at(-1).body;
+  assert.equal(dayOnly.starts_at, null);
+  assert.equal(dayOnly.ends_at, null);
+  assert.equal(dayOnly.scheduled_date, "2026-11-12");
+  await screenshot("m09b-day-only.png");
   await page.getByRole("tab", { name: "Bản đồ", exact: true }).click();
   await page
     .getByLabel("Khám phá địa điểm", { exact: true })

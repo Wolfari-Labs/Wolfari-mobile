@@ -21,7 +21,8 @@ import { ItineraryOrderEditor } from "../components/itinerary-order-editor";
 import { useTrip } from "../hooks/use-trip";
 import type { Activity } from "../types";
 import {
-  dateKey,
+  activityDay,
+  calendarLabel,
   dateLabel,
   sortedActivities,
   timeLabel,
@@ -46,9 +47,8 @@ export default function ItineraryScreen() {
       ? sortedActivities(
           plan.activities.filter((a) =>
             activeDay === "unscheduled"
-              ? !a.starts_at
-              : a.starts_at &&
-                dateKey(a.starts_at, trip.timezone) === activeDay,
+              ? !activityDay(a, trip.timezone)
+              : activityDay(a, trip.timezone) === activeDay,
           ),
         )
       : [];
@@ -215,11 +215,17 @@ export default function ItineraryScreen() {
                 <Text style={typography.footnote}>
                   {selected.starts_at
                     ? dateLabel(selected.starts_at, trip.timezone)
-                    : "Chưa xếp lịch"}
+                    : selected.scheduled_date
+                      ? `${calendarLabel(selected.scheduled_date)} · Cả ngày, chưa chốt giờ`
+                      : "Chưa xếp lịch"}
                 </Text>
                 <View style={ui.card}>
                   <Text style={typography.headline}>
-                    {timeLabel(selected.starts_at, trip.timezone)}
+                    {selected.starts_at
+                      ? timeLabel(selected.starts_at, trip.timezone)
+                      : selected.scheduled_date
+                        ? "Cả ngày"
+                        : "Chưa xếp"}
                     {selected.ends_at
                       ? ` – ${timeLabel(selected.ends_at, trip.timezone)}`
                       : ""}

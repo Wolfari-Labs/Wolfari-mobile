@@ -96,6 +96,17 @@ membership lifecycle handoff. Backend source/configuration were not modified.
 - Sign out clears the local session. The Sessions screen revokes actual server
   session IDs; JWT sid is never treated as a refresh_sessions.id.
 
+### Activity schedule modes (PLAN-03)
+
+The activity form offers the backend's three stored modes: **Chưa xếp lịch**
+(`scheduled_date`, `starts_at`, `ends_at` all null), **Cả ngày** (`scheduled_date`
+= `YYYY-MM-DD` in `Trip.timezone`, both timestamps null) and **Có giờ** (timestamp
+pair; `scheduled_date` is omitted so the server clears it in the same transaction).
+A day-only date must overlap the half-open trip interval; an end at local 00:00
+does not add a calendar day. Day-only activities are grouped by their calendar
+string (never converted through UTC) in the itinerary, ordering editor, overview,
+map filters and private plan draft, and are labelled "Cả ngày".
+
 ### Collaborative itinerary ordering
 
 The editor opens a fresh plan and lets authorized editors drag within a day

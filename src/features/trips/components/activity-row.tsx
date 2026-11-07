@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { colors, radii, shadows, typography } from "@/shared/theme/tokens";
 import { DesignIcon } from "@/shared/ui/design-icon";
 import type { Activity } from "../types";
-import { timeLabel } from "../utils";
+import { activityTimeLabel } from "../utils";
 
 export function ActivityRow({
   activity,
@@ -21,7 +21,7 @@ export function ActivityRow({
     <Pressable
       cssInterop={false}
       accessibilityRole="button"
-      accessibilityLabel={`${activity.title}, ${timeLabel(activity.starts_at, timezone)}${complete ? ", đã hoàn thành" : ""}`}
+      accessibilityLabel={`${activity.title}, ${activityTimeLabel(activity, timezone)}${complete ? ", đã hoàn thành" : ""}`}
       onPress={onPress}
       onLongPress={onLongPress}
       delayLongPress={400}
@@ -29,7 +29,7 @@ export function ActivityRow({
       style={({ pressed }) => [styles.row, pressed && { opacity: 0.7 }]}
     >
       <Text style={[typography.footnote, styles.time]}>
-        {timeLabel(activity.starts_at, timezone)}
+        {activityTimeLabel(activity, timezone)}
       </Text>
       <View style={[styles.icon, complete && { backgroundColor: colors.pinGreen }]}>
         <DesignIcon
