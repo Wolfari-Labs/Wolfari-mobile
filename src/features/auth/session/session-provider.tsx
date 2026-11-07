@@ -13,6 +13,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
     storage: tokenStorage,
     login: authApi.login,
     refresh: authApi.refresh,
+    logout: authApi.logout,
     web: Platform.OS === "web",
   }));
 
@@ -28,7 +29,8 @@ export function useSession() {
   return {
     ...snapshot,
     signIn: session.signIn,
-    signOut: session.clearLocalSession,
+    signOut: session.signOut,
+    clearLocalSession: session.clearLocalSession,
     restore: session.restore,
     getAccessToken: session.getAccessToken,
     refreshAccessToken: session.refreshAccessToken,

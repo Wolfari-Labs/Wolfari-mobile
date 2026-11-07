@@ -22,8 +22,8 @@ export function validateRegistration(
     errors.full_name = "Họ và tên phải có từ 1 đến 150 ký tự.";
   }
   const passwordLength = [...password].length;
-  if (passwordLength < 15 || passwordLength > 128) {
-    errors.password = "Mật khẩu phải có từ 15 đến 128 ký tự.";
+  if (passwordLength < 8 || passwordLength > 128) {
+    errors.password = "Mật khẩu phải có từ 8 đến 128 ký tự.";
   }
   if (password !== confirmation) errors.confirm_password = "Mật khẩu xác nhận chưa khớp.";
   return errors;

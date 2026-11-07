@@ -84,8 +84,8 @@ test("a late refresh cannot restore a session after local cleanup", async () => 
 });
 
 test("signup enforces the backend Unicode password length and confirmation", () => {
-  assert.equal(validateRegistration("Demo", "demo@example.test", "short", "short").password, "Mật khẩu phải có từ 15 đến 128 ký tự.");
-  const password = "🙂".repeat(15);
+  assert.equal(validateRegistration("Demo", "demo@example.test", "short", "short").password, "Mật khẩu phải có từ 8 đến 128 ký tự.");
+  const password = "🙂".repeat(8);
   assert.deepEqual(validateRegistration(" Demo ", "demo@example.test", password, password), {});
   assert.ok(validateRegistration("Demo", "demo@example.test", password, "different").confirm_password);
 });

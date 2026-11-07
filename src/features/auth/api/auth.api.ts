@@ -1,6 +1,7 @@
 import { Platform } from "react-native";
 
 import { apiClient } from "@/shared/api/client";
+import { ApiError } from "@/shared/api/api-client";
 import type { AcceptedResponse, AuthTokens, LoginInput, Profile, RegisterInput } from "../types";
 
 export const authApi = {
@@ -40,6 +41,22 @@ export const authApi = {
 
   getProfile(accessToken: string) {
     return apiClient.request<Profile>("/me", { accessToken });
+  },
+
+  async logout(accessToken: string, sessionId: string) {
+    let csrfToken: string | undefined;
+    if (Platform.OS === "web") {
+      try {
+        csrfToken = (await apiClient.request<{ csrf_token: string }>("/auth/csrf")).csrf_token;
+      } catch (cause) {
+        // Bearer-only logout is valid when no refresh cookie remains.
+        if (!(cause instanceof ApiError) || cause.status !== 401) throw cause;
+      }
+    }
+    await apiClient.request<void>("/auth/logout", {
+      method: "POST", accessToken, body: { session_id: sessionId },
+      ...(csrfToken ? { headers: { "X-CSRF-Token": csrfToken } } : {}),
+    });
   },
 
   requestPasswordReset(email: string) {

@@ -23,7 +23,9 @@ const owner = { id: ownerId, trip_id: tripId, user_id: userId, role: "OWNER", jo
 const member = { ...owner, id: memberId, user_id: memberUserId, role: "MEMBER" };
 let trip = { id: tripId, name: "Kiểm thử chức năng backend", description: null, public_description: null, start_at: "2026-11-11T17:00:00Z", end_at: "2026-11-14T16:59:00Z", timezone: "Asia/Ho_Chi_Minh", lifecycle: "UPCOMING", archived_at: null, plan_edit_policy: "OWNER_ONLY", plan_version: 1, membership_revision: 1, export_revision: 1, current_membership: owner, permissions: { can_read: true, can_update: true } };
 const calls = [], errors = [];
-let wrongPassword = true, operation, lostReply = true, completeOperation = false, removed = false, rejectFinance = false;
+let wrongPassword = true, lostPasswordReply = false, operation, lostReply = true, completeOperation = false, removed = false, rejectFinance = false;
+let loggedOut = false, logoutOffline = true;
+const sessionId = "50000000-0000-4000-8000-000000000001";
 await context.route("**/api/v1/**", async route => {
   const request = route.request(), url = new URL(request.url()), pathname = url.pathname.replace("/api/v1", ""), method = request.method();
   const headers = { "Access-Control-Allow-Origin": appUrl, "Access-Control-Allow-Credentials": "true", "Access-Control-Allow-Headers": "Content-Type, X-Client-Type, Authorization, X-CSRF-Token, Idempotency-Key", "Access-Control-Allow-Methods": "GET, POST, PATCH, PUT, DELETE, OPTIONS" };
@@ -33,13 +35,21 @@ await context.route("**/api/v1/**", async route => {
   const multipart = request.headers()["content-type"]?.startsWith("multipart/form-data");
   const body = request.postData() && !multipart ? request.postDataJSON() : undefined;
   calls.push({ pathname, method, body, headers: request.headers() });
-  if (pathname === "/auth/csrf") return respond(200, { csrf_token: "fixture-csrf" });
-  if (pathname === "/auth/refresh" || pathname === "/auth/login") return respond(200, { access_token: "fixture-access", token_type: "Bearer", expires_in: 900, profile });
+  if (pathname === "/auth/csrf") return loggedOut ? fail(401, "UNAUTHENTICATED") : respond(200, { csrf_token: "fixture-csrf" });
+  if (pathname === "/auth/refresh" || pathname === "/auth/login") return loggedOut ? fail(401, "UNAUTHENTICATED") : respond(200, { session_id: sessionId, access_token: "fixture-access", token_type: "Bearer", expires_in: 900, profile });
+  if (pathname === "/auth/logout") {
+    assert.equal(body.session_id, sessionId);
+    assert.equal(request.headers()["x-csrf-token"], "fixture-csrf");
+    assert.equal(request.headers().authorization, "Bearer fixture-access");
+    if (logoutOffline) return route.abort("failed");
+    loggedOut = true;
+    return route.fulfill({ status: 204, headers });
+  }
   if (pathname === "/auth/password-reset-requests") return respond(202, { message_code: "REQUEST_ACCEPTED" });
-  if (pathname === "/auth/password-resets") return respond(200, { message_code: "REQUEST_ACCEPTED" });
+  if (pathname === "/auth/password-resets") return lostPasswordReply ? route.abort("failed") : respond(200, { message_code: "REQUEST_ACCEPTED" });
   if (pathname === "/auth/email-verifications") return respond(202, { message_code: "REQUEST_ACCEPTED" });
   if (pathname === "/auth/email-verifications/confirm") { profile = { ...profile, email_verified_at: "2026-10-18T00:00:00Z", version: profile.version + 1 }; return respond(200, { message_code: "REQUEST_ACCEPTED" }); }
-  if (pathname === "/me/password-change") return wrongPassword ? fail(401, "UNAUTHENTICATED") : respond(200, { message_code: "REQUEST_ACCEPTED" });
+  if (pathname === "/me/password-change") return wrongPassword ? fail(401, "UNAUTHENTICATED") : lostPasswordReply ? route.abort("failed") : respond(200, { message_code: "REQUEST_ACCEPTED" });
   if (pathname === "/me/avatar") {
     assert.equal(request.headers().authorization, "Bearer fixture-access");
     if (method === "GET") return route.fulfill({ status: 200, headers, contentType: "image/png", body: png });
@@ -64,7 +74,7 @@ await context.route("**/api/v1/**", async route => {
     return respond(200, { policy: body.policy, editor_member_ids: body.editor_member_ids, membership_revision: trip.membership_revision });
   }
   if (pathname.endsWith("/invitations")) {
-    if (method === "GET") return respond(200, { items: [], next_cursor: null });
+    if (method === "GET") return respond(200, { items: trip.lifecycle === "ARCHIVED" ? [{ id: "pending-email", trip_id: tripId, invitation_type: "EMAIL", email: "invitee@example.test", status: "PENDING", version: 1, expires_at: "2099-11-01T00:00:00Z", resolved_at: null }] : [], next_cursor: null });
     assert.equal(body.invitation_type, "LINK");
     assert.equal(body.email, undefined);
     return respond(201, { invitation: { id: "invitation", trip_id: tripId, invitation_type: "LINK", email: null, status: "PENDING", version: 1, expires_at: "2026-11-01T00:00:00Z", resolved_at: null }, one_time_link: `https://gateway.test/invitations/local#token=inv1_${"x".repeat(43)}` });
@@ -88,6 +98,7 @@ await context.route("**/api/v1/**", async route => {
 const page = await context.newPage();
 page.setDefaultTimeout(30_000); page.setDefaultNavigationTimeout(120_000);
 page.on("pageerror", error => errors.push(error.message));
+page.on("console", message => { if (message.type() === "error" && /navigation.*initialized|Maximum update depth/.test(message.text())) errors.push(message.text()); });
 const button = name => page.getByRole("button", { name, exact: true });
 const field = name => page.getByLabel(name, { exact: true });
 const goto = async route => {
@@ -108,26 +119,41 @@ try {
   await button("Gửi email khôi phục").click();
   await page.getByText(/Nếu email thuộc tài khoản hợp lệ/).waitFor();
   assert.equal(calls.find(call => call.pathname === "/auth/password-reset-requests").body.email, "demo@example.test");
+  assert.equal(await button("Gửi email khôi phục").isDisabled(), true);
+  await field("Email").fill("corrected@example.test");
+  await button("Gửi email khôi phục").click();
+  await page.getByText(/Nếu email thuộc tài khoản hợp lệ/).waitFor();
+  assert.equal(calls.filter(call => call.pathname === "/auth/password-reset-requests").length, 2);
+  assert.equal(calls.filter(call => call.pathname === "/auth/password-reset-requests").at(-1).body.email, "corrected@example.test");
   await button("Tôi đã có mã khôi phục").click();
+  await goto(`/reset-password?token=${"a".repeat(43)}`);
+  await page.waitForFunction(() => !new URL(location.href).searchParams.get("token"));
+  assert.equal(await field("Mã hoặc liên kết đặt lại mật khẩu").inputValue(), "a".repeat(43));
+  assert.equal(calls.filter(call => call.pathname === "/auth/password-resets").length, 0, "Opening a link never consumes it.");
   await field("Mã hoặc liên kết đặt lại mật khẩu").fill(`https://gateway.test/api/v1/auth/local/reset?token=${"a".repeat(43)}`);
-  await field("Mật khẩu mới").fill("a new long test password");
+  await field("Mật khẩu mới").fill("Reset123");
   await field("Nhập lại mật khẩu mới").fill("different password");
   await button("Lưu mật khẩu mới").click();
   await page.getByText("Mật khẩu xác nhận chưa khớp.").waitFor();
   assert.equal(calls.filter(call => call.pathname === "/auth/password-resets").length, 0);
-  await field("Nhập lại mật khẩu mới").fill("a new long test password");
+  await field("Nhập lại mật khẩu mới").fill("Reset123");
   await screenshot("reset-password.png");
   await button("Lưu mật khẩu mới").click();
   await page.waitForURL("**/sign-in?notice=password-updated");
-  await goto("/verify-email");
+  await goto(`/verify-email?token=${"b".repeat(43)}`);
+  await page.waitForFunction(() => !new URL(location.href).searchParams.get("token"));
+  assert.equal(await field("Mã hoặc liên kết xác minh").inputValue(), "b".repeat(43));
+  assert.equal(calls.filter(call => call.pathname === "/auth/email-verifications/confirm").length, 0);
   await button("Gửi lại email xác minh").click();
   await field("Mã hoặc liên kết xác minh").fill("b".repeat(43));
   await button("Xác nhận email").click();
   await page.getByText("Email của tài khoản đã được xác minh.").waitFor();
+  await button("Về tài khoản").click();
+  await page.waitForURL("**/profile");
   await goto("/change-password");
   await field("Mật khẩu hiện tại").fill("wrong old password");
-  await field("Mật khẩu mới").fill("another long new password");
-  await field("Nhập lại mật khẩu mới").fill("another long new password");
+  await field("Mật khẩu mới").fill("Change12");
+  await field("Nhập lại mật khẩu mới").fill("Change12");
   const refreshes = calls.filter(call => call.pathname === "/auth/refresh").length;
   await button("Lưu mật khẩu mới").click();
   await page.getByText("Mật khẩu hiện tại chưa đúng hoặc phiên đăng nhập đã hết hạn.").waitFor();
@@ -135,6 +161,24 @@ try {
   wrongPassword = false;
   await button("Lưu mật khẩu mới").click();
   await page.waitForURL("**/sign-in?notice=password-updated");
+  for (const mode of ["change", "reset"]) {
+    await goto(`/${mode}-password`);
+    if (mode === "change") await field("Mật khẩu hiện tại").fill("Change12");
+    else await field("Mã hoặc liên kết đặt lại mật khẩu").fill("a".repeat(43));
+    await field("Mật khẩu mới").fill("Next1234");
+    await field("Nhập lại mật khẩu mới").fill("Next1234");
+    const endpoint = mode === "change" ? "/me/password-change" : "/auth/password-resets";
+    const previousWrites = calls.filter(call => call.pathname === endpoint).length;
+    lostPasswordReply = true;
+    await button("Lưu mật khẩu mới").click();
+    await page.getByText(/Chưa xác định được mật khẩu đã đổi hay chưa/).waitFor();
+    assert.equal(await button("Lưu mật khẩu mới").isDisabled(), true);
+    assert.equal(await field("Mật khẩu mới").inputValue(), "");
+    assert.equal(calls.filter(call => call.pathname === endpoint).length, previousWrites + 1);
+    await button("Đến trang đăng nhập").click();
+    await page.waitForURL("**/sign-in");
+    lostPasswordReply = false;
+  }
   await goto("/edit-profile");
   const chooser = page.waitForEvent("filechooser");
   await button("Chọn ảnh đại diện").click();
@@ -203,9 +247,34 @@ try {
   await button("Xác nhận thực hiện").click();
   await page.getByText("Chưa thể rời hoặc xóa thành viên vì còn nghĩa vụ tài chính cần giải quyết.").waitFor();
   assert.equal(await button("Hoàn tất").count(), 0);
+  trip = { ...trip, lifecycle: "ARCHIVED", archived_at: "2026-11-05T00:00:00Z", current_membership: owner };
+  const writesBeforeArchive = calls.filter(call => ["POST", "PATCH", "PUT", "DELETE"].includes(call.method) && call.pathname.startsWith("/trips/")).length;
+  await goto(`/trip/${tripId}/settings`);
+  await page.getByText("Chuyến đi đã lưu trữ. Quyền của nhóm chỉ có thể xem.").waitFor();
+  assert.equal(await button("Lưu quyền của nhóm").count(), 0);
+  assert.equal(await button("Rời chuyến đi").count(), 0);
+  await goto(`/trip/${tripId}/invite`);
+  await page.getByText("Chuyến đi đã lưu trữ", { exact: true }).waitFor();
+  assert.equal(await button("Gửi lời mời").count(), 0);
+  assert.equal(await button("Tạo liên kết mời").count(), 0);
+  await goto(`/trip/${tripId}/members`);
+  await page.getByText("invitee@example.test", { exact: true }).waitFor();
+  for (const name of ["Mời thành viên", "Gửi lại", "Thu hồi", `Xóa ${memberUserId.slice(0, 8)}`]) assert.equal(await button(name).count(), 0);
+  assert.equal(calls.filter(call => ["POST", "PATCH", "PUT", "DELETE"].includes(call.method) && call.pathname.startsWith("/trips/")).length, writesBeforeArchive);
+  await goto("/profile");
+  await button("Đăng xuất").click();
+  await button("Đăng xuất tài khoản").click();
+  await page.getByText(/Chưa xác nhận được đăng xuất/).waitFor();
+  assert.equal(loggedOut, false);
+  logoutOffline = false;
+  await button("Đăng xuất tài khoản").click();
+  await page.waitForURL(`${appUrl}/`);
+  await page.reload({ waitUntil: "networkidle" });
+  await button("Bắt đầu hành trình").waitFor();
+  assert.equal(calls.filter(call => call.pathname === "/auth/logout").length, 2);
   assert.deepEqual(errors, []);
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
-  console.log("Backend feature UI fixtures passed: recovery, verification, password change, avatar, LINK invitations, selected editors, member history, lost replies, async completion and finance block.");
+  console.log("Backend feature UI fixtures passed: recovery, verification, password change, avatar, LINK invitations, selected editors, member history, lost replies, async completion, finance block and archived Trip read-only controls.");
 } catch (error) {
   await page.screenshot({ path: path.join(shots, "failure.png") });
   console.error("Page:", page.url(), "Errors:", errors, "Recent requests:", calls.slice(-8).map(({ pathname, method }) => ({ pathname, method })));

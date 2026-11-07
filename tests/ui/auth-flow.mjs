@@ -21,6 +21,11 @@ assert.ok(executablePath, "Set WOLFARI_BROWSER_PATH to an installed Chromium bro
 const browser = await chromium.launch({ executablePath, headless: true });
 const requests = [];
 const pageErrors = [];
+let authenticated = false;
+const fixtureSession = { session_id: "10000000-0000-4000-8000-000000000001", access_token: "fixture-access", token_type: "Bearer", expires_in: 900, profile: {
+  id: "fixture-user", email: "demo@example.test", full_name: "Minh Anh", avatar: null,
+  system_role: "USER", status: "ACTIVE", email_verified_at: null, version: 1,
+} };
 const context = await browser.newContext({ viewport: { width: 402, height: 874 } });
 
 // Contract fixture only: these tests never create accounts or send email on a real backend.
@@ -33,12 +38,15 @@ await context.route("**/api/v1/**", async (route) => {
   requests.push({ pathname, method: request.method(), body, headers: request.headers() });
   const respond = (status, data) => route.fulfill({ status, contentType: "application/json", headers: cors, body: JSON.stringify(data) });
   const error = (status, code) => respond(status, { error: { code, message: "Không thể hoàn tất yêu cầu", details: null, retryable: status === 503 }, meta: { correlation_id: "fixture-correlation" } });
-  if (pathname.endsWith("/auth/csrf")) return error(401, "UNAUTHENTICATED");
+  if (pathname.endsWith("/auth/csrf")) return authenticated ? respond(200, { data: { csrf_token: "fixture-csrf" } }) : error(401, "UNAUTHENTICATED");
+  if (pathname.endsWith("/auth/refresh")) return authenticated ? respond(200, { data: fixtureSession }) : error(401, "UNAUTHENTICATED");
+  if (pathname.endsWith("/auth/email-verifications/confirm")) return respond(200, { data: { message_code: "REQUEST_ACCEPTED" } });
   if (pathname.endsWith("/trips")) return respond(200, { data: { items: [], next_cursor: null }, meta: {} });
   if (pathname.endsWith("/auth/register")) return respond(202, { data: { message_code: "REQUEST_ACCEPTED" }, meta: {} });
   if (pathname.endsWith("/auth/login")) {
     if (body.email === "unavailable@example.test") return error(503, "SERVICE_UNAVAILABLE");
-    if (body.password !== "a long test password") return error(401, "UNAUTHENTICATED");
+    if (body.password !== "Wolfari1") return error(401, "UNAUTHENTICATED");
+    authenticated = true;
     return respond(200, {
       data: { access_token: "fixture-access", token_type: "Bearer", expires_in: 900, profile: {
         id: "fixture-user", email: body.email, full_name: "Minh Anh", avatar: null,
@@ -89,9 +97,9 @@ try {
   await page.getByLabel("Mật khẩu", { exact: true }).fill("short");
   await page.getByLabel("Nhập lại mật khẩu", { exact: true }).fill("short");
   await page.getByRole("button", { name: "Tạo tài khoản", exact: true }).click();
-  await page.getByText("Mật khẩu phải có từ 15 đến 128 ký tự.", { exact: true }).waitFor();
-  await page.getByLabel("Mật khẩu", { exact: true }).fill("a long test password");
-  await page.getByLabel("Nhập lại mật khẩu", { exact: true }).fill("a long test password");
+  await page.getByText("Mật khẩu phải có từ 8 đến 128 ký tự.", { exact: true }).waitFor();
+  await page.getByLabel("Mật khẩu", { exact: true }).fill("Wolfari1");
+  await page.getByLabel("Nhập lại mật khẩu", { exact: true }).fill("Wolfari1");
   const registrationPassword = page.getByLabel("Mật khẩu", { exact: true });
   const confirmationPassword = page.getByLabel("Nhập lại mật khẩu", { exact: true });
   assert.equal(await registrationPassword.getAttribute("type"), "password");
@@ -104,7 +112,7 @@ try {
   await page.getByRole("button", { name: "Hiện nhập lại mật khẩu", exact: true }).click();
   assert.equal(await confirmationPassword.evaluate(input => input.type), "text");
   await page.getByRole("button", { name: "Ẩn nhập lại mật khẩu", exact: true }).click();
-  assert.equal(await confirmationPassword.inputValue(), "a long test password");
+  assert.equal(await confirmationPassword.inputValue(), "Wolfari1");
   await page.getByRole("checkbox").click();
   await page.getByRole("button", { name: "Tạo tài khoản", exact: true }).click();
   await page.getByText("Vui lòng đồng ý với điều khoản trước khi tạo tài khoản.", { exact: true }).waitFor();
@@ -117,6 +125,14 @@ try {
   assert.equal(registration.body.email, "demo@example.test");
   assert.equal(registration.body.full_name, "Minh Anh");
   assert.equal(requests.filter((request) => request.pathname.endsWith("/auth/login")).length, 0, "Registration does not automatically log in.");
+  assert.equal(await page.getByRole("button", { name: "Đóng", exact: true }).count(), 0);
+  await page.getByRole("button", { name: "Xác minh email", exact: true }).click();
+  await page.waitForURL("**/verify-email");
+  assert.equal(await page.getByRole("heading", { name: "Kiểm tra email của bạn" }).count(), 0, "Registration must not remain above verification.");
+  await page.getByLabel("Mã hoặc liên kết xác minh", { exact: true }).fill("a".repeat(43));
+  await page.getByRole("button", { name: "Xác nhận email", exact: true }).click();
+  await page.getByText("Liên kết xác minh đã được xác nhận.", { exact: true }).waitFor();
+  assert.equal(requests.filter(request => request.pathname.endsWith("/auth/login")).length, 0);
   await page.getByRole("button", { name: "Đăng nhập", exact: true }).click();
   await page.waitForURL("**/sign-in");
 
@@ -139,14 +155,21 @@ try {
   await page.getByRole("button", { name: "Đăng nhập", exact: true }).click();
   await page.getByText("Hệ thống đang bận. Vui lòng thử lại sau ít phút.", { exact: true }).waitFor();
   await page.getByLabel("Email", { exact: true }).fill(" DEMO@EXAMPLE.TEST ");
-  await page.getByLabel("Mật khẩu", { exact: true }).fill("a long test password");
+  await page.getByLabel("Mật khẩu", { exact: true }).fill("Wolfari1");
   await page.getByRole("button", { name: "Đăng nhập", exact: true }).click();
   await page.getByRole("heading", { name: "Đi đâu tiếp nhỉ?" }).waitFor();
   const login = requests.findLast(request => request.pathname.endsWith("/auth/login"));
   assert.equal(login.body.email, "demo@example.test");
   assert.equal(login.headers["x-client-type"], "web");
 
+  for (const route of ["/sign-in", "/sign-up"]) {
+    await page.goto(`${appUrl}${route}`, { waitUntil: "networkidle" });
+    await page.getByRole("heading", { name: "Đi đâu tiếp nhỉ?" }).waitFor();
+    assert.equal(await page.getByRole("button", { name: "Về trang khám phá", exact: true }).count(), 0);
+  }
+
   // Small phone: keyboard fields and actions remain scrollable with no horizontal clipping.
+  authenticated = false;
   await page.setViewportSize({ width: 360, height: 740 });
   await page.goto(`${appUrl}/sign-up?preview=1`, { waitUntil: "networkidle" });
   await noHorizontalOverflow();
