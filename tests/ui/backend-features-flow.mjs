@@ -153,7 +153,10 @@ try {
   await goto(`/trip/${tripId}/invite`);
   await page.getByRole("tab", { name: "Bằng liên kết", exact: true }).click();
   await button("Tạo liên kết mời").click();
-  await page.getByText(/https:\/\/gateway.test\/invitations\/local/).waitFor();
+  // The one-time link is shown as its pasteable code; the full secret URL is not rendered.
+  await page.getByText(`inv1_${"x".repeat(43)}`, { exact: true }).waitFor();
+  await page.getByRole("button", { name: "Sao chép mã", exact: true }).waitFor();
+  assert.equal(await page.getByText("gateway.test/invitations", { exact: false }).count(), 0);
   await goto(`/trip/${tripId}/settings`);
   await page.getByRole("tab", { name: "Chọn thành viên", exact: true }).click();
   await page.getByRole("checkbox").click();
