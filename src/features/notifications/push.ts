@@ -1,6 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants, { ExecutionEnvironment } from "expo-constants";
 import * as Notifications from "expo-notifications";
+import { AndroidImportance } from "expo-notifications";
 import { router } from "expo-router";
 import { Platform } from "react-native";
 
@@ -42,7 +43,7 @@ export async function registerPushDevice(api: NotificationsApi, userId: string, 
   try {
     if (Platform.OS === "android") {
       // Android 13+ shows the permission prompt only after a channel exists.
-      await Notifications.setNotificationChannelAsync("default", { name: "Wolfari", importance: Notifications.AndroidImportance.HIGH });
+      await Notifications.setNotificationChannelAsync("default", { name: "Wolfari", importance: AndroidImportance.HIGH });
     }
     let permission = await Notifications.getPermissionsAsync();
     if (!permission.granted && prompt && permission.canAskAgain) permission = await Notifications.requestPermissionsAsync();

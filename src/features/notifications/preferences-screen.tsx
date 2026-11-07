@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { Switch, Text, View } from "react-native";
 
 import { useApi } from "@/shared/api/use-api";
@@ -30,11 +30,16 @@ export default function NotificationPreferencesScreen() {
   const { profile } = useSession();
   const [push, setPush] = useState<PushStatus>();
   const resource = useResource(useCallback((signal: AbortSignal) => api.notifications.preferences(signal), [api]));
-  const [draft, setDraft] = useState<NotificationPreferences>();
+  // Local edits belong to the server snapshot they started from; a fresh load replaces them.
+  const [edit, setEdit] = useState<{ base: NotificationPreferences | undefined; value: NotificationPreferences }>();
+  const draft = edit && edit.base === resource.data ? edit.value : resource.data;
+  const setDraft = (update: (old: NotificationPreferences | undefined) => NotificationPreferences | undefined) => {
+    const value = update(draft);
+    setEdit(value ? { base: resource.data, value } : undefined);
+  };
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string>();
-  useEffect(() => { if (resource.data) setDraft(resource.data); }, [resource.data]);
   const change = (patch: Partial<NotificationPreferences>) => { setDraft(old => old && { ...old, ...patch }); setSaved(false); };
   const groupOn = (group: NotificationGroup, channel: keyof GroupOverride) => draft?.group_overrides[group]?.[channel] ?? true;
   // Store only "off" overrides; an empty group object is rejected by the backend.
@@ -55,7 +60,7 @@ export default function NotificationPreferencesScreen() {
   async function save() {
     if (!draft || busy) return;
     setBusy(true); setError(undefined);
-    try { const next = await api.notifications.updatePreferences(draft); setDraft(next); setSaved(true); }
+    try { const next = await api.notifications.updatePreferences(draft); setDraft(() => next); setSaved(true); }
     catch (cause) { setError(errorMessage(cause)); await resource.reload(); }
     finally { setBusy(false); }
   }
