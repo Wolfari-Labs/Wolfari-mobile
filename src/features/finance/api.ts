@@ -134,6 +134,8 @@ export const financeCommands = {
   confirmDestination: (fund: Fund, row: Destination) => command("Xác nhận tài khoản nhận", `/funds/${id(fund.id)}/destinations/${id(row.id)}/confirm`, versions(fund, row)),
   contributionRequest: (fund: Fund, input: { title: string; contributions: { member_user_id: string; destination_id: string; amount: string }[]; due_at?: string; note?: string }) =>
     command("Tạo yêu cầu đóng góp", `/funds/${id(fund.id)}/contribution-requests`, { ...input, ...versions(fund) }),
+  updateContributionRequest: (fund: Fund, row: Versioned, input: { title?: string; note?: string; due_at?: string }) =>
+    command("Sửa đợt đóng góp", `/funds/${id(fund.id)}/contribution-requests/${id(row.id)}`, { ...input, ...versions(fund, row) }, "PATCH"),
   contribution: (fund: Fund, row: Versioned, action: "amount" | "report-transfer" | "confirm-received" | "reject-transfer" | "waive" | "cancel" | "reverse", input: { amount?: string; reason?: string; evidence_object_key?: string } = {}) =>
     command("Cập nhật đóng góp", `/contributions/${id(row.id)}${action === "amount" ? "" : `/${action}`}`, { ...input, ...versions(fund, row) }, action === "amount" ? "PATCH" : "POST"),
   expense: (fund: Fund, input: ExpenseInput, row?: Versioned) => command(row ? "Sửa khoản chi" : "Tạo khoản chi", row ? `/expenses/${id(row.id)}` : `/funds/${id(fund.id)}/expenses`, { ...input, ...versions(fund, row) }, row ? "PATCH" : "POST"),

@@ -12,6 +12,8 @@ import { FormField } from "@/shared/ui/form-field";
 import { DateTimeField } from "@/shared/ui/date-time-field";
 import { Notice, ui } from "@/shared/ui/journal";
 import { Sheet } from "@/shared/ui/sheet";
+import type { PaymentQr } from "@/features/payments/model/payment-qr";
+import { QrFill } from "./qr-fill";
 
 export type FormValues = Record<string, string>;
 export type FinanceFormSpec = {
@@ -20,6 +22,8 @@ export type FinanceFormSpec = {
     mode?: "date" | "time";
     options?: { value: string; label: string }[]; multiple?: boolean }[];
   receipt?: { fundId: string; field: "receipt_object_key" | "evidence_object_key" };
+  /** Optional on-device VietQR reader that pre-fills fields; `fill` throws a user-facing message on mismatch. */
+  scan?: { label: string; fill(payment: PaymentQr): FormValues };
   build(values: FormValues): OperationCommand;
 };
 
@@ -31,6 +35,8 @@ export function FinanceForm({ spec, busy, onSubmit, onClose }: {
   const [error, setError] = useState<string>();
   const [prepared, setPrepared] = useState<OperationCommand>();
   const [working, setWorking] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const [filled, setFilled] = useState(false);
   const [photo, setPhoto] = useState<ImagePicker.ImagePickerAsset>();
   const assetRef = useRef<ImagePicker.ImagePickerAsset | undefined>(undefined);
   const active = useRef(true), lock = useRef(false), uploaded = useRef<string | undefined>(undefined);
@@ -86,6 +92,13 @@ export function FinanceForm({ spec, busy, onSubmit, onClose }: {
     <Text style={typography.headline}>{spec.title}</Text>
     <Notice>{spec.description}</Notice>
     {error && <Feedback message={error} />}
+    {!prepared && spec.scan && (scanning
+      ? <QrFill onClose={() => setScanning(false)} onRead={payment => {
+        try { const next = spec.scan!.fill(payment); setValues(current => ({ ...current, ...next })); setScanning(false); setFilled(true); setError(undefined); return undefined; }
+        catch (cause) { return errorMessage(cause); }
+      }} />
+      : <Button label={spec.scan.label} icon="wallet" variant="soft" disabled={disabled} onPress={() => { setFilled(false); setScanning(true); }} />)}
+    {filled && !prepared && <Feedback success message="Đã điền từ VietQR. Kiểm tra lại từng trường trước khi tiếp tục." />}
     {spec.fields?.map(field => prepared ? <View key={field.key} style={ui.stack}>
       <Text style={typography.footnote}>{field.label}</Text>
       <Text selectable style={typography.body}>{field.options ? field.options.filter(option => (values[field.key] ?? "").split(",").includes(option.value)).map(option => option.label).join(" · ") || "Không chọn" : values[field.key] || "Để trống"}</Text>
@@ -112,6 +125,6 @@ export function FinanceForm({ spec, busy, onSubmit, onClose }: {
       <Notice>Đây là ghi nhận nghiệp vụ trên máy chủ, không phải lệnh chuyển tiền ngân hàng. Không xác nhận đã nhận/chi khi chưa đối chiếu tiền thực tế.</Notice>
       <Button label="Xác nhận thực hiện" variant={spec.destructive ? "destructive" : "primary"} loading={disabled} onPress={() => { void submit(); }} />
       <Button label="Quay lại chỉnh sửa" variant="soft" disabled={disabled} onPress={() => setPrepared(undefined)} />
-    </> : <Button label="Tiếp tục" loading={disabled} onPress={() => { void prepare(); }} />}
+    </> : <Button label="Tiếp tục" loading={disabled} disabled={scanning} onPress={() => { void prepare(); }} />}
   </Sheet>;
 }

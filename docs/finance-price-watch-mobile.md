@@ -30,12 +30,24 @@ khác nhau. App không tự áp dụng quy tắc 5%/24 giờ để phát cảnh 
 vẫn được giữ và gắn nhãn; giá cũ không được tô như một giá mới dưới ngưỡng. Không có
 quan sát không có nghĩa là giá bằng 0. Lọc danh sách áp dụng trên các trang đã tải.
 
-## Hợp nhất với giao diện D (05/11/2026)
+## Một màn quỹ chính (07/11/2026)
 
-Quỹ nhóm giữ màn hình chính hiện tại. Liên kết **Công cụ quỹ mở rộng** mở
-`/trip/:id/fund-tools` để dùng ngoài quỹ, lịch sử kiểm toán, MoMo Sandbox và đối
-soát. Bản nháp riêng dùng `/trip/:id/fund-drafts`, không ghi vào sổ quỹ.
-Hai màn quỹ và quản lý thành viên dùng chung khóa thao tác theo Gateway/tài
+`/trip/:id/fund` là nơi duy nhất cho nghiệp vụ hằng ngày: mở quỹ, ngân sách, tài
+khoản nhận VietQR, đợt góp (tạo/sửa tên, ghi chú, hạn đóng), đóng góp, khoản chi,
+hoàn tiền, sổ quỹ, chốt quỹ và **Quét QR thanh toán**. **Công cụ quỹ mở rộng**
+(`/trip/:id/fund-tools`) chỉ còn các phần màn chính không có: ghi chú ngoài quỹ,
+lịch sử kiểm toán (nhãn tiếng Việt, tên người thực hiện), MoMo Sandbox (nơi nhận
+và lần thanh toán) và đối soát. Không còn hai nơi thao tác cùng một khoản tiền.
+Bản nháp riêng dùng `/trip/:id/fund-drafts`, không ghi vào sổ quỹ.
+
+Tài khoản nhận VietQR được kiểm tra theo đúng danh mục ngân hàng của backend
+(`src/features/finance/vietqr-banks.ts`, nhận mã như `VCB` hoặc BIN `970436`) và
+số tài khoản 1–19 chữ/số — giới hạn để backend phát hành được QR (sai sẽ là 409).
+Chủ nhóm có thể **quét/dán VietQR nhận tiền** của người giữ quỹ để điền sẵn ngân
+hàng, số tài khoản và tên; tên trong QR chưa được ngân hàng xác minh. Người giữ quỹ
+vẫn phải tự xác nhận tài khoản trước khi tạo đợt góp.
+
+Các màn quỹ và quản lý thành viên dùng chung khóa thao tác theo Gateway/tài
 khoản/Trip. API Price Watch cũng đi qua client kiểm tra đúng phiên đăng nhập.
 
 ## Mất phản hồi và phiên bản cũ

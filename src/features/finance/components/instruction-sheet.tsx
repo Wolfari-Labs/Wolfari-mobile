@@ -8,6 +8,7 @@ import { Feedback } from "@/shared/ui/feedback";
 import { Notice, ResourceFeedback } from "@/shared/ui/journal";
 import { Sheet } from "@/shared/ui/sheet";
 import { money } from "../model";
+import { instructionQrUrl } from "../extended-model";
 import { QrImage } from "./qr-image";
 
 export function InstructionSheet({ contributionId, onClose }: { contributionId: string; onClose(): void }) {
@@ -15,9 +16,9 @@ export function InstructionSheet({ contributionId, onClose }: { contributionId: 
   const [consent, setConsent] = useState(false), [failed, setFailed] = useState(false);
   const resource = useResource(useCallback(async (signal: AbortSignal) => {
     const instruction = await api.finance.instruction(contributionId, signal);
-    const url = new URL(instruction.qr_url);
-    if (instruction.environment !== "TEST" || instruction.contribution_id !== contributionId || url.origin !== "https://img.vietqr.io" || url.username || url.password || !url.pathname.startsWith("/image/")) throw new Error("Chỉ dẫn thanh toán không hợp lệ.");
-    return instruction;
+    if (instruction.contribution_id !== contributionId) throw new Error("Chỉ dẫn thanh toán không hợp lệ.");
+    // The image URL must encode exactly this instruction's bank, account, amount, reference and name.
+    return { ...instruction, qr_url: instructionQrUrl(instruction) };
   }, [api, contributionId]));
   const row = resource.data;
   return <Sheet visible title="VietQR · TEST" onClose={onClose}>

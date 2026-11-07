@@ -4,7 +4,9 @@ import { financeCommands as commands } from "./api.ts";
 import type { FinanceFormSpec } from "./components/finance-form";
 import { eligibleDestinations, money, parseMoney, requiredText } from "./model.ts";
 import { dateLabel, timeLabel, parseDate, localTimestamp } from "../trips/utils.ts";
-import type { Closure, Contribution, Destination, Expense, Fund, Refund } from "./types";
+import type { Closure, Contribution, ContributionRequest, Destination, Expense, Fund, Refund } from "./types";
+import type { PaymentQr } from "../payments/model/payment-qr";
+import { resolveVietQrBank, validVietQrAccount } from "./vietqr-banks.ts";
 
 const amountField = { key: "amount", label: "Số tiền (VND, chỉ chữ số)", numeric: true, max: 19 };
 const reasonField = { key: "reason", label: "Lý do", multiline: true, max: 1024 };
@@ -14,13 +16,27 @@ const memberOptions = (members: Membership[], self: string) => members.filter(me
 type Namer = (userId: string) => string;
 const shortId: Namer = userId => `#${userId.slice(0, 4).toUpperCase()}`;
 const bankFields = [
-  { key: "bank_code", label: "Mã ngân hàng (VD: VCB)", max: 30 },
-  { key: "account_number", label: "Số tài khoản", max: 80 },
+  { key: "bank_code", label: "Ngân hàng (mã VD: VCB, hoặc BIN VD: 970436)", max: 30 },
+  { key: "account_number", label: "Số tài khoản (chữ/số, tối đa 19 ký tự)", max: 19 },
   { key: "account_name", label: "Tên chủ tài khoản", max: 150 },
 ];
-const bankInput = (values: Record<string, string>) => ({ destination_type: "VIETQR" as const,
-  bank_code: text(values.bank_code ?? "", "Mã ngân hàng", 30), account_number: text(values.account_number ?? "", "Số tài khoản", 80),
-  account_name: text(values.account_name ?? "", "Tên chủ tài khoản", 150), active: true, is_default: true });
+/** Same rules the backend applies before it can issue a VietQR instruction (unknown bank → 409). */
+export function bankInput(values: Record<string, string>) {
+  const bank = resolveVietQrBank(values.bank_code ?? "");
+  if (!bank) throw new Error("Ngân hàng không có trong danh mục VietQR. Nhập mã (VD: VCB, TCB, MB) hoặc BIN 6 số, hoặc quét QR tài khoản.");
+  const account = (values.account_number ?? "").replace(/\s/g, "");
+  if (!validVietQrAccount(account)) throw new Error("Số tài khoản VietQR chỉ gồm chữ/số, từ 1 đến 19 ký tự.");
+  return { destination_type: "VIETQR" as const, bank_code: bank.code, account_number: account,
+    account_name: text(values.account_name ?? "", "Tên chủ tài khoản", 150), active: true, is_default: true };
+}
+/** Fill destination fields from a scanned/pasted VietQR of the receiving account (static or with amount). */
+export function destinationFromQr(payment: PaymentQr): Record<string, string> {
+  const bank = resolveVietQrBank(payment.bankBin);
+  if (!bank) throw new Error(`Ngân hàng BIN ${payment.bankBin} chưa có trong danh mục VietQR của máy chủ.`);
+  if (!validVietQrAccount(payment.account)) throw new Error("Tài khoản trong QR không dùng được cho VietQR (chỉ chữ/số, tối đa 19 ký tự).");
+  return { bank_code: bank.code, account_number: payment.account, ...(payment.recipientLabel ? { account_name: payment.recipientLabel } : {}) };
+}
+const destinationScan = { label: "Quét/dán VietQR của tài khoản nhận", fill: destinationFromQr };
 const reasonDescription = "Bắt buộc nêu lý do. Thao tác giữ nguyên lịch sử; đảo sổ không tự trả lại tiền ngân hàng.";
 export const actionLabels: Record<string, string> = {
   amount: "Sửa số tiền", waive: "Miễn đóng góp", cancel: "Hủy", "report-transfer": "Báo đã chuyển tiền", "confirm-received": "Xác nhận đã nhận đủ",
@@ -30,7 +46,7 @@ export const actionLabels: Record<string, string> = {
 };
 export function enableForm(tripId: string, members: Membership[], self: string): FinanceFormSpec {
   return { title: "Mở quỹ nhóm", description: "Chọn người giữ quỹ và tài khoản nhận. Người giữ quỹ phải xác nhận tài khoản riêng sau khi mở; chưa có tiền được thu ở bước này.",
-    initial: { holder: self }, fields: [{ key: "holder", label: "Người giữ quỹ", options: memberOptions(members, self) }, { ...amountField, key: "budget", label: "Ngân sách dự kiến (VND, có thể để trống)" }, ...bankFields],
+    initial: { holder: self }, fields: [{ key: "holder", label: "Người giữ quỹ", options: memberOptions(members, self) }, { ...amountField, key: "budget", label: "Ngân sách dự kiến (VND, có thể để trống)" }, ...bankFields], scan: destinationScan,
     build: values => { if (!members.some(member => member.user_id === values.holder && !member.left_at)) throw new Error("Chọn người giữ quỹ đang tham gia."); return commands.enable(tripId, values.holder, bankInput(values), values.budget?.trim() ? parseMoney(values.budget, true) : undefined); } };
 }
 export function budgetForm(fund: Fund): FinanceFormSpec {
@@ -38,19 +54,42 @@ export function budgetForm(fund: Fund): FinanceFormSpec {
 }
 export function destinationForm(fund: Fund, row?: Destination): FinanceFormSpec {
   return { title: row ? "Sửa tài khoản nhận" : "Thêm tài khoản nhận", description: "Tài khoản VietQR mới/sửa sẽ cần người giữ quỹ xác nhận. Chỉ dẫn của các khoản đóng góp đã phát hành không đổi. Tài khoản này sẽ được đặt mặc định cho yêu cầu mới.",
-    initial: { bank_code: row?.bank_code ?? "", account_number: row?.account_number ?? "", account_name: row?.account_name ?? "" }, fields: bankFields,
+    initial: { bank_code: row?.bank_code ?? "", account_number: row?.account_number ?? "", account_name: row?.account_name ?? "" }, fields: bankFields, scan: destinationScan,
     build: values => commands.destination(fund, bankInput(values), row) };
 }
-export function contributionRequestForm(fund: Fund, members: Membership[], destinations: Destination[], self: string): FinanceFormSpec {
+export function contributionRequestForm(fund: Fund, members: Membership[], destinations: Destination[], self: string, timezone = "Asia/Ho_Chi_Minh"): FinanceFormSpec {
   const eligible = eligibleDestinations(destinations);
   return { title: "Tạo yêu cầu đóng góp", description: "Số tiền nhập áp dụng cho mỗi người đã chọn, không phải tổng chia đều. Chỉ dùng tài khoản VietQR đã được người giữ quỹ xác nhận.",
     initial: { members: "", destination: eligible.find(row => row.is_default)?.id ?? eligible[0]?.id ?? "" },
-    fields: [titleField, amountField, { key: "members", label: "Người đóng góp", multiple: true, options: memberOptions(members, self) }, { key: "destination", label: "Tài khoản nhận", options: eligible.map(row => ({ value: row.id, label: `${row.bank_code ?? "VietQR"} · ${row.account_number ?? row.id.slice(0, 8)}` })) }, { key: "note", label: "Ghi chú (không bắt buộc)", multiline: true }],
+    fields: [titleField, amountField, { key: "members", label: "Người đóng góp", multiple: true, options: memberOptions(members, self) }, { key: "destination", label: "Tài khoản nhận", options: eligible.map(row => ({ value: row.id, label: `${row.bank_code ?? "VietQR"} · ${row.account_number ?? row.id.slice(0, 8)}` })) }, { key: "note", label: "Ghi chú (không bắt buộc)", multiline: true }, ...dueFields(timezone)],
     build: values => {
+      const due_at = dueAt(values, timezone);
       const selected = [...new Set((values.members ?? "").split(",").filter(Boolean))];
       if (!selected.length || selected.some(user => !members.some(member => member.user_id === user && !member.left_at))) throw new Error("Chọn ít nhất một thành viên đang tham gia.");
       if (!eligible.some(row => row.id === values.destination)) throw new Error("Cần tài khoản nhận đang hoạt động và đã xác nhận.");
-      return commands.contributionRequest(fund, { title: text(values.title ?? "", "Nội dung", 200), contributions: selected.map(member_user_id => ({ member_user_id, amount: parseMoney(values.amount ?? ""), destination_id: values.destination })), ...(values.note?.trim() ? { note: text(values.note, "Ghi chú") } : {}) });
+      return commands.contributionRequest(fund, { title: text(values.title ?? "", "Nội dung", 200), contributions: selected.map(member_user_id => ({ member_user_id, amount: parseMoney(values.amount ?? ""), destination_id: values.destination })), ...(values.note?.trim() ? { note: text(values.note, "Ghi chú") } : {}), ...(due_at ? { due_at } : {}) });
+    } };
+}
+/** Optional due date in the trip timezone; the backend needs an explicit offset and cannot clear it. */
+function dueAt(values: Record<string, string>, timezone: string) {
+  if (!values.due_date?.trim()) return undefined;
+  const date = parseDate(values.due_date);
+  const due = date ? localTimestamp(date, values.due_time?.trim() || "23:59", timezone) : undefined;
+  if (!due) throw new Error("Hạn đóng không hợp lệ (DD/MM/YYYY, giờ HH:MM).");
+  return due;
+}
+const dueFields = (timezone: string) => [
+  { key: "due_date", label: "Hạn đóng (không bắt buộc)", mode: "date" as const },
+  { key: "due_time", label: `Giờ hạn đóng (${timezone})`, mode: "time" as const },
+];
+export function contributionRequestEditForm(fund: Fund, row: ContributionRequest, timezone: string): FinanceFormSpec {
+  return { title: "Sửa đợt đóng góp", description: "Chỉ sửa tên, ghi chú và hạn đóng. Số tiền từng người sửa tại khoản đóng góp. Hạn đóng chỉ là thông tin nhắc, không tự trừ tiền hay hủy khoản.",
+    initial: { title: row.title, note: row.note ?? "", due_date: row.due_at ? dateLabel(row.due_at, timezone) : "", due_time: row.due_at ? timeLabel(row.due_at, timezone) : "" },
+    fields: [titleField, { key: "note", label: "Ghi chú", multiline: true }, ...dueFields(timezone)],
+    build: values => {
+      const due_at = dueAt(values, timezone);
+      if (row.due_at && !due_at) throw new Error("Máy chủ không cho xóa hạn đóng đã đặt; hãy chọn hạn mới hoặc giữ nguyên.");
+      return commands.updateContributionRequest(fund, row, { title: text(values.title ?? "", "Nội dung", 200), note: values.note ?? "", ...(due_at ? { due_at } : {}) });
     } };
 }
 export function contributionForm(fund: Fund, row: Contribution, action: Parameters<typeof commands.contribution>[2], who: Namer = shortId): FinanceFormSpec {

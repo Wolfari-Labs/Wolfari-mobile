@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { access, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { chromium } from "playwright-core";
+import { makeQr } from "../fixtures/payment-qr.mjs";
 
 // Local contract fixtures only. Every Gateway request is intercepted; no real money or DB writes.
 const appUrl = process.env.WOLFARI_PREVIEW_URL ?? "http://localhost:8082";
@@ -170,10 +171,21 @@ async function shot(name) {
 try {
   await goto(); await button("Mở quỹ nhóm").click();
   await field("Ngân sách dự kiến (VND, có thể để trống)").fill("1000000");
-  await field("Mã ngân hàng (VD: VCB)").fill("VCB");
-  await field("Số tài khoản").fill("0012345678");
+  // Unknown banks are rejected locally: the backend could not issue a VietQR for them (409).
+  await field("Ngân hàng (mã VD: VCB, hoặc BIN VD: 970436)").fill("XYZ");
+  await field("Số tài khoản (chữ/số, tối đa 19 ký tự)").fill("0012345678");
   await field("Tên chủ tài khoản").fill("TEST ACCOUNT");
-  await confirm(); assert.equal(fund.current_balance, "0"); assert.equal(destinations[0].confirmed_by_holder_at, null);
+  await button("Tiếp tục").click();
+  await page.getByText(/Ngân hàng không có trong danh mục VietQR/).waitFor();
+  // Pasting the holder's receiving VietQR fills bank code (from BIN), account and printed name.
+  await button("Quét/dán VietQR của tài khoản nhận").click();
+  await button("Dán nội dung QR").click();
+  await field("Nội dung VietQR (000201…)").fill(makeQr({ bin: "970436", account: "0012345678", recipient: "TEST ACCOUNT" }));
+  await button("Đọc và điền thông tin").click();
+  await page.getByText("Đã điền từ VietQR. Kiểm tra lại từng trường trước khi tiếp tục.", { exact: true }).waitFor();
+  assert.equal(await field("Ngân hàng (mã VD: VCB, hoặc BIN VD: 970436)").inputValue(), "VCB");
+  await confirm();
+  assert.equal(destinations[0].bank_code, "VCB"); assert.equal(destinations[0].account_number, "0012345678"); assert.equal(fund.current_balance, "0"); assert.equal(destinations[0].confirmed_by_holder_at, null);
   await action("Xác nhận tài khoản");
   assert.ok(destinations[0].confirmed_by_holder_at);
   await action("Cập nhật ngân sách", { "Số tiền (VND, chỉ chữ số)": "9007199254740993" });
@@ -184,7 +196,7 @@ try {
   conflictBudget = false; await button("Tải lại quỹ").click();
   await tab("Đóng góp"); await button("Tạo yêu cầu đóng góp").click();
   await field("Nội dung").fill("Đợt góp đầu tiên"); await field("Số tiền (VND, chỉ chữ số)").fill("500000");
-  await page.getByRole("checkbox", { name: `Người đóng góp: Bạn · ${userId.slice(0, 8)}` }).click(); await confirm();
+  await page.getByRole("checkbox", { name: "Người đóng góp: Bạn · Chủ nhóm" }).click(); await confirm();
   assert.equal(contributions.length, 1); assert.equal(fund.current_balance, "0");
   await button("Xem VietQR TEST").click(); await page.getByText("Tài khoản: 0012345678", { exact: true }).waitFor(); assert.equal(qrRequests, 0);
   await button("Đồng ý tải ảnh VietQR TEST").click(); await page.getByRole("img", { name: "VietQR TEST" }).waitFor();
@@ -208,7 +220,7 @@ try {
   await button("Tạo khoản chi").click(); await field("Nội dung").fill("Nháp cần xóa"); await field("Số tiền (VND, chỉ chữ số)").fill("1"); await confirm();
   await action("Xóa khoản chi nháp"); assert.equal(expenses.length, 1);
   await tab("Hoàn tiền"); await button("Tạo hoàn tiền").click();
-  await page.getByRole("radio", { name: `Người nhận hoàn: Bạn · ${userId.slice(0, 8)}` }).click();
+  await page.getByRole("radio", { name: "Người nhận hoàn: Bạn · Chủ nhóm" }).click();
   await field("Số tiền (VND, chỉ chữ số)").fill("500000"); await field("Lý do").fill("Hoàn quỹ dư"); await confirm();
   assert.equal(fund.current_balance, "500000"); assert.equal(fund.available_balance, "0");
   await tab("Khoản chi"); await button("Tạo khoản chi").click();
@@ -219,13 +231,13 @@ try {
   await button("Tải lại quỹ").click(); await action("Rút đề nghị chi"); await action("Xóa khoản chi nháp"); await tab("Hoàn tiền");
   await action("Báo đã hoàn tiền"); assert.equal(fund.current_balance, "500000"); await action("Xác nhận đã nhận đủ"); assert.equal(fund.current_balance, "0");
   await action("Yêu cầu đảo hoàn tiền", { "Lý do": "Nhận nhầm" }); await action("Đồng ý đảo hoàn tiền"); await action("Đảo giao dịch", { "Lý do": "Nhận nhầm" }); assert.equal(fund.current_balance, "500000");
-  await button("Tạo hoàn tiền").click(); await page.getByRole("radio", { name: `Người nhận hoàn: Bạn · ${userId.slice(0, 8)}` }).click();
+  await button("Tạo hoàn tiền").click(); await page.getByRole("radio", { name: "Người nhận hoàn: Bạn · Chủ nhóm" }).click();
   await field("Số tiền (VND, chỉ chữ số)").fill("100000"); await field("Lý do").fill("Kiểm tra báo chưa nhận"); await confirm();
   await action("Báo đã hoàn tiền");
   await button(`Hủy ${refunds.at(-1).id.slice(0, 8)}`).waitFor({ state: "hidden" });
   await action("Báo chưa nhận tiền", { "Lý do": "Chưa nhận tiền thực tế" }); await action("Hủy", { "Lý do": "Hủy sau khi người nhận đối chiếu" });
   assert.equal(fund.current_balance, "500000"); assert.equal(fund.available_balance, "500000");
-  await button("Tạo hoàn tiền").click(); await page.getByRole("radio", { name: `Người nhận hoàn: Bạn · ${userId.slice(0, 8)}` }).click();
+  await button("Tạo hoàn tiền").click(); await page.getByRole("radio", { name: "Người nhận hoàn: Bạn · Chủ nhóm" }).click();
   await field("Số tiền (VND, chỉ chữ số)").fill("500000"); await field("Lý do").fill("Hoàn lại chính xác"); await confirm();
   await action("Báo đã hoàn tiền"); await action("Xác nhận đã nhận đủ"); assert.equal(fund.current_balance, "0");
   await tab("Lịch sử"); await shot("04-ledger.png"); assert.equal(ledger.length, 6);
