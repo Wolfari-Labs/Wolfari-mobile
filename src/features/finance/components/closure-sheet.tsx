@@ -9,8 +9,8 @@ import { Sheet } from "@/shared/ui/sheet";
 import { money, statusLabels } from "../model";
 import type { Closure } from "../types";
 
-export function ClosureSheet({ closureId, owner, userId, writable, onClose, onAction }: {
-  closureId: string; owner: boolean; userId: string; writable: boolean; onClose(): void;
+export function ClosureSheet({ closureId, owner, userId, who, writable, onClose, onAction }: {
+  closureId: string; owner: boolean; userId: string; who(userId: string): string; writable: boolean; onClose(): void;
   onAction(row: Closure, action: "confirm" | "cancel" | "remind"): void;
 }) {
   const api = useApi();
@@ -24,7 +24,7 @@ export function ClosureSheet({ closureId, owner, userId, writable, onClose, onAc
       <Text selectable style={typography.footnote}>Mã bản chốt: {row.snapshot_hash}</Text>
       <Text style={typography.body}>Số dư bản chốt: {money(row.snapshot.fund.current_balance)}</Text>
       <Text style={typography.body}>Phiên bản bản chốt: {row.snapshot_finance_version}</Text>
-      {row.confirmations.map(item => <Text key={item.user_id} style={typography.body}>{item.user_id === userId ? "Bạn" : item.user_id.slice(0, 8)} · {item.confirmed_at ? "Đã xác nhận" : "Chưa xác nhận"}</Text>)}
+      {row.confirmations.map(item => <Text key={item.user_id} style={typography.body}>{who(item.user_id)} · {item.confirmed_at ? "Đã xác nhận" : "Chưa xác nhận"}</Text>)}
       <Notice>Bản chốt là dữ liệu cố định tại thời điểm yêu cầu đóng, không phải số dư được tính lại trên điện thoại.</Notice>
       <Button label={expanded ? "Thu gọn bản chốt" : "Xem toàn bộ bản chốt"} variant="soft" onPress={() => setExpanded(!expanded)} />
       {expanded && <View style={ui.stack}>

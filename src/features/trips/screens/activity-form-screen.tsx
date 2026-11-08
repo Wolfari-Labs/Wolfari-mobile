@@ -1,9 +1,9 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
-import { Switch, Text, View } from "react-native";
+import { Text, View } from "react-native";
 
 import { useCommand } from "@/shared/hooks/use-command";
-import { colors, typography } from "@/shared/theme/tokens";
+import { typography } from "@/shared/theme/tokens";
 import { Button } from "@/shared/ui/button";
 import { Feedback } from "@/shared/ui/feedback";
 import { FormField } from "@/shared/ui/form-field";
@@ -19,11 +19,16 @@ import { Screen } from "@/shared/ui/screen";
 import { useTrip } from "../hooks/use-trip";
 import type { Activity } from "../types";
 import {
+  activitySchedule,
+  calendarLabel,
   dateKey,
   dateLabel,
+  isTripDay,
+  lastTripDay,
   localTimestamp,
   parseDate,
   timeLabel,
+  type ActivitySchedule,
 } from "../utils";
 
 export default function ActivityFormScreen() {
@@ -98,13 +103,15 @@ function ActivityForm({
     activity?.description ?? note ?? "",
   );
   const [type, setType] = useState(activity?.activity_type ?? "SIGHTSEEING");
-  const [scheduled, setScheduled] = useState(
-    activity ? !!activity.starts_at : day !== "unscheduled",
+  const [mode, setMode] = useState<ActivitySchedule>(
+    activity ? activitySchedule(activity) : day === "unscheduled" ? "unscheduled" : "timed",
   );
   const initialDay =
     day && /^\d{4}-\d{2}-\d{2}$/.test(day) ? `${day}T12:00:00Z` : trip.start_at;
   const [date, setDate] = useState(
-    dateLabel(activity?.starts_at ?? initialDay, trip.timezone),
+    activity?.scheduled_date
+      ? calendarLabel(activity.scheduled_date)
+      : dateLabel(activity?.starts_at ?? initialDay, trip.timezone),
   );
   const [start, setStart] = useState(
     activity?.starts_at
@@ -125,11 +132,16 @@ function ActivityForm({
     }
     const first = parseDate(date),
       last = parseDate(endDate);
+    const timed = mode === "timed";
+    if (mode === "day" && (!first || !isTripDay(first, trip))) {
+      setValidation("Chọn một ngày nằm trong thời gian của chuyến đi.");
+      return;
+    }
     const starts_at =
-      scheduled && first ? localTimestamp(first, start, trip.timezone) : null;
+      timed && first ? localTimestamp(first, start, trip.timezone) : null;
     const ends_at =
-      scheduled && last ? localTimestamp(last, end, trip.timezone) : null;
-    if (scheduled && (!starts_at || !ends_at || ends_at <= starts_at)) {
+      timed && last ? localTimestamp(last, end, trip.timezone) : null;
+    if (timed && (!starts_at || !ends_at || ends_at <= starts_at)) {
       setValidation(
         "Nhập ngày và giờ hợp lệ. Giờ kết thúc phải sau giờ bắt đầu.",
       );
@@ -151,6 +163,9 @@ function ActivityForm({
       activity_type: type,
       starts_at: starts_at ?? null,
       ends_at: ends_at ?? null,
+      // Timed writes omit the date: the server clears it with the timestamp pair.
+      // Day-only sends both timestamps null; unscheduled clears the date explicitly.
+      ...(timed ? {} : { scheduled_date: mode === "day" ? first! : null }),
       selected_location_id: selectedLocation || null,
       position: activity?.position ?? plan.activities.length,
       expected_plan_version: plan.plan_version,
@@ -214,17 +229,33 @@ function ActivityForm({
         value={type}
         onChange={setType}
       />
-      <View style={ui.row}>
-        <Text style={[typography.body, ui.flex]}>Xếp vào lịch trình</Text>
-        <Switch
-          accessibilityLabel="Xếp vào lịch trình"
-          value={scheduled}
-          onValueChange={setScheduled}
-          trackColor={{ true: colors.teal, false: colors.line }}
-          disabled={command.busy}
-        />
-      </View>
-      {scheduled && (
+      <Text style={typography.footnote}>Thời gian trong lịch trình</Text>
+      <Segments
+        items={[
+          { value: "unscheduled", label: "Chưa xếp lịch" },
+          { value: "day", label: "Cả ngày" },
+          { value: "timed", label: "Có giờ" },
+        ]}
+        value={mode}
+        onChange={(value) => {
+          if (!command.busy) setMode(value as ActivitySchedule);
+        }}
+      />
+      {mode === "day" && (
+        <>
+          <DateTimeField
+            label="Ngày"
+            value={date}
+            onChangeText={setDate}
+            editable={!command.busy}
+          />
+          <Text style={typography.footnote}>
+            Hoạt động diễn ra trong ngày, chưa chốt giờ · {dateKey(trip.start_at, trip.timezone)} –{" "}
+            {lastTripDay(trip)}
+          </Text>
+        </>
+      )}
+      {mode === "timed" && (
         <>
           <DateTimeField
             label="Ngày bắt đầu"
@@ -260,7 +291,7 @@ function ActivityForm({
           />
           <Text style={typography.footnote}>
             Múi giờ {trip.timezone} · {dateKey(trip.start_at, trip.timezone)} –{" "}
-            {dateKey(trip.end_at, trip.timezone)}
+            {lastTripDay(trip)}
           </Text>
         </>
       )}

@@ -100,7 +100,6 @@ export default function SignUpScreen() {
 }
 
 const styles = StyleSheet.create({
-  muted: { color: colors.muted },
   consent: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 44 },
   checkbox: { width: 22, height: 22, borderRadius: 6, borderColor: colors.line, borderWidth: 1, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center" },
   checked: { backgroundColor: colors.teal, borderWidth: 0 },

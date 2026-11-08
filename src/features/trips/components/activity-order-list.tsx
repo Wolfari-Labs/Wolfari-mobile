@@ -18,7 +18,7 @@ import Animated, { useAnimatedStyle, useSharedValue, type SharedValue } from "re
 import { colors, typography } from "@/shared/theme/tokens";
 import type { Activity } from "../types";
 import { moveItem } from "../order-session";
-import { timeLabel } from "../utils";
+import { activityTimeLabel } from "../utils";
 import { ActivityDragHandle } from "./activity-drag-handle";
 import { dragPosition, dragScrollOffset, orderFrames, ORDER_LIST_PADDING, ORDER_ROW_GAP, type OrderFrame } from "../model/order-drag";
 
@@ -222,7 +222,7 @@ export function ActivityOrderList({
           >
             <View style={styles.copy}>
               <Text style={styles.time}>
-                {index + 1} · {timeLabel(activity.starts_at, timezone)}
+                {index + 1} · {activityTimeLabel(activity, timezone)}
               </Text>
               <Text style={typography.headline}>{activity.title}</Text>
             </View>

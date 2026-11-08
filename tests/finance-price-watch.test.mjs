@@ -3,7 +3,6 @@ import { test } from 'node:test';
 import { ApiError, createApiClient } from '../src/shared/api/api-client.ts';
 import { createFinanceApi, decodeCollection, decodeRow } from '../src/features/finance/api.ts';
 import {
-  contributionActions,
   money,
   moneyLabel,
   sandboxPaymentUrl,
@@ -66,29 +65,6 @@ test('VND preserves int64 precision, rejects decimals and formats without Number
   for (const value of ['0', '-1', '200.000', '1.5', '9223372036854775808', '1e3'])
     assert.throws(() => money(value));
   assert.equal(money('0', false), '0');
-});
-test('Holder rights never follow Owner or plan edit rights, and self contributions need reporting first', () => {
-  const fund = { holder_user_id: 'holder', status: 'OPEN' },
-    contribution = { member_user_id: 'member', status: 'TRANSFER_REPORTED' };
-  assert.deepEqual(contributionActions(contribution, fund, 'owner', true, true), []);
-  assert.deepEqual(contributionActions(contribution, fund, 'holder', false, true), [
-    'confirm-received',
-    'reject-transfer',
-  ]);
-  assert.ok(
-    !contributionActions(
-      { member_user_id: 'holder', status: 'PENDING' },
-      fund,
-      'holder',
-      false,
-      true,
-    ).includes('confirm-received'),
-  );
-  assert.deepEqual(
-    contributionActions(contribution, { ...fund, status: 'CLOSING' }, 'holder', false, true),
-    [],
-  );
-  assert.deepEqual(contributionActions(contribution, fund, 'holder', false, false), []);
 });
 test('Finance pagination and writes use exact API contract, string money, key and both versions', async () => {
   const calls = [];

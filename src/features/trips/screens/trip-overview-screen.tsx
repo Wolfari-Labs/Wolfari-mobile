@@ -17,7 +17,7 @@ import { ActivityRow } from "../components/activity-row";
 import { TripCard } from "../components/trip-card";
 import { openTrip, TripNavigation } from "../components/trip-navigation";
 import { useTrip } from "../hooks/use-trip";
-import { dateKey, sortedActivities, tripDates } from "../utils";
+import { activityDay, dateKey, sortedActivities, tripDates } from "../utils";
 
 export default function TripOverviewScreen() {
   const resource = useTrip();
@@ -30,7 +30,7 @@ export default function TripOverviewScreen() {
       ? sortedActivities(
           plan.activities.filter(
             (a) =>
-              a.starts_at && dateKey(a.starts_at, trip.timezone) === firstDay,
+              activityDay(a, trip.timezone) === firstDay,
           ),
         )
       : [];

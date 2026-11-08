@@ -12,10 +12,13 @@ import { PageIntro, layered } from "@/shared/ui/page-intro";
 import { Screen } from "@/shared/ui/screen";
 import { Sheet } from "@/shared/ui/sheet";
 import { pendingInvitation } from "@/features/trips/pending-invitation";
+import { unregisterPushDevice } from "@/features/notifications/push";
+import { useApi } from "@/shared/api/use-api";
 import { useSession } from "../session/session-provider";
 
 export default function ProfileScreen() {
   const { profile, signOut } = useSession();
+  const api = useApi();
   const [confirm, setConfirm] = useState(false);
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
@@ -25,6 +28,7 @@ export default function ProfileScreen() {
     setError(undefined);
     try {
       pendingInvitation.set(undefined);
+      if (profile?.id) await unregisterPushDevice(api.notifications, profile.id);
       await signOut();
       router.replace("/");
     } catch {
@@ -71,6 +75,13 @@ export default function ProfileScreen() {
           subtitle="Tham gia hành trình cùng bạn bè"
           icon="mail"
           onPress={() => router.push("/invitation")}
+        />
+        <SectionLink
+          grouped
+          title="Thông báo"
+          subtitle="Xem thông báo và chọn kênh nhận"
+          icon="bell"
+          onPress={() => router.push("/notifications")}
         />
         <SectionLink
           grouped

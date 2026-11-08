@@ -19,6 +19,8 @@ import { Sheet } from "@/shared/ui/sheet";
 import { emptyCreateDraft, isCreateDraft, money, moneyLabel, type CreateDraft } from "../model/local-parity";
 import { localTimestamp, parseDate } from "../utils";
 
+const validMembers = (value: string) => /^[1-9]\d*$/.test(value);
+
 export default function CreateTripScreen() {
   const { idea } = useLocalSearchParams<{ idea?: string }>();
   const { profile } = useSession();
@@ -40,22 +42,33 @@ function CreateTripForm({ initial, draft }: { initial: CreateDraft; draft: Retur
   const busy = command.busy || draft.busy || !!createdId;
   const timezone = "Asia/Ho_Chi_Minh";
   const update = (key: keyof CreateDraft, value: string) => { if (!busy) { setForm(old => ({ ...old, [key]: value })); setSaved(false); } };
-  function valid() {
+  // Each step validates only its own fields: draft-only details never block reaching step 2.
+  function validInfo() {
     if (!form.name.trim() || form.name.trim().length > 200) { setValidation("Tên chuyến đi cần từ 1 đến 200 ký tự."); return; }
     const first = parseDate(form.start), last = parseDate(form.end);
     if (!first || !last) { setValidation("Nhập ngày hợp lệ theo định dạng DD/MM/YYYY."); return; }
     if (last < first) { setValidation("Ngày về cần bằng hoặc sau ngày khởi hành."); return; }
-    if (!/^[1-6]$/.test(form.members)) { setValidation("Số người dự kiến từ 1 đến 6."); return; }
-    if (form.budget && !money(form.budget)) { setValidation("Ngân sách là số nguyên VND lớn hơn 0, tối đa 12 chữ số."); return; }
     setValidation(undefined);
     // Extra planning preferences remain local; do not invent unsupported API fields.
     return { name: form.name.trim(), start_at: localTimestamp(first, "00:00", timezone)!, end_at: localTimestamp(last, "23:59", timezone)!, timezone, ...(form.description.trim() ? { description: form.description.trim() } : {}) };
   }
+  function validDetails() {
+    if (!validMembers(form.members)) { setValidation("Số người dự kiến phải là số nguyên từ 1 trở lên."); return false; }
+    if (form.budget && !money(form.budget)) { setValidation("Ngân sách là số nguyên VND lớn hơn 0, tối đa 12 chữ số."); return false; }
+    setValidation(undefined);
+    return true;
+  }
+  function goTo(next: "info" | "details") {
+    if (busy || next === step) return;
+    if (next === "info") { setValidation(undefined); setStep("info"); return; }
+    if (validInfo()) setStep("details");
+  }
   async function submit() {
     if (busy) return;
-    const input = valid();
-    if (!input) return;
+    const input = validInfo();
+    if (!input) { setStep("info"); return; }
     if (step === "info") { setStep("details"); return; }
+    if (!validDetails()) return;
     const trip = await command.run(input, key => api.trips.create(input, key));
     if (trip) {
       setCreatedId(trip.id);
@@ -78,9 +91,9 @@ function CreateTripForm({ initial, draft }: { initial: CreateDraft; draft: Retur
   }
   return <Screen title="Chuyến đi mới" onBack={() => {
     if (command.busy || draft.busy) return;
-    if (step === "details") setStep("info"); else if (router.canGoBack()) router.back(); else router.replace("/(tabs)/trips");
+    if (step === "details") goTo("info"); else if (router.canGoBack()) router.back(); else router.replace("/(tabs)/trips");
   }} footer={<Button label={step === "info" ? "Tiếp tục" : "Tạo chuyến đi"} disabled={busy || picking} loading={command.busy} onPress={() => { void submit(); }} />}>
-    <Segments items={[{ value: "info", label: "1  Thông tin" }, { value: "details", label: "2  Cá nhân hóa" }]} value={step} onChange={value => { if (!busy && (value === "info" || valid())) setStep(value); }} />
+    <Segments items={[{ value: "info", label: "1  Thông tin" }, { value: "details", label: "2  Cá nhân hóa" }]} value={step} onChange={value => goTo(value as "info" | "details")} />
     <Heading title={step === "info" ? "Hành trình bắt đầu từ một ý tưởng" : "Theo cách của bạn"} />
     {draft.value && <Notice>Có bản nháp trên thiết bị cho tài khoản này. Bấm Lưu bản nháp chuyến đi để giữ các thay đổi mới.</Notice>}
     {saved && !draft.error && <Feedback success message="Đã lưu bản nháp chuyến đi trên thiết bị." />}
@@ -96,9 +109,9 @@ function CreateTripForm({ initial, draft }: { initial: CreateDraft; draft: Retur
     </> : <>
       <FormField label="Lời nhắn cho nhóm" icon="edit" value={form.description} onChangeText={value => update("description", value)} multiline maxLength={5000} editable={!busy} />
       <Notice>Điểm đến, số người, ngân sách, phong cách, mẫu và ảnh dưới đây chỉ dùng để phác thảo. Khi tạo chuyến đi, máy chủ chỉ nhận tên, ngày và lời nhắn.</Notice>
-      <FormField label="Số người dự kiến (1–6)" icon="users" value={form.members} onChangeText={value => update("members", value)} keyboardType="number-pad" maxLength={1} editable={!busy} />
+      <FormField label="Số người dự kiến" icon="users" value={form.members} onChangeText={value => update("members", value.replace(/\D/g, ""))} keyboardType="number-pad" maxLength={6} editable={!busy} />
       <FormField label="Ngân sách dự kiến (VND)" icon="wallet" value={form.budget} onChangeText={value => update("budget", value)} keyboardType="number-pad" maxLength={12} editable={!busy} />
-      {money(form.budget) && /^[1-6]$/.test(form.members) ? <Text style={typography.headline}>Khoảng {moneyLabel(Number(form.budget) / Number(form.members))} / người</Text> : null}
+      {money(form.budget) && validMembers(form.members) ? <Text style={typography.headline}>Khoảng {moneyLabel(Number(form.budget) / Number(form.members))} / người</Text> : null}
       <Text style={typography.headline}>Phong cách dự kiến</Text>
       <Segments scroll value={form.style} onChange={value => update("style", value)} items={[{ value: "explore", label: "Khám phá" }, { value: "relax", label: "Nghỉ dưỡng" }, { value: "food", label: "Ẩm thực" }, { value: "culture", label: "Văn hóa" }]} />
       <Text style={typography.headline}>Mẫu dự kiến (không tự tạo hoạt động)</Text>

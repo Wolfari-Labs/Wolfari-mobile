@@ -1,7 +1,8 @@
+import * as Clipboard from "expo-clipboard";
 import { Image } from "expo-image";
 import { router } from "expo-router";
 import { useState } from "react";
-import { Text, View } from "react-native";
+import { Share, Text, View } from "react-native";
 
 import { useCommand } from "@/shared/hooks/use-command";
 import { typography } from "@/shared/theme/tokens";
@@ -13,7 +14,7 @@ import { EmptyState, Heading, Notice, ResourceFeedback, Segments } from "@/share
 import { Screen } from "@/shared/ui/screen";
 import { useTrip } from "../hooks/use-trip";
 import type { InvitationResult } from "../types";
-import { dateLabel } from "../utils";
+import { dateLabel, invitationToken } from "../utils";
 
 export default function InviteScreen() {
   const resource = useTrip();
@@ -23,6 +24,18 @@ export default function InviteScreen() {
   const [email, setEmail] = useState("");
   const [validation, setValidation] = useState<string>();
   const [result, setResult] = useState<InvitationResult>();
+  const [copied, setCopied] = useState(false);
+  const code = result?.one_time_link ? invitationToken(result.one_time_link) : undefined;
+  async function copy() {
+    if (!code) return;
+    await Clipboard.setStringAsync(code);
+    setCopied(true);
+  }
+  async function share() {
+    if (!data || !result?.one_time_link) return;
+    const message = `Mình mời bạn tham gia chuyến đi "${data.trip.name}" trên Wolfari!\nMở app → Tài khoản → Lời mời chuyến đi, rồi dán mã:\n${code ?? result.one_time_link}\nMã hết hạn ${dateLabel(result.invitation.expires_at)}, chỉ dùng được một lần.`;
+    try { await Share.share({ message }); } catch { /* user closed share sheet */ }
+  }
   const archived = data?.trip.lifecycle === "ARCHIVED";
   const allowed = data?.trip.current_membership.role === "OWNER" && !archived;
   const writable = allowed && !resource.loading && !resource.error;
@@ -39,12 +52,16 @@ export default function InviteScreen() {
       <Heading title={"Đi cùng nhau,\nvui hơn nhiều!"} aside={<Image source={designAssets.mascot} style={{ width: 84, height: 84 }} contentFit="contain" />} subtitle={"Mời bạn bè tham gia " + data.trip.name + "."} />
       {result ? <>
         <Feedback success message={(result.invitation.email ? "Lời mời cho " + result.invitation.email : "Lời mời bằng liên kết") + " đã được tạo. Hết hạn " + dateLabel(result.invitation.expires_at) + "."} />
-        {result.one_time_link ? <View style={{ gap: 8 }}>
-          <Text style={typography.footnote}>Nhấn giữ để sao chép liên kết. Chỉ chia sẻ với người bạn muốn mời; liên kết chỉ nhận được một lần.</Text>
-          <Text selectable style={typography.body}>{result.one_time_link}</Text>
+        {result.one_time_link ? <View style={{ gap: 12 }}>
+          <Text style={typography.footnote}>Gửi mã này cho người bạn muốn mời. Họ mở app → Lời mời chuyến đi và dán mã. Mã chỉ dùng được một lần.</Text>
+          <Text selectable numberOfLines={1} ellipsizeMode="middle" style={typography.headline}>{code ?? result.one_time_link}</Text>
+          <View style={{ flexDirection: "row", gap: 12 }}>
+            <Button label={copied ? "Đã sao chép ✓" : "Sao chép mã"} variant="soft" style={{ flex: 1 }} onPress={() => { void copy(); }} />
+            <Button label="Chia sẻ" style={{ flex: 1 }} onPress={() => { void share(); }} />
+          </View>
         </View> : result.invitation.invitation_type === "LINK" && <Notice>Máy chủ không trả lại liên kết bí mật ở lần thử này. Bạn có thể thu hồi lời mời trong Thành viên trước khi tạo lời mời khác.</Notice>}
         <Button label="Xem bạn đồng hành" onPress={() => router.replace({ pathname: "/trip/[id]/members", params: { id } })} />
-        <Button label="Mời thêm một người bạn" variant="soft" onPress={() => { setResult(undefined); setEmail(""); }} />
+        <Button label="Mời thêm một người bạn" variant="soft" onPress={() => { setResult(undefined); setEmail(""); setCopied(false); }} />
       </> : <>
         <Segments items={[{ value: "EMAIL", label: "Qua email" }, { value: "LINK", label: "Bằng liên kết" }]} value={kind} onChange={value => { if (!command.busy) { setKind(value); setValidation(undefined); } }} />
         {validation && <Feedback message={validation} />}

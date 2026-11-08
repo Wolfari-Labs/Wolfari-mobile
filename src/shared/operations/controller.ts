@@ -8,7 +8,7 @@ export type OperationReceipt = Pick<OperationCommand, "kind" | "title" | "target
   key: string; tripId: string; operation?: MembershipOperation; rejection?: string;
 };
 type Pending = OperationReceipt & { command?: OperationCommand };
-type Snapshot = { ready: boolean; busy: boolean; pending?: Pending; error?: string; result?: unknown };
+type Snapshot = { ready: boolean; busy: boolean; pending?: Pending; error?: string; sendError?: string; result?: unknown };
 type Dependencies = {
   tripId: string; storageKey: string;
   storage: { getItem(key: string): Promise<string | null>; setItem(key: string, value: string): Promise<unknown>; removeItem(key: string): Promise<unknown> };
@@ -111,7 +111,7 @@ export function createOperationController(deps: Dependencies) {
         update({ pending: rejected });
         try { await persist(rejected); } catch { /* Original lookup receipt is still durable. */ }
       }
-      update({ error: deps.message(cause) });
+      update({ error: deps.message(cause), sendError: deps.message(cause) });
     }
   }
   return {
@@ -126,7 +126,7 @@ export function createOperationController(deps: Dependencies) {
         const pending: Pending = { ...receiptForStorage({ ...frozen, key: deps.uuid(), tripId: deps.tripId }), command: frozen };
         // Do not issue a mutation if we cannot durably remember its operation ID.
         await persist(pending);
-        update({ pending });
+        update({ pending, sendError: undefined });
         await execute(pending, true);
         return true;
       } catch { update({ error: "Không lưu được mã yêu cầu. Chưa gửi thay đổi lên máy chủ." }); return false; }
@@ -144,15 +144,32 @@ export function createOperationController(deps: Dependencies) {
       update({ busy: true });
       try { await receive(await deps.poll(pending.key)); }
       catch (cause) {
-        update({ error: (cause as { status?: number }).status === 404 ? "Chưa tìm thấy kết quả. Mã yêu cầu vẫn được giữ; 404 không chứng minh thao tác thất bại." : deps.message(cause) });
+        const notFound = (cause as { status?: number }).status === 404;
+        // 404 with no server acknowledgement: the request most likely never reached the Trip service.
+        update({ error: notFound
+          ? (pending.operation ? "Chưa tìm thấy kết quả. Mã yêu cầu vẫn được giữ; 404 không chứng minh thao tác thất bại."
+            : `Máy chủ chưa ghi nhận yêu cầu này${snapshot.sendError ? ` (lỗi khi gửi: ${snapshot.sendError})` : ""}. Bạn có thể bỏ yêu cầu và thử lại.`)
+          : deps.message(cause) });
       } finally { update({ busy: false }); }
+    },
+    // Drop a request the server never acknowledged (no operation receipt), so the trip is not locked forever.
+    async discard() {
+      const pending = snapshot.pending;
+      if (snapshot.busy || !pending || pending.operation) return false;
+      update({ busy: true });
+      try {
+        await deps.storage.removeItem(deps.storageKey);
+        update({ pending: undefined, error: undefined, sendError: undefined });
+        return true;
+      } catch { update({ error: "Không xóa được mã yêu cầu đã lưu. Hãy thử lại." }); return false; }
+      finally { update({ busy: false }); }
     },
     async acknowledge() {
       if (snapshot.busy || !operationTerminal(snapshot.pending)) return false;
       update({ busy: true });
       try {
         await deps.storage.removeItem(deps.storageKey);
-        update({ pending: undefined, error: undefined });
+        update({ pending: undefined, error: undefined, sendError: undefined });
         return true;
       } catch { update({ error: "Không cập nhật được mã yêu cầu đã lưu. Hãy thử lại." }); return false; }
       finally { update({ busy: false }); }

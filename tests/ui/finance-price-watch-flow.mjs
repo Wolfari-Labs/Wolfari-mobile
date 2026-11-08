@@ -309,7 +309,7 @@ const button = (name) => page.getByRole('button', { name, exact: true }),
 const tab = (name) => page.getByRole('tab', { name, exact: true });
 const goto = async (feature = 'fund-tools') => {
   await page.goto(`${appUrl}/trip/${tripId}/${feature}`, { waitUntil: 'networkidle' });
-  await page.getByText('Finance & Price Watch', { exact: true }).waitFor();
+  await page.getByText('Finance & Price Watch', { exact: true }).first().waitFor();
 };
 const save = async () => {
   await button('Xác nhận lưu').click();
@@ -318,60 +318,86 @@ const save = async () => {
 const shots = path.resolve('.cache/visual/finance-price-watch');
 await mkdir(shots, { recursive: true });
 try {
+  // Everyday fund work runs on the main Fund screen; fund-tools keeps notes/history/MoMo/reconciliation.
+  const starts = (name) => page.getByRole('button', { name: new RegExp(`^${name}`) });
+  const fundTab = async () => {
+    await goto('fund');
+    await tab('Đóng góp').click();
+    await page.getByText(/^(Khoản đóng của bạn|Bạn đồng hành #)/).first().waitFor();
+  };
+  const confirmSheet = async () => {
+    await button('Tiếp tục').click();
+    await button('Xác nhận thực hiện').click();
+  };
+  const settle = async () => {
+    await button('Tải lại quỹ').click();
+    await button('Tải lại quỹ').waitFor({ state: 'hidden' });
+  };
   await goto('fund');
-  await button('Công cụ quỹ mở rộng').click();
-  await page.waitForURL(`**/trip/${tripId}/fund-tools`);
-  await page.getByText('Số dư: 0 ₫', { exact: true }).waitFor();
-  assert.equal(await button('Xác nhận đã nhận đủ').count(), 0, 'Owner does not gain Holder rights');
+  await page.getByText('Số dư đã ghi nhận', { exact: true }).waitFor();
+  await tab('Đóng góp').click();
+  await page.getByText(/^Bạn đồng hành #/).first().waitFor();
+  assert.equal(await starts('Xác nhận đã nhận đủ').count(), 0, 'Owner does not gain Holder rights');
   actor = memberId;
-  await goto();
-  await button('Báo đã chuyển').first().click();
-  await save();
+  await fundTab();
+  await starts('Báo đã chuyển tiền').first().click();
+  await confirmSheet();
+  await settle();
+  assert.equal(contributions[0].status, 'TRANSFER_REPORTED');
   assert.equal(fund.current_balance, '0');
   assert.equal(ledger.length, 0);
   actor = holderId;
-  await goto();
-  await button('Từ chối báo chuyển').click();
+  await fundTab();
+  await starts('Từ chối báo chuyển').first().click();
   await field('Lý do').fill('Chưa thấy tiền thử nghiệm');
-  await save();
+  await confirmSheet();
+  await settle();
   assert.equal(contributions[0].status, 'PENDING');
   assert.equal(ledger.length, 0);
   actor = memberId;
-  await goto();
-  await button('Báo đã chuyển').first().click();
-  await save();
-  await button('Báo đã chuyển').click();
-  await save();
+  await fundTab();
+  await page.getByText('Lý do từ chối gần nhất: Chưa thấy tiền thử nghiệm', { exact: true }).first().waitFor();
+  await starts('Báo đã chuyển tiền').first().click();
+  await confirmSheet();
+  await settle();
+  await starts('Báo đã chuyển tiền').first().click();
+  await confirmSheet();
+  await settle();
   actor = holderId;
-  await goto();
-  await button('Xác nhận đã nhận đủ').first().click();
-  await save();
+  await fundTab();
+  await starts('Xác nhận đã nhận đủ').first().click();
+  await confirmSheet();
+  // The reply is lost after the server committed: retry must reuse the identical body and key.
   await button('Gửi lại cùng yêu cầu').waitFor();
   assert.equal(fund.current_balance, '200000');
   assert.equal(ledger.length, 1);
   await button('Gửi lại cùng yêu cầu').click();
-  await button('Tải lại dữ liệu').waitFor();
-  await page.reload({ waitUntil: 'networkidle' });
-  assert.equal(await button('Gửi lại cùng yêu cầu').count(), 0, 'No sensitive command body is restored after restart');
-  await button('Tải lại dữ liệu').click();
-  await button('Xác nhận đã nhận đủ').click();
-  await save();
-  await page.getByText('Số dư: 500.000 ₫', { exact: true }).waitFor();
+  await settle();
+  await starts('Xác nhận đã nhận đủ').first().click();
+  await confirmSheet();
+  await settle();
+  await page.getByText('500.000 ₫', { exact: true }).first().waitFor();
   assert.equal(ledger.length, 2);
   assert.equal(fund.current_balance, '500000');
   const confirms = calls.filter((c) => c.p.endsWith('confirm-received'));
   assert.equal(confirms[0].key, confirms[1].key);
   assert.deepEqual(confirms[0].body, confirms[1].body);
-  await tab('Sổ quỹ').click();
-  await page.getByText('#2 · Thu 300.000 ₫', { exact: true }).waitFor();
+  await tab('Lịch sử').click();
+  await page.getByText('+300.000 ₫', { exact: true }).waitFor();
   await page.screenshot({ path: path.join(shots, 'fund-ledger.png'), fullPage: true });
   await tab('Khoản chi').click();
-  await button('Đề xuất khoản chi').click();
+  await button('Tạo khoản chi').click();
   await field('Nội dung').fill('Bữa trưa thử nghiệm');
-  await field('Số tiền (VND)').fill('100000');
-  await save();
-  await page.getByText('Bữa trưa thử nghiệm', { exact: true }).waitFor();
+  await field('Số tiền (VND, chỉ chữ số)').fill('100000');
+  await confirmSheet();
+  await settle();
+  await page.getByText('Bữa trưa thử nghiệm · 100.000 ₫', { exact: true }).waitFor();
   assert.equal(fund.current_balance, '500000', 'Draft expense has no ledger effect');
+  await button('Công cụ quỹ mở rộng').click();
+  await page.waitForURL(`**/trip/${tripId}/fund-tools`);
+  await tab('Ngoài quỹ').waitFor();
+  for (const name of ['Đóng góp', 'Khoản chi', 'Hoàn tiền', 'Chốt quỹ'])
+    assert.equal(await tab(name).count(), 0, `${name} lives only on the main Fund screen`);
   await tab('Ngoài quỹ').click();
   await button('Thêm khoản ngoài quỹ').click();
   await field('Mô tả').fill('Tự trả vé xe');
@@ -418,7 +444,7 @@ try {
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
   assert.deepEqual(errors, []);
   console.log(
-    'PASS mobile UI HTTP fixtures: role permissions; report/reject/re-report; lost-reply same-key replay then receipt-only restart; 500000 VND/2 IN; expense/notes; watch create/edit/pause/resume/stop; stale history. Not physical iOS evidence.',
+    'PASS mobile UI HTTP fixtures: role permissions on the main Fund screen; report/reject/re-report; lost-reply same-key replay; 500000 VND/2 IN; expense/notes; watch create/edit/pause/resume/stop; stale history. Not physical iOS evidence.',
   );
 } finally {
   await browser.close();

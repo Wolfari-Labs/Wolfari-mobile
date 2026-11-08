@@ -12,12 +12,38 @@ export function dateKey(value: string, timezone: string) {
 }
 export function tripDays(trip: Trip) {
   const first = dateKey(trip.start_at, trip.timezone);
-  const last = dateKey(trip.end_at, trip.timezone);
+  // Trips are half-open [start_at, end_at): an end at local 00:00 does not add a calendar day.
+  const last = lastTripDay(trip);
   const result: string[] = [];
   let stamp = Date.parse(`${first}T12:00:00Z`);
   const end = Date.parse(`${last}T12:00:00Z`);
   while (stamp <= end && result.length < 366) { result.push(new Date(stamp).toISOString().slice(0, 10)); stamp += 86_400_000; }
   return result;
+}
+export function lastTripDay(trip: Pick<Trip, "start_at" | "end_at" | "timezone">) {
+  const end = Date.parse(trip.end_at), start = Date.parse(trip.start_at);
+  return dateKey(new Date(Math.max(start, end - 1)).toISOString(), trip.timezone);
+}
+/** A calendar day may hold a day-only activity when it overlaps the trip. */
+export function isTripDay(day: string, trip: Pick<Trip, "start_at" | "end_at" | "timezone">) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(day) && day >= dateKey(trip.start_at, trip.timezone) && day <= lastTripDay(trip);
+}
+export type ActivitySchedule = "unscheduled" | "day" | "timed";
+export function activitySchedule(activity: Pick<Activity, "starts_at" | "scheduled_date">): ActivitySchedule {
+  return activity.starts_at ? "timed" : activity.scheduled_date ? "day" : "unscheduled";
+}
+/** Local calendar day of an activity: timed activities by start instant, day-only by their stored date. */
+export function activityDay(activity: Pick<Activity, "starts_at" | "scheduled_date">, timezone: string) {
+  if (activity.starts_at) return dateKey(activity.starts_at, timezone);
+  return activity.scheduled_date ?? undefined;
+}
+export function activityTimeLabel(activity: Pick<Activity, "starts_at" | "scheduled_date">, timezone: string) {
+  return activity.starts_at ? timeLabel(activity.starts_at, timezone) : activity.scheduled_date ? "Cả ngày" : "Chưa xếp";
+}
+/** dd/mm/yyyy for a calendar string without converting through UTC instants. */
+export function calendarLabel(day: string) {
+  const [year, month, date] = day.split("-");
+  return `${date}/${month}/${year}`;
 }
 export function timeLabel(value: string | null, timezone: string) {
   return value ? new Intl.DateTimeFormat("vi-VN", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: timezone }).format(new Date(value)) : "Chưa xếp";

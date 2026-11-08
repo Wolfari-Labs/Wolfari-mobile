@@ -1,4 +1,4 @@
-import type { Contribution, Fund, PaymentInstruction } from './types';
+import type { PaymentInstruction } from './types';
 export type { Page, Fund, Destination, Contribution, ContributionRequest, Expense, Refund, FinancialNote, Transaction as LedgerEntry, AuditEntry, Closure, PaymentInstruction, PaymentAttempt, PaymentException, FinanceCollections } from './types';
 
 // Extended forms use money as a parser; the primary model's money formats labels.
@@ -44,24 +44,6 @@ export const statusLabel: Record<string, string> = {
   EXPIRED: 'Hết hạn',
   STOPPED: 'Đã dừng',
 };
-export function contributionActions(
-  c: Contribution,
-  fund: Fund,
-  userId: string,
-  owner: boolean,
-  writable: boolean,
-) {
-  if (!writable || fund.status !== 'OPEN') return [];
-  const actions: string[] = [];
-  if (c.status === 'PENDING') {
-    if (c.member_user_id === userId) actions.push('instruction', 'report-transfer', 'payment');
-    if (owner) actions.push('edit', 'waive', 'cancel');
-  }
-  if (c.status === 'TRANSFER_REPORTED' && fund.holder_user_id === userId)
-    actions.push('confirm-received', 'reject-transfer');
-  if (c.status === 'CONFIRMED' && fund.holder_user_id === userId) actions.push('reverse');
-  return actions;
-}
 export function instructionQrUrl(instruction: PaymentInstruction): string {
   const url = new URL(instruction.qr_url);
   const expected = `/image/${instruction.bank_bin}-${instruction.account_number}-compact2.svg`;
