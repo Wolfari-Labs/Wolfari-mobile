@@ -7,7 +7,7 @@ import { Screen } from "@/shared/ui/screen";
 import { useTrip } from "../hooks/use-trip";
 import { DraftCollection } from "../components/draft-collection";
 import { moneyLabel, watchError } from "../model/local-parity";
-import { dateKey } from "../utils";
+import { dateKey, lastTripDay } from "../utils";
 
 const cabins = [{ value: "economy", label: "Phổ thông" }, { value: "premium", label: "Phổ thông đặc biệt" }, { value: "business", label: "Thương gia" }];
 export default function PriceWatchDraftsScreen() {
@@ -33,7 +33,7 @@ export default function PriceWatchDraftsScreen() {
       </View>}
       <Segments scroll value={filter} onChange={setFilter} items={[{ value: "all", label: "Tất cả" }, { value: "active", label: "Dự kiến theo dõi" }, { value: "paused", label: "Tạm dừng" }]} />
       <DraftCollection key={id} scope={id} feature="price-watch" title="yêu cầu giá vé" editable={data.plan.permissions.can_edit}
-        initial={{ origin: "", destination: "", direction: "one", departure: dateKey(data.trip.start_at, data.trip.timezone), returnDate: dateKey(data.trip.end_at, data.trip.timezone), passengers: "1", cabin: "economy", threshold: "", status: "active" }}
+        initial={{ origin: "", destination: "", direction: "one", departure: dateKey(data.trip.start_at, data.trip.timezone), returnDate: lastTripDay(data.trip), passengers: "1", cabin: "economy", threshold: "", status: "active" }}
         fields={[
           { key: "direction", label: "Hành trình", options: [{ value: "one", label: "Một chiều" }, { value: "round", label: "Khứ hồi" }] },
           { key: "origin", label: "Điểm đi", suggestions: ["TP. Hồ Chí Minh (SGN)", "Hà Nội (HAN)"] },

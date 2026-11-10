@@ -15,6 +15,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { useAccessibilityPreferences } from "@/shared/hooks/use-accessibility-preferences";
 import { colors, typography } from "@/shared/theme/tokens";
 import { GlassSurface } from "./glass-surface";
+import { KeyboardScrollProvider, useKeyboardScroll } from "./keyboard-scroll";
 import { webSafeArea } from "./web-safe-area";
 
 type Props = PropsWithChildren<{
@@ -26,7 +27,15 @@ type Props = PropsWithChildren<{
   scrollable?: boolean;
 }>;
 
-export function Sheet({
+export function Sheet(props: Props) {
+  return (
+    <KeyboardScrollProvider>
+      <SheetInner {...props} />
+    </KeyboardScrollProvider>
+  );
+}
+
+function SheetInner({
   visible,
   title,
   onClose,
@@ -37,6 +46,8 @@ export function Sheet({
 }: Props) {
   const insets = useSafeAreaInsets();
   const { reduceMotion } = useAccessibilityPreferences();
+  const keyboardScroll = useKeyboardScroll();
+  const keyboardHeight = keyboardScroll?.keyboardHeight ?? 0;
   const nativeSheet = Platform.OS === "ios";
   const close = () => {
     if (dismissible) onClose();
@@ -54,7 +65,11 @@ export function Sheet({
     >
       <GestureHandlerRootView style={{ flex: 1 }}>
       <KeyboardAvoidingView
-        style={[styles.overlay, nativeSheet && styles.nativeOverlay]}
+        style={[
+          styles.overlay,
+          nativeSheet && styles.nativeOverlay,
+          !nativeSheet && keyboardHeight > 0 && { paddingBottom: keyboardHeight },
+        ]}
         behavior={nativeSheet ? "padding" : undefined}
       >
         {!nativeSheet && (
@@ -69,6 +84,7 @@ export function Sheet({
         <View
           accessibilityViewIsModal
           style={[styles.sheet, nativeSheet && styles.nativeSheet]}
+          onLayout={(e) => keyboardScroll?.onViewportLayout(e.nativeEvent.layout.height)}
         >
           {!nativeSheet && <View style={styles.handle} />}
           <GlassSurface variant="regular" style={styles.header}>
@@ -95,13 +111,21 @@ export function Sheet({
           </GlassSurface>
           {scrollable ? (
             <ScrollView
+              ref={keyboardScroll?.scrollRef}
+              onScroll={keyboardScroll?.onScroll}
+              scrollEventThrottle={16}
               keyboardShouldPersistTaps="handled"
+              automaticallyAdjustKeyboardInsets={nativeSheet}
               keyboardDismissMode={nativeSheet ? "interactive" : "on-drag"}
               showsVerticalScrollIndicator={false}
               style={styles.scroll}
               contentContainerStyle={[
                 styles.content,
-                { paddingBottom: Math.max(insets.bottom, 24) },
+                {
+                  paddingBottom:
+                    Math.max(insets.bottom, 24) +
+                    (keyboardHeight > 0 ? Math.min(keyboardHeight * 0.5, 180) : 0),
+                },
                 webSafeArea.sheetContent,
               ]}
             >

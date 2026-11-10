@@ -3,8 +3,9 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useSession } from '@/features/auth/session/session-provider';
 import { useApi } from '@/shared/api/use-api';
 import { useResource } from '@/shared/hooks/use-resource';
+import { View } from 'react-native';
 import { Button } from '@/shared/ui/button';
-import { Heading, Notice, ResourceFeedback, Segments } from '@/shared/ui/journal';
+import { Heading, Notice, ResourceFeedback, Segments, StatusBadge, ui } from '@/shared/ui/journal';
 import { Screen } from '@/shared/ui/screen';
 import {
   ActionSheet,
@@ -15,6 +16,7 @@ import {
   type Field,
 } from '../../finance/components';
 import { moneyLabel, statusLabel } from '../../finance/extended-model';
+import { historyTimeLabel } from '../../finance/history-labels';
 import { useFinanceCommand } from '../../finance/use-finance-command';
 import { watchInput, type Watch, type Observations } from '../../price-watch/api';
 
@@ -245,13 +247,14 @@ function WatchWorkspace({ id, userId }: { id: string; userId: string }) {
           <Card
             key={w.id}
             title={`${w.normalized_query.origin} → ${w.normalized_query.destination}`}
+            right={<StatusBadge status={w.status} label={statusLabel[w.status] ?? w.status} />}
           >
             <Line>
               {statusLabel[w.status]} ·{' '}
               {w.user_id === userId ? 'Yêu cầu của bạn' : 'Yêu cầu của thành viên khác'}
             </Line>
             <Line>
-              Khởi hành: {w.normalized_query.departure_at} · Hết hạn: {w.expires_at}
+              Khởi hành: {historyTimeLabel(w.normalized_query.departure_at)} · Hết hạn: {historyTimeLabel(w.expires_at)}
             </Line>
             <Line>Ngưỡng riêng: {moneyLabel(w.threshold_price)}</Line>
             <Line>
@@ -266,31 +269,34 @@ function WatchWorkspace({ id, userId }: { id: string; userId: string }) {
             <Line>
               Cảnh báo gần nhất:{' '}
               {w.last_alert_at && w.last_alert_price
-                ? `${moneyLabel(w.last_alert_price)} lúc ${w.last_alert_at}`
+                ? `${moneyLabel(w.last_alert_price)} lúc ${historyTimeLabel(w.last_alert_at)}`
                 : 'Chưa ghi nhận'}
             </Line>
             <WatchHistory key={`${w.id}:${w.version}`} watch={w} />
             {w.user_id === userId && ['ACTIVE', 'PAUSED'].includes(w.status) && (
-              <>
+              <View style={ui.actionRow}>
                 <Button
                   label="Sửa theo dõi giá"
+                  compact
                   variant="soft"
                   onPress={() => edit(w)}
                   disabled={command.blocked || !writable}
                 />
                 <Button
                   label={w.status === 'ACTIVE' ? 'Tạm dừng theo dõi' : 'Tiếp tục theo dõi'}
+                  compact
                   variant="soft"
                   onPress={() => transition(w, w.status === 'ACTIVE' ? 'pause' : 'resume')}
                   disabled={command.blocked || !writable}
                 />
                 <Button
                   label="Dừng theo dõi"
+                  compact
                   variant="destructive"
                   onPress={() => transition(w, 'stop')}
                   disabled={command.blocked || !writable}
                 />
-              </>
+              </View>
             )}
           </Card>
         ))}
@@ -393,8 +399,8 @@ function WatchHistory({ watch }: { watch: Watch }) {
           )}
           {source?.items.map((o) => (
             <Line key={o.id}>
-              {moneyLabel(o.price)} · {o.provider} · Quan sát: {o.observed_at} · Thu thập:{' '}
-              {o.fetched_at}
+              {moneyLabel(o.price)} · {o.provider} · Quan sát: {historyTimeLabel(o.observed_at)} · Thu thập:{' '}
+              {historyTimeLabel(o.fetched_at)}
             </Line>
           ))}
           {moreError && <Notice>{moreError}</Notice>}

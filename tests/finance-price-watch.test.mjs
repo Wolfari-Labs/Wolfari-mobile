@@ -7,6 +7,7 @@ import {
   moneyLabel,
   sandboxPaymentUrl,
   instructionQrUrl,
+  bankAppDeeplink,
 } from '../src/features/finance/extended-model.ts';
 import { createCommandJournal } from '../src/features/finance/command.ts';
 import { chunkedStorage } from '../src/features/finance/chunked-storage.ts';
@@ -32,6 +33,27 @@ test('QR URL matches the TEST instruction and rejects foreign hosts or altered a
     { qr_url: instruction.qr_url + '&amount=1' },
   ])
     assert.throws(() => instructionQrUrl({ ...instruction, ...change }));
+});
+test('bank app deeplink pre-fills only this instruction and only for autofill apps', () => {
+  const instruction = {
+    environment: 'TEST', bank_code: 'VCB', bank_bin: '970436', account_number: '0001234567',
+    amount: '180000', reference: 'TESTREF 01', recipient_name: 'TEST ONLY',
+  };
+  const url = new URL(bankAppDeeplink(instruction, 'mb', 'wolfarimobile://'));
+  assert.equal(url.origin + url.pathname, 'https://dl.vietqr.io/pay');
+  assert.deepEqual(Object.fromEntries(url.searchParams), {
+    app: 'mb', ba: '0001234567@vcb', am: '180000', tn: 'TESTREF 01', url: 'wolfarimobile://', bn: 'TEST ONLY',
+  });
+  for (const [change, app] of [
+    [{}, 'vcb'],
+    [{ environment: 'PRODUCTION' }, 'mb'],
+    [{ bank_code: 'BNP HN' }, 'mb'],
+    [{ account_number: '0001-234' }, 'mb'],
+    [{ amount: '0' }, 'mb'],
+    [{ amount: '1.5' }, 'mb'],
+    [{ reference: ' ' }, 'mb'],
+  ])
+    assert.throws(() => bankAppDeeplink({ ...instruction, ...change }, app, 'wolfarimobile://'));
 });
 const intent = {
   key: '11111111-1111-4111-8111-111111111111',

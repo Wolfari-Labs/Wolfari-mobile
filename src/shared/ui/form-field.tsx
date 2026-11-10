@@ -1,4 +1,4 @@
-import { useEffect, useState, type Ref } from "react";
+import { useEffect, useRef, useState, type Ref } from "react";
 import {
   AppState,
   Pressable,
@@ -8,11 +8,13 @@ import {
   View,
   type TextInputProps,
   type TextInputInstance,
+  type ViewInstance,
 } from "react-native";
 
 import { colors, fonts, radii, typography } from "@/shared/theme/tokens";
 import { DesignIcon } from "./design-icon";
 import type { DesignIconName } from "./design-assets";
+import { useKeyboardScroll } from "./keyboard-scroll";
 
 type Props = TextInputProps & {
   label: string;
@@ -34,6 +36,8 @@ export function FormField({
 }: Props) {
   const [focused, setFocused] = useState(false);
   const [passwordVisible, setPasswordVisible] = useState(false);
+  const fieldRef = useRef<ViewInstance | null>(null);
+  const keyboardScroll = useKeyboardScroll();
   useEffect(() => {
     if (!secureTextEntry) return;
     const subscription = AppState.addEventListener("change", (state) => {
@@ -42,7 +46,7 @@ export function FormField({
     return () => subscription.remove();
   }, [secureTextEntry]);
   return (
-    <View style={styles.field}>
+    <View ref={fieldRef} collapsable={false} style={styles.field}>
       <Text style={[typography.body, styles.label]}>{label}</Text>
       <View
         collapsable={false}
@@ -73,10 +77,12 @@ export function FormField({
           ]}
           onFocus={(event) => {
             setFocused(true);
+            keyboardScroll?.scrollToField(fieldRef.current);
             onFocus?.(event);
           }}
           onBlur={(event) => {
             setFocused(false);
+            keyboardScroll?.scrollToField(null);
             onBlur?.(event);
           }}
         />

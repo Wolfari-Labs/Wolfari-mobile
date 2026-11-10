@@ -1,12 +1,15 @@
 import { LinearGradient } from "expo-linear-gradient";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   ActivityIndicator,
+  type GestureResponderEvent,
   Pressable,
   ScrollView,
+  type ScrollViewInstance,
   StyleSheet,
   Text,
   View,
+  type ViewInstance,
 } from "react-native";
 import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withRepeat, withSpring, withTiming } from "react-native-reanimated";
 
@@ -91,39 +94,139 @@ export function IconButton({
   );
 }
 
+const lastSegmentIndex = new Map<string, number>();
+
 export function Segments<T extends string>({
   items,
   value,
   onChange,
   scroll = false,
+  memoryKey,
 }: {
   items: { value: T; label: string }[];
   value: T;
   onChange: (value: T) => void;
   scroll?: boolean;
+  memoryKey?: string;
 }) {
   const { reduceMotion } = useAccessibilityPreferences();
   const [containerWidth, setContainerWidth] = useState(0);
+  const [scrubIndex, setScrubIndex] = useState<number | null>(null);
+  const [itemLayouts, setItemLayouts] = useState<Record<number, { x: number; width: number }>>({});
+  const scrollRef = useRef<ScrollViewInstance | null>(null);
+  const containerRef = useRef<ViewInstance | null>(null);
+  const containerLeftRef = useRef(0);
+  const startPageXRef = useRef(0);
+  const scrubIndexRef = useRef<number | null>(null);
+  const hasScrolledPlayedRef = useRef(false);
 
-  const selectedIndex = items.findIndex((it) => it.value === value);
-  const slideAnim = useSharedValue(Math.max(0, selectedIndex));
+  const selectedIndex = Math.max(0, items.findIndex((it) => it.value === value));
+  const initialIndex = memoryKey !== undefined ? (lastSegmentIndex.get(memoryKey) ?? selectedIndex) : selectedIndex;
+  const slideAnim = useSharedValue(initialIndex);
+  const pillScale = useSharedValue(1);
+  const scrollPillX = useSharedValue(0);
+  const scrollPillW = useSharedValue(0);
 
   useEffect(() => {
-    slideAnim.set(reduceMotion ? Math.max(0, selectedIndex) : withSpring(Math.max(0, selectedIndex), springs.gentle));
+    if (memoryKey !== undefined) {
+      lastSegmentIndex.set(memoryKey, selectedIndex);
+    }
+    if (scrubIndexRef.current !== null) return;
+    slideAnim.set(reduceMotion ? selectedIndex : withSpring(selectedIndex, springs.gentle));
     return () => cancelAnimation(slideAnim);
-  }, [selectedIndex, reduceMotion, slideAnim]);
+  }, [memoryKey, selectedIndex, reduceMotion, slideAnim]);
+
+  const activeLayout = itemLayouts[selectedIndex];
+  useEffect(() => {
+    if (!scroll || !activeLayout) return;
+    if (!hasScrolledPlayedRef.current || reduceMotion) {
+      scrollPillX.set(activeLayout.x);
+      scrollPillW.set(activeLayout.width);
+      hasScrolledPlayedRef.current = true;
+    } else {
+      scrollPillX.set(withSpring(activeLayout.x, springs.gentle));
+      scrollPillW.set(withSpring(activeLayout.width, springs.gentle));
+    }
+    if (containerWidth > 0) {
+      const targetOffset = Math.max(0, activeLayout.x - containerWidth / 2 + activeLayout.width / 2);
+      scrollRef.current?.scrollTo({ x: targetOffset, animated: !reduceMotion });
+    }
+  }, [activeLayout, containerWidth, reduceMotion, scroll, scrollPillW, scrollPillX]);
 
   // The rail has four-point padding on each side.
   const itemWidth =
     containerWidth > 0 && items.length > 0
       ? (containerWidth - 8) / items.length
       : 0;
-  const indicatorStyle = useAnimatedStyle(() => ({ transform: [{ translateX: slideAnim.get() * itemWidth }] }));
+  const indicatorStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: slideAnim.get() * itemWidth },
+      { scale: pillScale.get() },
+    ],
+  }));
+  const scrollIndicatorStyle = useAnimatedStyle(() => ({
+    width: scrollPillW.get(),
+    transform: [{ translateX: scrollPillX.get() - 4 }],
+  }));
+
+  function updateScrubFromPageX(pageX: number) {
+    if (scroll || itemWidth <= 0 || items.length === 0) return;
+    const relX = pageX - containerLeftRef.current - 4;
+    const rawIdx = relX / itemWidth - 0.5;
+    const clampedPos = Math.max(0, Math.min(items.length - 1, rawIdx));
+    const snappedIdx = Math.max(0, Math.min(items.length - 1, Math.floor(relX / itemWidth)));
+    slideAnim.set(reduceMotion ? snappedIdx : withSpring(clampedPos, springs.snappy));
+    if (scrubIndexRef.current !== snappedIdx) {
+      scrubIndexRef.current = snappedIdx;
+      setScrubIndex(snappedIdx);
+    }
+  }
+
+  function finishScrub() {
+    const targetIdx = scrubIndexRef.current;
+    scrubIndexRef.current = null;
+    setScrubIndex(null);
+    pillScale.set(reduceMotion ? 1 : withSpring(1, springs.snappy));
+    if (targetIdx !== null && items[targetIdx]) {
+      if (memoryKey !== undefined) {
+        lastSegmentIndex.set(memoryKey, targetIdx);
+      }
+      slideAnim.set(reduceMotion ? targetIdx : withSpring(targetIdx, springs.gentle));
+      if (items[targetIdx].value !== value) {
+        onChange(items[targetIdx].value);
+      }
+    } else {
+      slideAnim.set(reduceMotion ? selectedIndex : withSpring(selectedIndex, springs.gentle));
+    }
+  }
+
+  const highlightedIndex = scrubIndex ?? selectedIndex;
 
   const controls = (
     <View
+      ref={containerRef}
       style={[ui.segments, scroll && { alignSelf: "flex-start" }]}
-      onLayout={(e) => setContainerWidth(e.nativeEvent.layout.width)}
+      onLayout={(e) => {
+        if (!scroll) setContainerWidth(e.nativeEvent.layout.width);
+      }}
+      onTouchStart={!scroll ? (e) => {
+        startPageXRef.current = e.nativeEvent.pageX;
+        containerRef.current?.measureInWindow((x) => {
+          if (typeof x === "number") containerLeftRef.current = x;
+        });
+      } : undefined}
+      onMoveShouldSetResponderCapture={!scroll ? (e: GestureResponderEvent) =>
+        Math.abs(e.nativeEvent.pageX - startPageXRef.current) > 8
+      : undefined}
+      onResponderGrant={!scroll ? (e: GestureResponderEvent) => {
+        pillScale.set(reduceMotion ? 1 : withSpring(0.96, springs.snappy));
+        updateScrubFromPageX(e.nativeEvent.pageX);
+      } : undefined}
+      onResponderMove={!scroll ? (e: GestureResponderEvent) => {
+        updateScrubFromPageX(e.nativeEvent.pageX);
+      } : undefined}
+      onResponderRelease={!scroll ? finishScrub : undefined}
+      onResponderTerminate={!scroll ? finishScrub : undefined}
     >
       {!scroll && itemWidth > 0 && (
         <Animated.View
@@ -135,42 +238,64 @@ export function Segments<T extends string>({
           ]}
         ><LinearGradient colors={gradients.primary} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={StyleSheet.absoluteFill} /></Animated.View>
       )}
-      {items.map((item) => (
-        <Pressable
-          cssInterop={false}
-          key={item.value}
-          accessibilityRole="tab"
-          accessibilityState={{ selected: value === item.value }}
-          aria-selected={value === item.value}
-          onPress={() => onChange(item.value)}
-          style={({ pressed }) => [
-            ui.segment,
-            scroll ? { flexShrink: 0, paddingHorizontal: 16 } : { flex: 1 },
-            scroll && value === item.value && ui.segmentActive,
-            pressed && ui.pressed,
+      {scroll && activeLayout && (
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            ui.segmentPill,
+            scrollIndicatorStyle,
           ]}
-        >
-          {scroll && value === item.value && <LinearGradient pointerEvents="none" colors={gradients.primary} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={StyleSheet.absoluteFill} />}
-          <Text
-            style={[
-              ui.segmentLabel,
-              {
-                color: value === item.value ? colors.onAccent : colors.muted,
-                fontFamily: value === item.value ? fonts.heading : fonts.body,
-              },
+        ><LinearGradient colors={gradients.primary} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={StyleSheet.absoluteFill} /></Animated.View>
+      )}
+      {items.map((item, idx) => {
+        const isHighlighted = highlightedIndex === idx;
+        return (
+          <Pressable
+            cssInterop={false}
+            key={item.value}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: value === item.value }}
+            aria-selected={value === item.value}
+            onLayout={scroll ? (e) => {
+              const { x, width } = e.nativeEvent.layout;
+              setItemLayouts((prev) => {
+                const cur = prev[idx];
+                if (cur && Math.abs(cur.x - x) < 0.5 && Math.abs(cur.width - width) < 0.5) return prev;
+                return { ...prev, [idx]: { x, width } };
+              });
+            } : undefined}
+            onPress={() => onChange(item.value)}
+            style={({ pressed }) => [
+              ui.segment,
+              scroll ? { flexShrink: 0, paddingHorizontal: 16 } : { flex: 1 },
+              scroll && !activeLayout && value === item.value && ui.segmentActive,
+              pressed && ui.pressed,
             ]}
           >
-            {item.label}
-          </Text>
-        </Pressable>
-      ))}
+            {scroll && !activeLayout && value === item.value && <LinearGradient pointerEvents="none" colors={gradients.primary} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={StyleSheet.absoluteFill} />}
+            <Text
+              style={[
+                ui.segmentLabel,
+                {
+                  color: isHighlighted ? colors.onAccent : colors.muted,
+                  fontFamily: isHighlighted ? fonts.heading : fonts.body,
+                },
+              ]}
+            >
+              {item.label}
+            </Text>
+          </Pressable>
+        );
+      })}
     </View>
   );
   return scroll ? (
     <ScrollView
+      ref={scrollRef}
       horizontal
       showsHorizontalScrollIndicator={false}
       style={{ flexGrow: 0 }}
+      onLayout={(e) => setContainerWidth(e.nativeEvent.layout.width)}
     >
       {controls}
     </ScrollView>
@@ -322,6 +447,62 @@ export function Notice({ children }: { children: ReactNode }) {
     </View>
   );
 }
+
+const statusToneMap: Record<string, { bg: string; fg: string }> = {
+  OPEN: { bg: colors.mint, fg: colors.pinGreen },
+  CONFIRMED: { bg: colors.mint, fg: colors.pinGreen },
+  COMPLETED: { bg: colors.mint, fg: colors.pinGreen },
+  ACTIVE: { bg: colors.mint, fg: colors.pinGreen },
+  PENDING: { bg: colors.butter, fg: colors.amber },
+  TRANSFER_REPORTED: { bg: colors.butter, fg: colors.amber },
+  SUBMITTED: { bg: colors.butter, fg: colors.amber },
+  HOLDER_REPORTED: { bg: colors.butter, fg: colors.amber },
+  CLOSING: { bg: colors.butter, fg: colors.amber },
+  PENDING_CONFIRMATIONS: { bg: colors.butter, fg: colors.amber },
+  PAUSED: { bg: colors.butter, fg: colors.amber },
+  REJECTED: { bg: colors.peach, fg: colors.orange },
+  CANCELLED: { bg: colors.peach, fg: colors.orange },
+  REVERSED: { bg: colors.peach, fg: colors.orange },
+  STOPPED: { bg: colors.peach, fg: colors.orange },
+  EXPIRED: { bg: colors.peach, fg: colors.orange },
+  DRAFT: { bg: colors.tealSoft, fg: colors.teal },
+  WAIVED: { bg: colors.tealSoft, fg: colors.teal },
+  CLOSED: { bg: colors.fill, fg: colors.muted },
+};
+
+export function StatusBadge({ status, label }: { status: string; label?: string }) {
+  const tone = statusToneMap[status] ?? { bg: colors.tealSoft, fg: colors.teal };
+  return (
+    <View style={[ui.statusBadge, { backgroundColor: tone.bg }]}>
+      <Text style={[ui.statusBadgeText, { color: tone.fg }]}>{label ?? status}</Text>
+    </View>
+  );
+}
+
+export function FadeInView({ children, delay = 0 }: { children: ReactNode; delay?: number }) {
+  const { reduceMotion } = useAccessibilityPreferences();
+  const progress = useSharedValue(reduceMotion ? 1 : 0);
+  useEffect(() => {
+    if (reduceMotion) {
+      progress.set(1);
+      return;
+    }
+    progress.set(0);
+    const timer = delay > 0
+      ? setTimeout(() => { progress.set(withTiming(1, { duration: 220, easing: Easing.out(Easing.cubic) })); }, delay)
+      : undefined;
+    if (!delay) progress.set(withTiming(1, { duration: 220, easing: Easing.out(Easing.cubic) }));
+    return () => {
+      if (timer) clearTimeout(timer);
+      cancelAnimation(progress);
+    };
+  }, [delay, progress, reduceMotion]);
+  const animatedStyle = useAnimatedStyle(() => ({
+    opacity: progress.get(),
+    transform: [{ translateY: (1 - progress.get()) * 8 }],
+  }));
+  return <Animated.View style={[ui.stack, animatedStyle]}>{children}</Animated.View>;
+}
 export function Progress({ done, total }: { done: number; total: number }) {
   const { reduceMotion } = useAccessibilityPreferences();
   const percent = total > 0 ? Math.max(0, Math.min(100, (done / total) * 100)) : 0;
@@ -466,10 +647,35 @@ export const ui = StyleSheet.create({
   // Reading content stays on the page; reserve cards for bounded form/selection surfaces.
   section: { gap: 12, paddingVertical: 4 },
   record: {
-    gap: 12,
-    paddingVertical: 18,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.line,
+    gap: 10,
+    padding: 18,
+    borderRadius: radii.card,
+    backgroundColor: colors.surface,
+    ...shadows.glass,
+  },
+  recordHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  actionRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 4,
+  },
+  statusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: radii.pill,
+    alignSelf: "flex-start",
+  },
+  statusBadgeText: {
+    fontFamily: fonts.bold,
+    fontSize: 12,
+    lineHeight: 16,
   },
   card: {
     padding: 20,

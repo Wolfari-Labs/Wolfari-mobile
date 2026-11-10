@@ -10,11 +10,13 @@ import { Button } from "@/shared/ui/button";
 import { Feedback } from "@/shared/ui/feedback";
 import {
   EmptyState,
+  FadeInView,
   Heading,
   IconButton,
   ResourceFeedback,
   SectionLink,
   Segments,
+  StatusBadge,
   ui,
 } from "@/shared/ui/journal";
 import { Screen } from "@/shared/ui/screen";
@@ -109,33 +111,37 @@ export default function MembersScreen() {
       />
       <Segments items={[{ value: "active", label: "Đang tham gia" }, { value: "all", label: "Cả lịch sử" }]} value={includeLeft ? "all" : "active"} onChange={value => setIncludeLeft(value === "all")} />
       {members.data?.map((member) => (
-        <View key={member.id} style={ui.link}>
-          <View style={ui.rowIcon}>
-            <Text style={[typography.body, { color: colors.teal }]}>
-              {member.user_id === profile?.id
-                ? profile.full_name.charAt(0)
-                : (member.display_name?.trim().charAt(0) || "W")}
-            </Text>
+        <FadeInView key={member.id}>
+          <View style={ui.record}>
+            <View style={ui.row}>
+              <View style={ui.rowBadge}>
+                <Text style={[typography.headline, { color: colors.teal }]}>
+                  {member.user_id === profile?.id
+                    ? profile.full_name.charAt(0)
+                    : (member.display_name?.trim().charAt(0) || "W")}
+                </Text>
+              </View>
+              <View style={ui.flex}>
+                <Text style={typography.headline}>
+                  {member.user_id === profile?.id
+                    ? `${profile.full_name} · Bạn`
+                    : memberName(member)}
+                </Text>
+                <Text style={[typography.footnote, { marginTop: 2 }]}>
+                  {member.role === "OWNER" ? "Người tổ chức" : "Thành viên"} · Tham
+                  gia {dateLabel(member.joined_at)}
+                  {member.left_at ? ` · Đã rời ${dateLabel(member.left_at)}` : ""}
+                </Text>
+              </View>
+              {member.role === "OWNER" ? (
+                <StatusBadge status="OPEN" label="Chủ nhóm" />
+              ) : member.left_at ? (
+                <StatusBadge status="CLOSED" label="Đã rời" />
+              ) : null}
+            </View>
+            {canManage && member.role === "MEMBER" && !member.left_at && <Button label="Xóa khỏi nhóm" accessibilityLabel={`Xóa ${member.user_id.slice(0, 8)}`} variant="destructive" compact style={{ alignSelf: "flex-start" }} onPress={() => router.push({ pathname: "/trip/[id]/membership-action", params: { id, memberId: member.id } })} />}
           </View>
-          <View style={ui.flex}>
-            <Text style={typography.headline}>
-              {member.user_id === profile?.id
-                ? `${profile.full_name} · Bạn`
-                : memberName(member)}
-            </Text>
-            <Text style={[typography.footnote, { marginTop: 4 }]}>
-              {member.role === "OWNER" ? "Người tổ chức" : "Thành viên"} · Tham
-              gia {dateLabel(member.joined_at)}
-              {member.left_at ? ` · Đã rời ${dateLabel(member.left_at)}` : ""}
-            </Text>
-            {canManage && member.role === "MEMBER" && !member.left_at && <Button label="Xóa khỏi nhóm" accessibilityLabel={`Xóa ${member.user_id.slice(0, 8)}`} variant="destructive" compact style={{ alignSelf: "flex-start", marginTop: 8 }} onPress={() => router.push({ pathname: "/trip/[id]/membership-action", params: { id, memberId: member.id } })} />}
-          </View>
-          {member.role === "OWNER" && (
-            <Text style={[typography.footnote, { color: colors.teal }]}>
-              Chủ nhóm
-            </Text>
-          )}
-        </View>
+        </FadeInView>
       ))}
       {members.data && !members.data.length && (
         <EmptyState

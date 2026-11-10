@@ -26,7 +26,7 @@ export const VIETQR_BANKS: readonly { code: string; bin: string }[] = [
 
 export function resolveVietQrBank(input: string) {
   const value = input.trim().toUpperCase();
-  return value ? VIETQR_BANKS.find(bank => bank.code === value || bank.bin === value) : undefined;
+  return value ? VIETQR_BANKS.find(bank => bank.code.toUpperCase() === value || bank.bin === value) : undefined;
 }
 
 /** Backend QuickLink accepts 1..19 ASCII letters/digits for the account. */

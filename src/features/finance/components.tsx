@@ -1,12 +1,26 @@
 import { useState, type ReactNode } from 'react';
-import { Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { Button } from '../../shared/ui/button';
 import { FormField } from '../../shared/ui/form-field';
-import { Notice, Segments, ui } from '../../shared/ui/journal';
+import { FadeInView, Notice, Segments, ui } from '../../shared/ui/journal';
 import { Sheet } from '../../shared/ui/sheet';
-import { typography } from '../../shared/theme/tokens';
+import { colors, typography } from '../../shared/theme/tokens';
+import { moneyLabel } from './extended-model';
 import type { useFinanceCommand } from './use-finance-command';
 import { ReceiptField } from './receipt-field';
+
+const QUICK_AMOUNTS = [
+  { label: '100k', value: '100000' },
+  { label: '200k', value: '200000' },
+  { label: '500k', value: '500000' },
+  { label: '1tr', value: '1000000' },
+] as const;
+
+function previewVnd(raw?: string): string | undefined {
+  const clean = raw?.trim() ?? '';
+  if (!/^\d{1,19}$/.test(clean)) return undefined;
+  try { return moneyLabel(clean); } catch { return undefined; }
+}
 export type Field = {
   key: string;
   label: string;
@@ -66,18 +80,62 @@ export function ActionSheet({ form, close }: { form: ActionForm; close: () => vo
               />
             </View>
           ) : (
-            <FormField
-              key={field.key}
-              label={field.label}
-              icon={field.numeric ? 'wallet' : 'edit'}
-              value={values[field.key]}
-              placeholder={field.placeholder}
-              keyboardType={field.numeric ? 'number-pad' : 'default'}
-              autoCapitalize="none"
-              multiline={field.multiline}
-              editable={!busy}
-              onChangeText={(v) => setValues((s) => ({ ...s, [field.key]: v }))}
-            />
+            <View key={field.key} style={{ gap: 8 }}>
+              <FormField
+                label={field.label}
+                icon={field.numeric ? 'wallet' : 'edit'}
+                value={values[field.key]}
+                placeholder={field.placeholder}
+                keyboardType={field.numeric ? 'number-pad' : 'default'}
+                autoCapitalize="none"
+                multiline={field.multiline}
+                editable={!busy}
+                onChangeText={(v) => setValues((s) => ({ ...s, [field.key]: v }))}
+              />
+              {field.numeric && (
+                <>
+                  {previewVnd(values[field.key]) && (
+                    <Text style={[typography.footnote, { color: colors.teal }]}>
+                      Định dạng: {previewVnd(values[field.key])}
+                    </Text>
+                  )}
+                  <View style={ui.actionRow}>
+                    {QUICK_AMOUNTS.map((preset) => (
+                      <Pressable
+                        key={preset.value}
+                        disabled={busy}
+                        onPress={() => setValues((s) => ({ ...s, [field.key]: preset.value }))}
+                        style={({ pressed }) => [
+                          {
+                            paddingHorizontal: 12,
+                            paddingVertical: 6,
+                            borderRadius: 999,
+                            backgroundColor:
+                              values[field.key] === preset.value ? colors.mint : colors.fill,
+                            borderWidth: 1,
+                            borderColor:
+                              values[field.key] === preset.value ? colors.pinGreen : colors.line,
+                          },
+                          pressed && { opacity: 0.7 },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            typography.footnote,
+                            {
+                              color:
+                                values[field.key] === preset.value ? colors.pinGreen : colors.ink,
+                            },
+                          ]}
+                        >
+                          {preset.label}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </>
+              )}
+            </View>
           ),
         )}
         {!!error && <Notice>{error}</Notice>}
@@ -100,11 +158,9 @@ export function CommandFeedback({ command }: { command: ReturnType<typeof useFin
       {command.pending && (
         <View style={ui.card}>
           <Text style={typography.headline}>Yêu cầu chưa có kết quả cuối</Text>
-          <Text selectable style={typography.body}>
-            {command.pending.label} · {command.pending.key}
-          </Text>
+          <Text style={typography.body}>{command.pending.label}</Text>
           <Text style={typography.footnote}>
-            Giữ nguyên nội dung và mã yêu cầu khi gửi lại. Không tạo giao dịch thay thế.
+            Giữ nguyên nội dung yêu cầu khi gửi lại. Không tạo giao dịch thay thế.
           </Text>
           <Button
             label="Gửi lại yêu cầu đã lưu"
@@ -148,12 +204,17 @@ export function CommandFeedback({ command }: { command: ReturnType<typeof useFin
     </>
   );
 }
-export function Card({ title, children }: { title: string; children: ReactNode }) {
+export function Card({ title, right, children }: { title: string; right?: ReactNode; children: ReactNode }) {
   return (
-    <View style={ui.card}>
-      <Text style={typography.headline}>{title}</Text>
-      {children}
-    </View>
+    <FadeInView>
+      <View style={ui.card}>
+        <View style={ui.recordHeader}>
+          <Text style={typography.headline}>{title}</Text>
+          {right}
+        </View>
+        {children}
+      </View>
+    </FadeInView>
   );
 }
 export function Line({ children }: { children: ReactNode }) {

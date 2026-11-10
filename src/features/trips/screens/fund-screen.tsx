@@ -11,8 +11,9 @@ import {
 } from '@/features/finance/history-labels';
 import { useApi } from '@/shared/api/use-api';
 import { useResource } from '@/shared/hooks/use-resource';
+import { View } from 'react-native';
 import { Button } from '@/shared/ui/button';
-import { Heading, Notice, ResourceFeedback, Segments } from '@/shared/ui/journal';
+import { Heading, Notice, ResourceFeedback, Segments, StatusBadge, ui } from '@/shared/ui/journal';
 import { Screen } from '@/shared/ui/screen';
 import { Sheet } from '@/shared/ui/sheet';
 import { ActionSheet, Card, Line, type ActionForm, type Field } from '../../finance/components';
@@ -212,8 +213,8 @@ function FundTools({ id, userId }: { id: string; userId: string }) {
     );
     setLoadingMore(false);
   }
-  const btn = (label: string, onPress: () => void, inactive = disabled) => (
-    <Button key={label} label={label} variant="soft" disabled={inactive} onPress={onPress} />
+  const btn = (label: string, onPress: () => void, inactive = disabled, compact = false) => (
+    <Button key={label} label={label} compact={compact} variant="soft" disabled={inactive} onPress={onPress} />
   );
   const lookupAttempt = (message: string) =>
     setForm({
@@ -314,12 +315,12 @@ function FundTools({ id, userId }: { id: string; userId: string }) {
                   ),
                 )}
               {(items as FinanceCollections['notes'][]).map((n) => (
-                <Card key={n.id} title={n.description}>
+                <Card key={n.id} title={n.description} right={<StatusBadge status="DRAFT" label={moneyLabel(n.amount)} />}>
                   <Line>
                     {moneyLabel(n.amount)} · {who(n.created_by_user_id)}
                   </Line>
                   {fund.status === 'OPEN' && (owner || n.created_by_user_id === userId) && (
-                    <>
+                    <View style={ui.actionRow}>
                       {btn('Sửa khoản ngoài quỹ', () =>
                         open(
                           'Sửa khoản ngoài quỹ',
@@ -335,11 +336,15 @@ function FundTools({ id, userId }: { id: string; userId: string }) {
                             ...version(n),
                           }),
                         ),
+                        disabled,
+                        true,
                       )}
                       {btn('Xóa khoản ngoài quỹ', () =>
                         action('Xóa khoản ngoài quỹ', `/notes/${n.id}`, version(n), false, 'DELETE'),
+                        disabled,
+                        true,
                       )}
-                    </>
+                    </View>
                   )}
                 </Card>
               ))}
@@ -347,7 +352,7 @@ function FundTools({ id, userId }: { id: string; userId: string }) {
           )}
           {tab === 'history' &&
             (items as FinanceCollections['history'][]).map((h) => (
-              <Card key={h.id} title={historyActionLabel(h.action)}>
+              <Card key={h.id} title={historyActionLabel(h.action)} right={<StatusBadge status="DRAFT" label={historyEntityLabel(h.entity_type)} />}>
                 <Line>
                   {historyActorLabel(h, who)} · {historyTimeLabel(h.occurred_at, trip?.timezone)}
                 </Line>
@@ -378,31 +383,36 @@ function FundTools({ id, userId }: { id: string; userId: string }) {
                   {d.confirmed_by_holder_at ? 'Người giữ quỹ đã xác nhận' : 'Chưa xác nhận'}
                 </Line>
               ))}
-              {owner &&
-                fund.status === 'OPEN' &&
-                btn('Thêm nơi nhận MoMo Sandbox', () =>
-                  open(
-                    'Thêm nơi nhận MoMo Sandbox',
-                    `/funds/${fund.id}/destinations`,
-                    'POST',
-                    [{ key: 'momo_phone', label: 'Số điện thoại MoMo Sandbox' }],
-                    (v) => ({
-                      destination_type: 'MOMO_SANDBOX',
-                      momo_phone: required(v.momo_phone, 30),
-                      active: true,
-                      is_default: false,
-                      ...version(),
-                    }),
-                    'Người giữ quỹ cần xác nhận nơi nhận này ở màn Quỹ nhóm trước khi dùng.',
-                  ),
+              <View style={ui.actionRow}>
+                {owner &&
+                  fund.status === 'OPEN' &&
+                  btn('Thêm nơi nhận MoMo Sandbox', () =>
+                    open(
+                      'Thêm nơi nhận MoMo Sandbox',
+                      `/funds/${fund.id}/destinations`,
+                      'POST',
+                      [{ key: 'momo_phone', label: 'Số điện thoại MoMo Sandbox' }],
+                      (v) => ({
+                        destination_type: 'MOMO_SANDBOX',
+                        momo_phone: required(v.momo_phone, 30),
+                        active: true,
+                        is_default: false,
+                        ...version(),
+                      }),
+                      'Người giữ quỹ cần xác nhận nơi nhận này ở màn Quỹ nhóm trước khi dùng.',
+                    ),
+                    disabled,
+                    true,
+                  )}
+                {btn(
+                  'Tra cứu lần thanh toán của tôi',
+                  () => lookupAttempt('Mã lần thanh toán được trả về khi tạo MoMo Sandbox.'),
+                  command.busy,
+                  true,
                 )}
-              {btn(
-                'Tra cứu lần thanh toán của tôi',
-                () => lookupAttempt('Mã lần thanh toán được trả về khi tạo MoMo Sandbox.'),
-                command.busy,
-              )}
+              </View>
               {momoContributions.map((c) => (
-                <Card key={c.id} title={`${moneyLabel(c.amount)} · Khoản của bạn`}>
+                <Card key={c.id} title={`${moneyLabel(c.amount)} · Khoản của bạn`} right={<StatusBadge status={c.status} label={statusLabel[c.status]} />}>
                   <Line>{statusLabel[c.status]}</Line>
                   {writable &&
                     fund.status === 'OPEN' &&
@@ -415,6 +425,8 @@ function FundTools({ id, userId }: { id: string; userId: string }) {
                         () => ({ provider: 'MOMO_SANDBOX', ...version(c) }),
                         'Chỉ MoMo Sandbox. Nếu nơi nhận hoặc provider chưa sẵn sàng, server sẽ từ chối; app không tự ghi nhận tiền.',
                       ),
+                      disabled,
+                      true,
                     )}
                 </Card>
               ))}
@@ -430,52 +442,62 @@ function FundTools({ id, userId }: { id: string; userId: string }) {
                       'Nhập mã lần thanh toán đã được server trả về. Chỉ người thanh toán/người giữ quỹ được đọc.',
                     ),
                   command.busy,
+                  true,
                 )}
                 {(items as FinanceCollections['payment-exceptions'][]).map((p) => (
-                  <Card key={p.id} title={p.processing_status}>
+                  <Card
+                    key={p.id}
+                    title={p.reviewed_at ? 'Ngoại lệ đã xử lý' : 'Ngoại lệ thanh toán cần xử lý'}
+                    right={<StatusBadge status={p.reviewed_at ? 'CONFIRMED' : 'PENDING'} label={p.reviewed_at ? 'Đã đối soát' : 'Cần xử lý'} />}
+                  >
                     <Line>
                       {p.review_reason ?? 'Chưa có lý do'} ·{' '}
                       {historyTimeLabel(p.received_at, trip?.timezone)}
                     </Line>
-                    {p.payment_attempt_id &&
-                      btn(
-                        'Xem lần thanh toán',
-                        () => {
-                          void read(() => api.finance.attempt(p.payment_attempt_id!), setAttempt);
-                        },
-                        command.busy,
-                      )}
-                    {holder &&
-                      !p.reviewed_at &&
-                      btn('Xử lý ngoại lệ thanh toán', () =>
-                        open(
-                          'Xử lý ngoại lệ thanh toán',
-                          `/payment-exceptions/${p.id}/resolve`,
-                          'POST',
-                          [
-                            {
-                              key: 'resolution',
-                              label: 'Kết luận sau đối soát',
-                              value: 'NO_FINANCIAL_EFFECT',
-                              options: [
-                                { value: 'NO_FINANCIAL_EFFECT', label: 'Không ảnh hưởng tài chính' },
-                                { value: 'LINKED', label: 'Liên kết lần thanh toán' },
-                              ],
-                            },
-                            { key: 'linked_attempt_id', label: 'Mã lần thanh toán (nếu liên kết)' },
-                            reasonField,
-                          ],
-                          (v) => ({
-                            resolution: v.resolution,
-                            ...(v.resolution === 'LINKED'
-                              ? { linked_attempt_id: required(v.linked_attempt_id) }
-                              : {}),
-                            reason: required(v.reason),
-                            ...version(),
-                          }),
-                          'Chỉ kết luận sau khi kiểm tra dữ liệu Sandbox. Không suy đoán giao dịch đã thành công.',
-                        ),
-                      )}
+                    <View style={ui.actionRow}>
+                      {p.payment_attempt_id &&
+                        btn(
+                          'Xem lần thanh toán',
+                          () => {
+                            void read(() => api.finance.attempt(p.payment_attempt_id!), setAttempt);
+                          },
+                          command.busy,
+                          true,
+                        )}
+                      {holder &&
+                        !p.reviewed_at &&
+                        btn('Xử lý ngoại lệ thanh toán', () =>
+                          open(
+                            'Xử lý ngoại lệ thanh toán',
+                            `/payment-exceptions/${p.id}/resolve`,
+                            'POST',
+                            [
+                              {
+                                key: 'resolution',
+                                label: 'Kết luận sau đối soát',
+                                value: 'NO_FINANCIAL_EFFECT',
+                                options: [
+                                  { value: 'NO_FINANCIAL_EFFECT', label: 'Không ảnh hưởng tài chính' },
+                                  { value: 'LINKED', label: 'Liên kết lần thanh toán' },
+                                ],
+                              },
+                              { key: 'linked_attempt_id', label: 'Mã lần thanh toán (nếu liên kết)' },
+                              reasonField,
+                            ],
+                            (v) => ({
+                              resolution: v.resolution,
+                              ...(v.resolution === 'LINKED'
+                                ? { linked_attempt_id: required(v.linked_attempt_id) }
+                                : {}),
+                              reason: required(v.reason),
+                              ...version(),
+                            }),
+                            'Chỉ kết luận sau khi kiểm tra dữ liệu Sandbox. Không suy đoán giao dịch đã thành công.',
+                          ),
+                          disabled,
+                          true,
+                        )}
+                    </View>
                   </Card>
                 ))}
               </>
@@ -499,9 +521,7 @@ function FundTools({ id, userId }: { id: string; userId: string }) {
       {form && <ActionSheet form={form} close={() => setForm(undefined)} />}
       {activeAttempt && (
         <Sheet visible title="Thanh toán MoMo Sandbox" onClose={closeAttempt}>
-          <Line>
-            {activeAttempt.id} · {activeAttempt.status}
-          </Line>
+          <Line>{statusLabel[activeAttempt.status] ?? activeAttempt.status}</Line>
           <Line>{moneyLabel(activeAttempt.amount)}</Line>
           <Button
             label="Sao chép mã lần thanh toán"

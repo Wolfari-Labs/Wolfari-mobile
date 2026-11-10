@@ -21,14 +21,13 @@ export function ClosureSheet({ closureId, owner, userId, who, writable, onClose,
     <ResourceFeedback {...resource} hasData={!!row} onRetry={() => { void resource.reload(); }} />
     {row && <>
       <Text style={typography.headline}>{statusLabels[row.status]}</Text>
-      <Text selectable style={typography.footnote}>Mã bản chốt: {row.snapshot_hash}</Text>
       <Text style={typography.body}>Số dư bản chốt: {money(row.snapshot.fund.current_balance)}</Text>
       <Text style={typography.body}>Phiên bản bản chốt: {row.snapshot_finance_version}</Text>
       {row.confirmations.map(item => <Text key={item.user_id} style={typography.body}>{who(item.user_id)} · {item.confirmed_at ? "Đã xác nhận" : "Chưa xác nhận"}</Text>)}
       <Notice>Bản chốt là dữ liệu cố định tại thời điểm yêu cầu đóng, không phải số dư được tính lại trên điện thoại.</Notice>
       <Button label={expanded ? "Thu gọn bản chốt" : "Xem toàn bộ bản chốt"} variant="soft" onPress={() => setExpanded(!expanded)} />
       {expanded && <View style={ui.stack}>
-        {([ ["contribution_requests", "Yêu cầu đóng góp"], ["contributions", "Đóng góp"], ["expenses", "Khoản chi"], ["financial_notes", "Khoản ngoài quỹ"], ["refunds", "Hoàn tiền"], ["ledger", "Sổ giao dịch"] ] as const).map(([key, label]) => <SnapshotSection key={key} label={label} rows={row.snapshot[key]} />)}
+        {([ ["contribution_requests", "Yêu cầu đóng góp"], ["contributions", "Đóng góp"], ["expenses", "Khoản chi"], ["financial_notes", "Khoản ngoài quỹ"], ["refunds", "Hoàn tiền"], ["ledger", "Sổ giao dịch"] ] as const).map(([key, label]) => <SnapshotSection key={key} label={label} rows={row.snapshot[key]} who={who} />)}
       </View>}
       {row.status === "PENDING_CONFIRMATIONS" && writable && <>
         {row.confirmations.some(item => item.user_id === userId && !item.confirmed_at) && <Button label="Xác nhận bản chốt này" onPress={() => onAction(row, "confirm")} />}
@@ -41,11 +40,13 @@ export function ClosureSheet({ closureId, owner, userId, who, writable, onClose,
   </Sheet>;
 }
 
-function SnapshotSection({ label, rows }: { label: string; rows: Record<string, unknown>[] }) {
+const txLabels: Record<string, string> = { CONTRIBUTION: "Đóng góp", EXPENSE: "Khoản chi", REFUND: "Hoàn tiền", REVERSAL: "Bút toán đảo" };
+
+function SnapshotSection({ label, rows, who }: { label: string; rows: Record<string, unknown>[]; who(userId: string): string }) {
   const [page, setPage] = useState(0);
   return <View style={ui.stack}>
     <Text style={typography.headline}>{label} · {rows.length}</Text>
-    {rows.slice(page * 20, (page + 1) * 20).map((entry, index) => <SnapshotRow key={String(entry.id ?? index)} entry={entry} />)}
+    {rows.slice(page * 20, (page + 1) * 20).map((entry, index) => <SnapshotRow key={String(entry.id ?? index)} entry={entry} who={who} />)}
     {rows.length > 20 && <>
       <Text style={typography.footnote}>Trang {page + 1}/{Math.ceil(rows.length / 20)}</Text>
       {page > 0 && <Button label={`Trang trước · ${label}`} compact variant="soft" onPress={() => setPage(page - 1)} />}
@@ -54,14 +55,15 @@ function SnapshotSection({ label, rows }: { label: string; rows: Record<string, 
   </View>;
 }
 
-function SnapshotRow({ entry }: { entry: Record<string, unknown> }) {
-  const [expanded, setExpanded] = useState(false);
+function SnapshotRow({ entry, who }: { entry: Record<string, unknown>; who(userId: string): string }) {
+  const txType = typeof entry.transaction_type === "string" ? txLabels[entry.transaction_type] ?? entry.transaction_type : undefined;
+  const member = typeof entry.member_user_id === "string" ? who(entry.member_user_id) : undefined;
+  const primary = String(entry.title ?? entry.description ?? entry.reason ?? txType ?? member ?? "Bản ghi");
   return <View style={ui.card}>
-    <Text style={typography.body}>{String(entry.title ?? entry.description ?? entry.transaction_type ?? entry.id)}</Text>
+    <Text style={typography.body}>{primary}</Text>
     {typeof entry.amount === "string" && <Text style={typography.headline}>{money(entry.amount)}</Text>}
+    {member && primary !== member && <Text style={typography.footnote}>{member}</Text>}
     {typeof entry.status === "string" && <Text style={typography.footnote}>{statusLabels[entry.status] ?? entry.status}</Text>}
     {typeof entry.direction === "string" && <Text style={typography.footnote}>{entry.direction === "IN" ? "Thu" : "Chi"} · Số dư sau: {money(String(entry.balance_after))}</Text>}
-    <Button label="Chi tiết bản ghi" accessibilityLabel={`Chi tiết bản ghi ${String(entry.id)}`} compact variant="soft" onPress={() => setExpanded(!expanded)} />
-    {expanded && <Text selectable style={typography.footnote}>{JSON.stringify(entry, null, 2)}</Text>}
   </View>;
 }
