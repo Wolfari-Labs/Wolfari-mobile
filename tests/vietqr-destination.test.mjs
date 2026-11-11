@@ -9,6 +9,10 @@ import { makeQr } from "./fixtures/payment-qr.mjs";
 test("bank directory resolves code or BIN like the backend, failing closed", () => {
   assert.deepEqual(resolveVietQrBank(" vcb "), { code: "VCB", bin: "970436" });
   assert.equal(resolveVietQrBank("970436")?.code, "VCB");
+  assert.deepEqual(resolveVietQrBank("KBank"), { code: "KBank", bin: "668888" });
+  assert.deepEqual(resolveVietQrBank("ubank"), { code: "Ubank", bin: "546035" });
+  assert.deepEqual(resolveVietQrBank("VIKKI"), { code: "Vikki", bin: "970406" });
+  assert.deepEqual(resolveVietQrBank("momo"), { code: "momo", bin: "971025" });
   assert.equal(resolveVietQrBank("XYZ"), undefined);
   assert.equal(resolveVietQrBank(""), undefined);
   assert.equal(new Set(VIETQR_BANKS.map(bank => bank.code)).size, VIETQR_BANKS.length);
@@ -25,6 +29,9 @@ test("mobile bank directory mirrors the sibling backend list when available", as
 test("destination input normalizes bank code and enforces the QuickLink account rule", () => {
   assert.deepEqual(bankInput({ bank_code: "970436", account_number: "0012 345 678", account_name: "TEST ACCOUNT" }),
     { destination_type: "VIETQR", bank_code: "VCB", account_number: "0012345678", account_name: "TEST ACCOUNT", active: true, is_default: true });
+  // Mixed-case directory codes normalize to BIN so the backend's uppercase/BIN lookup succeeds.
+  assert.deepEqual(bankInput({ bank_code: "KBank", account_number: "0012345678", account_name: "TEST ACCOUNT" }),
+    { destination_type: "VIETQR", bank_code: "668888", account_number: "0012345678", account_name: "TEST ACCOUNT", active: true, is_default: true });
   assert.throws(() => bankInput({ bank_code: "XYZ", account_number: "1", account_name: "A" }), /danh mục VietQR/);
   assert.throws(() => bankInput({ bank_code: "VCB", account_number: "12345678901234567890", account_name: "A" }), /19 ký tự/);
   assert.throws(() => bankInput({ bank_code: "VCB", account_number: "12-34", account_name: "A" }), /19 ký tự/);
@@ -35,6 +42,9 @@ test("a receiving account VietQR fills destination fields; unknown BINs are refu
   const read = (qr) => { const result = parsePaymentQr(qr); assert.equal(result.ok, true); return result.payment; };
   assert.deepEqual(destinationFromQr(read(makeQr({ bin: "970436", account: "0012345678", recipient: "NGUYEN VAN A" }))),
     { bank_code: "VCB", account_number: "0012345678", account_name: "NGUYEN VAN A" });
+  const kbankFilled = destinationFromQr(read(makeQr({ bin: "668888", account: "0012345678", recipient: "KBANK HOLDER" })));
+  assert.deepEqual(kbankFilled, { bank_code: "KBank", account_number: "0012345678", account_name: "KBANK HOLDER" });
+  assert.equal(bankInput(kbankFilled).bank_code, "668888");
   assert.deepEqual(destinationFromQr(read(makeQr({ bin: "970436", account: "0012345678" }))), { bank_code: "VCB", account_number: "0012345678" });
   assert.throws(() => destinationFromQr(read(makeQr({ bin: "999999" }))), /BIN 999999/);
 });

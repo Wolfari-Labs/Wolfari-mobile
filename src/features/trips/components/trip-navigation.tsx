@@ -8,5 +8,5 @@ export function openTrip(id: string, section: TripSection = "overview") {
   router.navigate({ pathname: routes[section], params: { id } });
 }
 export function TripNavigation({ id, active }: { id: string; active: TripSection }) {
-  return <Segments items={[{ value: "overview", label: "Tổng quan" }, { value: "itinerary", label: "Lịch trình" }, { value: "places", label: "Bản đồ" }, { value: "tools", label: "Tiện ích" }]} value={active} onChange={section => openTrip(id, section)} />;
+  return <Segments memoryKey={`trip-nav:${id}`} items={[{ value: "overview", label: "Tổng quan" }, { value: "itinerary", label: "Lịch trình" }, { value: "places", label: "Bản đồ" }, { value: "tools", label: "Tiện ích" }]} value={active} onChange={section => openTrip(id, section)} />;
 }

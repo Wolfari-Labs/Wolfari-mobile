@@ -46,7 +46,7 @@ export function operationMessage(receipt?: OperationReceipt) {
   if (code === "FINANCE_OBLIGATION_BLOCKED") return "Chưa thể rời hoặc xóa thành viên: cần xử lý giao dịch đang chờ, hoàn tiền hoặc quỹ đang giữ. Khoản PENDING đủ điều kiện sẽ được máy chủ miễn; lịch sử tiền được giữ nguyên.";
   if (code === "VERSION_CONFLICT") return "Dữ liệu quỹ hoặc thành viên đã thay đổi. Tải lại rồi kiểm tra trước khi gửi yêu cầu mới.";
   if (code === "STATE_CONFLICT") return "Trạng thái chưa cho phép thao tác: kiểm tra số dư khả dụng, giao dịch đang chờ, phiên đóng quỹ và cấu hình backend.";
-  if (receipt.operation?.state === "NEEDS_REVIEW") return "Yêu cầu cần bộ phận vận hành kiểm tra. Giữ mã yêu cầu; không tạo yêu cầu khác.";
+  if (receipt.operation?.state === "NEEDS_REVIEW") return "Yêu cầu cần bộ phận vận hành kiểm tra. Giữ nguyên yêu cầu này; không tạo yêu cầu khác.";
   if (operationTerminal(receipt)) return "Yêu cầu không được ghi nhận thành công. Tải lại dữ liệu trước khi thực hiện thao tác khác.";
   if (receipt.operation) return "Máy chủ đang xử lý. Chưa xác nhận thành công; app sẽ kiểm tra lại khi màn hình đang mở.";
   return "Chưa xác định được kết quả. Kiểm tra trạng thái hoặc gửi lại cùng yêu cầu; không tạo yêu cầu mới.";

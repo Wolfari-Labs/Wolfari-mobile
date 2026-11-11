@@ -7,6 +7,7 @@ import {
   calendarLabel,
   isTripDay,
   lastTripDay,
+  tripDates,
   tripDays,
 } from "../src/features/trips/utils.ts";
 
@@ -40,4 +41,13 @@ test("an end at local midnight does not add a trip day", () => {
   assert.equal(isTripDay("2026-11-03", trip), false);
   assert.equal(isTripDay("2026-10-31", trip), false);
   assert.equal(isTripDay("01/11/2026", trip), false);
+});
+
+test("trip date label shows the last covered day, matching web (end_at - 1 ms)", () => {
+  // Web-created: exclusive end at next-day 00:00 local.
+  assert.equal(tripDates(trip), "01/11/2026 – 02/11/2026");
+  // Mobile-created: end at 23:59 of the last day shows the same day.
+  assert.equal(tripDates({ ...trip, end_at: "2026-11-02T16:59:00Z" }), "01/11/2026 – 02/11/2026");
+  // Never shows a day before the start.
+  assert.equal(tripDates({ ...trip, end_at: trip.start_at }), "01/11/2026 – 01/11/2026");
 });

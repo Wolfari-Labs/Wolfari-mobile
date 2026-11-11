@@ -4,7 +4,8 @@ export const lifecycleLabels = { UPCOMING: "Sắp tới", ONGOING: "Đang đi", 
 export function dateLabel(value: string, timezone = "Asia/Ho_Chi_Minh") {
   return new Intl.DateTimeFormat("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: timezone }).format(new Date(value));
 }
-export function tripDates(trip: Trip) { return `${dateLabel(trip.start_at, trip.timezone)} – ${dateLabel(trip.end_at, trip.timezone)}`; }
+// end_at is exclusive (web stores next-day 00:00), so show the last day the trip covers, like web does (end_at - 1 ms).
+export function tripDates(trip: Trip) { return `${dateLabel(trip.start_at, trip.timezone)} – ${calendarLabel(lastTripDay(trip))}`; }
 export function dateKey(value: string, timezone: string) {
   const parts = new Intl.DateTimeFormat("en-CA", { year: "numeric", month: "2-digit", day: "2-digit", timeZone: timezone }).formatToParts(new Date(value));
   const part = (key: string) => parts.find(p => p.type === key)?.value;

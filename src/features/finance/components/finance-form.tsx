@@ -10,10 +10,28 @@ import { Button } from "@/shared/ui/button";
 import { Feedback } from "@/shared/ui/feedback";
 import { FormField } from "@/shared/ui/form-field";
 import { DateTimeField } from "@/shared/ui/date-time-field";
-import { Notice, ui } from "@/shared/ui/journal";
+import { FadeInView, Notice, StatusBadge, ui } from "@/shared/ui/journal";
 import { Sheet } from "@/shared/ui/sheet";
 import type { PaymentQr } from "@/features/payments/model/payment-qr";
+import { money } from "../model";
+import { resolveVietQrBank } from "../vietqr-banks";
 import { QrFill } from "./qr-fill";
+
+const POPULAR_BANKS = ["VCB", "TCB", "MB", "ACB", "BIDV", "ICB", "VPB", "TPB", "STB", "VIB"] as const;
+const QUICK_AMOUNTS = [
+  { label: "100k", value: "100000" },
+  { label: "200k", value: "200000" },
+  { label: "500k", value: "500000" },
+  { label: "1tr", value: "1000000" },
+  { label: "2tr", value: "2000000" },
+] as const;
+
+function moneyPreview(raw?: string): string | undefined {
+  const clean = raw?.trim() ?? "";
+  if (!/^\d{1,19}$/.test(clean)) return undefined;
+  const canonical = clean.replace(/^0+/, "") || "0";
+  return money(canonical);
+}
 
 export type FormValues = Record<string, string>;
 export type FinanceFormSpec = {
@@ -99,10 +117,10 @@ export function FinanceForm({ spec, busy, onSubmit, onClose }: {
       }} />
       : <Button label={spec.scan.label} icon="wallet" variant="soft" disabled={disabled} onPress={() => { setFilled(false); setScanning(true); }} />)}
     {filled && !prepared && <Feedback success message="Đã điền từ VietQR. Kiểm tra lại từng trường trước khi tiếp tục." />}
-    {spec.fields?.map(field => prepared ? <View key={field.key} style={ui.stack}>
+    {spec.fields?.map(field => prepared ? <FadeInView key={field.key}>
       <Text style={typography.footnote}>{field.label}</Text>
-      <Text selectable style={typography.body}>{field.options ? field.options.filter(option => (values[field.key] ?? "").split(",").includes(option.value)).map(option => option.label).join(" · ") || "Không chọn" : values[field.key] || "Để trống"}</Text>
-    </View> : field.options ? <View key={field.key} style={ui.stack}>
+      <Text selectable style={typography.body}>{field.options ? field.options.filter(option => (values[field.key] ?? "").split(",").includes(option.value)).map(option => option.label).join(" · ") || "Không chọn" : field.numeric && moneyPreview(values[field.key]) ? moneyPreview(values[field.key]) : values[field.key] || "Để trống"}</Text>
+    </FadeInView> : field.options ? <View key={field.key} style={ui.stack}>
       <Text style={typography.headline}>{field.label}</Text>
       {!field.options.length && <Notice>Chưa có lựa chọn hợp lệ. Kiểm tra thành viên hoặc xác nhận tài khoản nhận trước.</Notice>}
       {field.options.map(option => {
@@ -114,7 +132,30 @@ export function FinanceForm({ spec, busy, onSubmit, onClose }: {
             set(field.key, field.multiple ? (selected ? current.filter(value => value !== option.value) : [...current, option.value]).join(",") : option.value);
           }}><Text style={typography.body}>{selected ? "✓ " : "○ "}{option.label}</Text></Pressable>;
       })}
-    </View> : field.mode ? <DateTimeField key={field.key} mode={field.mode} label={field.label} value={values[field.key] ?? ""} onChangeText={value => set(field.key, value)} editable={!disabled} /> : <FormField key={field.key} icon={field.numeric ? "wallet" : "edit"} label={field.label} value={values[field.key] ?? ""} onChangeText={value => set(field.key, value)} keyboardType={field.numeric ? "number-pad" : "default"} autoCapitalize="none" maxLength={field.max ?? 1024} multiline={field.multiline} editable={!disabled} />)}
+    </View> : field.mode ? <DateTimeField key={field.key} mode={field.mode} label={field.label} value={values[field.key] ?? ""} onChangeText={value => set(field.key, value)} editable={!disabled} /> : <View key={field.key} style={{ gap: 8 }}>
+      <FormField icon={field.numeric ? "wallet" : "edit"} label={field.label} value={values[field.key] ?? ""} onChangeText={value => set(field.key, value)} keyboardType={field.numeric ? "number-pad" : "default"} autoCapitalize="none" maxLength={field.max ?? 1024} multiline={field.multiline} editable={!disabled} />
+      {field.key === "bank_code" && <>
+        {(() => { const bank = resolveVietQrBank(values.bank_code ?? ""); return bank ? <StatusBadge status="CONFIRMED" label={`Đã nhận diện: ${bank.code} · BIN ${bank.bin}`} /> : null; })()}
+        <View style={ui.actionRow}>
+          {POPULAR_BANKS.map(code => {
+            const activeBank = resolveVietQrBank(values.bank_code ?? "")?.code === code;
+            return <Pressable key={code} disabled={disabled} onPress={() => set("bank_code", code)}
+              style={({ pressed }) => [{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, backgroundColor: activeBank ? colors.mint : colors.fill, borderWidth: 1, borderColor: activeBank ? colors.pinGreen : colors.line }, pressed && { opacity: 0.7 }]}>
+              <Text style={[typography.footnote, { color: activeBank ? colors.pinGreen : colors.ink }]}>{code}</Text>
+            </Pressable>;
+          })}
+        </View>
+      </>}
+      {field.numeric && <>
+        {moneyPreview(values[field.key]) && <Text style={[typography.footnote, { color: colors.teal }]}>Định dạng: {moneyPreview(values[field.key])}</Text>}
+        <View style={ui.actionRow}>
+          {QUICK_AMOUNTS.map(preset => <Pressable key={preset.value} disabled={disabled} onPress={() => set(field.key, preset.value)}
+            style={({ pressed }) => [{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, backgroundColor: values[field.key] === preset.value ? colors.mint : colors.fill, borderWidth: 1, borderColor: values[field.key] === preset.value ? colors.pinGreen : colors.line }, pressed && { opacity: 0.7 }]}>
+            <Text style={[typography.footnote, { color: values[field.key] === preset.value ? colors.pinGreen : colors.ink }]}>{preset.label}</Text>
+          </Pressable>)}
+        </View>
+      </>}
+    </View>)}
     {photo && <Image source={{ uri: photo.uri }} style={{ height: 180, width: "100%" }} contentFit="contain" cachePolicy="none" accessibilityLabel="Ảnh chứng từ đã chọn" />}
     {!prepared && spec.receipt && <>
       <Button label={photo ? "Đổi ảnh chứng từ" : "Đính kèm ảnh chứng từ"} variant="soft" disabled={disabled} onPress={() => { void choose(); }} />

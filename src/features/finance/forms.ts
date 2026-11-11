@@ -26,7 +26,9 @@ export function bankInput(values: Record<string, string>) {
   if (!bank) throw new Error("Ngân hàng không có trong danh mục VietQR. Nhập mã (VD: VCB, TCB, MB) hoặc BIN 6 số, hoặc quét QR tài khoản.");
   const account = (values.account_number ?? "").replace(/\s/g, "");
   if (!validVietQrAccount(account)) throw new Error("Số tài khoản VietQR chỉ gồm chữ/số, từ 1 đến 19 ký tự.");
-  return { destination_type: "VIETQR" as const, bank_code: bank.code, account_number: account,
+  // Backend resolves `b.code === bankCode.toUpperCase() || b.bin === bankCode`, so mixed-case directory codes use BIN.
+  const bank_code = bank.code === bank.code.toUpperCase() ? bank.code : bank.bin;
+  return { destination_type: "VIETQR" as const, bank_code, account_number: account,
     account_name: text(values.account_name ?? "", "Tên chủ tài khoản", 150), active: true, is_default: true };
 }
 /** Fill destination fields from a scanned/pasted VietQR of the receiving account (static or with amount). */
@@ -61,7 +63,7 @@ export function contributionRequestForm(fund: Fund, members: Membership[], desti
   const eligible = eligibleDestinations(destinations);
   return { title: "Tạo yêu cầu đóng góp", description: "Số tiền nhập áp dụng cho mỗi người đã chọn, không phải tổng chia đều. Chỉ dùng tài khoản VietQR đã được người giữ quỹ xác nhận.",
     initial: { members: "", destination: eligible.find(row => row.is_default)?.id ?? eligible[0]?.id ?? "" },
-    fields: [titleField, amountField, { key: "members", label: "Người đóng góp", multiple: true, options: memberOptions(members, self) }, { key: "destination", label: "Tài khoản nhận", options: eligible.map(row => ({ value: row.id, label: `${row.bank_code ?? "VietQR"} · ${row.account_number ?? row.id.slice(0, 8)}` })) }, { key: "note", label: "Ghi chú (không bắt buộc)", multiline: true }, ...dueFields(timezone)],
+    fields: [titleField, amountField, { key: "members", label: "Người đóng góp", multiple: true, options: memberOptions(members, self) }, { key: "destination", label: "Tài khoản nhận", options: eligible.map(row => ({ value: row.id, label: row.account_number ? `${row.bank_code ?? "VietQR"} · ${row.account_number}` : (row.bank_code ?? "VietQR") })) }, { key: "note", label: "Ghi chú (không bắt buộc)", multiline: true }, ...dueFields(timezone)],
     build: values => {
       const due_at = dueAt(values, timezone);
       const selected = [...new Set((values.members ?? "").split(",").filter(Boolean))];
@@ -132,5 +134,5 @@ export function closureForm(fund: Fund): FinanceFormSpec {
   return { title: "Yêu cầu đóng quỹ", description: "Cần số dư bằng 0, không còn khoản góp/chi/hoàn tiền hay thanh toán chưa xử lý. Quỹ chuyển sang đang đóng và khóa thay đổi; mọi người trong bản chốt phải xác nhận. Không tự đóng theo thời gian.", build: () => commands.closure(fund) };
 }
 export function closureActionForm(row: Closure, action: "confirm" | "cancel" | "remind"): FinanceFormSpec {
-  return { title: action === "confirm" ? "Xác nhận bản chốt quỹ" : action === "cancel" ? "Hủy phiên đóng quỹ" : "Nhắc xác nhận đóng quỹ", description: action === "confirm" ? `Bạn xác nhận đúng bản chốt đã xem, mã ${row.snapshot_hash}. Người xác nhận cuối sẽ đóng quỹ vĩnh viễn.` : action === "cancel" ? "Hủy phiên hiện tại và mở lại quỹ. Phiên đóng mới cần mọi người xác nhận lại." : "Ghi yêu cầu nhắc vào backend; phản hồi chấp nhận không chứng minh thông báo đã được gửi.", fields: action === "cancel" ? [reasonField] : [], destructive: action === "cancel", build: values => commands.closureAction(row, action, action === "cancel" ? text(values.reason ?? "", "Lý do") : undefined) };
+  return { title: action === "confirm" ? "Xác nhận bản chốt quỹ" : action === "cancel" ? "Hủy phiên đóng quỹ" : "Nhắc xác nhận đóng quỹ", description: action === "confirm" ? "Bạn xác nhận đúng bản chốt đã xem. Người xác nhận cuối sẽ đóng quỹ vĩnh viễn." : action === "cancel" ? "Hủy phiên hiện tại và mở lại quỹ. Phiên đóng mới cần mọi người xác nhận lại." : "Ghi yêu cầu nhắc vào backend; phản hồi chấp nhận không chứng minh thông báo đã được gửi.", fields: action === "cancel" ? [reasonField] : [], destructive: action === "cancel", build: values => commands.closureAction(row, action, action === "cancel" ? text(values.reason ?? "", "Lý do") : undefined) };
 }

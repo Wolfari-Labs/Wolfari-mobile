@@ -26,6 +26,7 @@ import { designIcons } from "./design-assets";
 import { DesignIcon } from "./design-icon";
 import { BottomTabBar, type TabKey } from "./bottom-tab-bar";
 import { GlassSurface } from "./glass-surface";
+import { KeyboardScrollProvider, useKeyboardScroll } from "./keyboard-scroll";
 import { webSafeArea } from "./web-safe-area";
 
 const ScreenArea = Platform.OS === "web" ? View : SafeAreaView;
@@ -72,7 +73,15 @@ function ScreenBackButton({ onPress }: { onPress: () => void }) {
   );
 }
 
-export function Screen({
+export function Screen(props: Props) {
+  return (
+    <KeyboardScrollProvider>
+      <ScreenInner {...props} />
+    </KeyboardScrollProvider>
+  );
+}
+
+function ScreenInner({
   title,
   header,
   headerRight,
@@ -90,6 +99,8 @@ export function Screen({
   const [headerHeight, setHeaderHeight] = useState(56);
   const [tabHeight, setTabHeight] = useState(0);
   const blurTarget = useRef<ViewInstance>(null);
+  const keyboardScroll = useKeyboardScroll();
+  const keyboardHeight = keyboardScroll?.keyboardHeight ?? 0;
   const { preview } = useLocalSearchParams<{ preview?: string }>();
   const hydrated = useSyncExternalStore(subscribeToHydration, clientSnapshot, serverSnapshot);
   // Opt-in browser preview chrome mirrors Figma. Native devices use real OS bars.
@@ -148,11 +159,18 @@ export function Screen({
         </View>}
         <KeyboardAvoidingView
           style={styles.viewport}
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
           keyboardVerticalOffset={insets.top + (immersive ? 0 : headerHeight)}
         >
-          <BlurTargetView ref={blurTarget} style={styles.viewport}>
+          <BlurTargetView
+            ref={blurTarget}
+            style={styles.viewport}
+            onLayout={(e) => keyboardScroll?.onViewportLayout(e.nativeEvent.layout.height, insets.top + (immersive ? 0 : headerHeight))}
+          >
             <ScrollView
+              ref={keyboardScroll?.scrollRef}
+              onScroll={keyboardScroll?.onScroll}
+              scrollEventThrottle={16}
               contentContainerStyle={[
                 styles.content,
                 immersive && styles.immersiveContent,
@@ -164,12 +182,13 @@ export function Screen({
                       : footer
                         ? 24
                         : insets.bottom + 24,
-                  ),
+                  ) + (keyboardHeight > 0 ? Math.min(keyboardHeight, 220) : 0),
                 },
                 !tab && !footer && webSafeArea.content(bottomPadding),
               ]}
               keyboardShouldPersistTaps="handled"
               contentInsetAdjustmentBehavior="automatic"
+              automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
               keyboardDismissMode={
                 Platform.OS === "ios" ? "interactive" : "on-drag"
               }
@@ -201,7 +220,7 @@ export function Screen({
             </GlassSurface>
           )}
         </KeyboardAvoidingView>
-        {tab && <BottomTabBar activeTab={tab} onHeightChange={setTabHeight} blurTarget={blurTarget} />}
+        {tab && keyboardHeight === 0 && <BottomTabBar activeTab={tab} onHeightChange={setTabHeight} blurTarget={blurTarget} />}
         {devicePreview && <View style={styles.homeIndicator} />}
       </ScreenArea>
     </View>

@@ -1,7 +1,7 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useFocusEffect } from "expo-router";
-import { useCallback, useState, type RefObject } from "react";
-import { Pressable, StyleSheet, Text, View, type ViewInstance } from "react-native";
+import { useCallback, useRef, useState, type RefObject } from "react";
+import { Pressable, StyleSheet, Text, View, type GestureResponderEvent, type ViewInstance } from "react-native";
 import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -24,17 +24,28 @@ const tabs: { key: TabKey; label: string; icon: DesignIconName; route: "/(tabs)"
 // slide it from there when the next screen gains focus.
 let lastIndex = 0;
 
+const SCRUB_SPRING = { damping: 22, stiffness: 420, mass: 0.4 };
+
 export function BottomTabBar({ activeTab, onHeightChange, blurTarget }: {
   activeTab: TabKey; onHeightChange?: (height: number) => void; blurTarget?: RefObject<ViewInstance | null>;
 }) {
   const insets = useSafeAreaInsets();
   const { reduceMotion } = useAccessibilityPreferences();
   const [dockWidth, setDockWidth] = useState(0);
+  const [scrubIndex, setScrubIndex] = useState<number | null>(null);
+  const dockWrapRef = useRef<ViewInstance | null>(null);
+  const dockPageX = useRef(0);
+  const startPageX = useRef<number | null>(null);
+  const hoveredRef = useRef(0);
+
   const activeIndex = Math.max(0, tabs.findIndex(tab => tab.key === activeTab));
   const tabWidth = Math.max(0, (dockWidth - 10) / tabs.length);
   const position = useSharedValue(activeIndex);
+  const dragScale = useSharedValue(1);
 
   useFocusEffect(useCallback(() => {
+    setScrubIndex(null);
+    dragScale.set(1);
     if (reduceMotion || lastIndex === activeIndex) {
       position.set(activeIndex);
     } else {
@@ -42,30 +53,104 @@ export function BottomTabBar({ activeTab, onHeightChange, blurTarget }: {
       position.set(withSpring(activeIndex, springs.snappy));
     }
     lastIndex = activeIndex;
-    return () => cancelAnimation(position);
-  }, [activeIndex, reduceMotion, position]));
+    hoveredRef.current = activeIndex;
+    return () => {
+      cancelAnimation(position);
+      cancelAnimation(dragScale);
+    };
+  }, [activeIndex, dragScale, position, reduceMotion]));
 
-  const indicatorStyle = useAnimatedStyle(() => ({ transform: [{ translateX: position.get() * tabWidth }] }));
+  const measureDock = useCallback(() => {
+    dockWrapRef.current?.measureInWindow?.((x) => {
+      if (typeof x === "number") dockPageX.current = x;
+    });
+  }, []);
+
+  const updateScrubFromPageX = useCallback((pageX: number) => {
+    if (tabWidth <= 0) return;
+    const relX = pageX - dockPageX.current - 5;
+    const continuous = Math.max(0, Math.min(tabs.length - 1, (relX - tabWidth / 2) / tabWidth));
+    const discrete = Math.max(0, Math.min(tabs.length - 1, Math.floor(relX / tabWidth)));
+    hoveredRef.current = discrete;
+    setScrubIndex(prev => (prev === discrete ? prev : discrete));
+    position.set(reduceMotion ? discrete : withSpring(continuous, SCRUB_SPRING));
+  }, [position, reduceMotion, tabWidth]);
+
+  const finishScrub = useCallback((commit: boolean) => {
+    startPageX.current = null;
+    const targetIdx = commit ? hoveredRef.current : activeIndex;
+    setScrubIndex(null);
+    dragScale.set(reduceMotion ? 1 : withSpring(1, springs.snappy));
+    position.set(reduceMotion ? targetIdx : withSpring(targetIdx, springs.snappy));
+    if (commit) {
+      lastIndex = targetIdx;
+      const targetTab = tabs[targetIdx];
+      if (targetTab) router.navigate(targetTab.route);
+    }
+  }, [activeIndex, dragScale, position, reduceMotion]);
+
+  const onMoveShouldSetResponderCapture = useCallback((event: GestureResponderEvent) => {
+    if (tabWidth <= 0) return false;
+    const pageX = event.nativeEvent.pageX;
+    if (startPageX.current === null) {
+      startPageX.current = pageX;
+      return false;
+    }
+    return Math.abs(pageX - startPageX.current) > 6;
+  }, [tabWidth]);
+
+  const indicatorStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: position.get() * tabWidth },
+      { scale: dragScale.get() },
+    ],
+  }));
+
+  const visualActiveIndex = scrubIndex ?? activeIndex;
 
   return (
     <View testID="glass-tab-bar" style={[styles.container, { paddingBottom: Math.max(insets.bottom, 12) }, webSafeArea.tab]}
       pointerEvents="box-none" onLayout={event => onHeightChange?.(event.nativeEvent.layout.height)}>
-      <View style={styles.row} pointerEvents="box-none">
-        <GlassSurface variant="dock" blurTarget={blurTarget} style={styles.dock} onLayout={event => setDockWidth(event.nativeEvent.layout.width)}>
+      <View
+        ref={dockWrapRef}
+        collapsable={false}
+        style={styles.row}
+        pointerEvents="box-none"
+        onLayout={measureDock}
+        onTouchStart={event => {
+          measureDock();
+          startPageX.current = event.nativeEvent.pageX;
+          hoveredRef.current = activeIndex;
+        }}
+        onMoveShouldSetResponderCapture={onMoveShouldSetResponderCapture}
+        onResponderGrant={event => {
+          dragScale.set(reduceMotion ? 1 : withSpring(1.04, springs.snappy));
+          updateScrubFromPageX(event.nativeEvent.pageX);
+        }}
+        onResponderMove={event => {
+          updateScrubFromPageX(event.nativeEvent.pageX);
+        }}
+        onResponderRelease={() => finishScrub(true)}
+        onResponderTerminate={() => finishScrub(false)}
+      >
+        <GlassSurface variant="dock" blurTarget={blurTarget} style={styles.dock} onLayout={event => {
+          setDockWidth(event.nativeEvent.layout.width);
+          measureDock();
+        }}>
           {tabWidth > 0 && <Animated.View pointerEvents="none" style={[styles.indicator, { width: tabWidth }, indicatorStyle]}><LinearGradient colors={gradients.primary} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={StyleSheet.absoluteFill} /></Animated.View>}
-          {tabs.map(tab => <TabItem key={tab.key} tab={tab} active={tab.key === activeTab} onPress={() => {
+          {tabs.map((tab, index) => <TabItem key={tab.key} tab={tab} active={tab.key === activeTab} highlighted={index === visualActiveIndex} onPress={() => {
+            lastIndex = index;
             // A detail route can share the active tab. Tapping it must still
             // return to that tab's root instead of trapping the user here.
             router.navigate(tab.route);
           }} />)}
         </GlassSurface>
-
       </View>
     </View>
   );
 }
 
-function TabItem({ tab, active, onPress }: { tab: (typeof tabs)[number]; active: boolean; onPress: () => void }) {
+function TabItem({ tab, active, highlighted, onPress }: { tab: (typeof tabs)[number]; active: boolean; highlighted: boolean; onPress: () => void }) {
   const motion = usePressMotion(false, 0.97);
   const { reduceMotion } = useAccessibilityPreferences();
   return (
@@ -76,13 +161,13 @@ function TabItem({ tab, active, onPress }: { tab: (typeof tabs)[number]; active:
         <View className="items-center justify-center gap-0.5">
           {/* Keep the active destination visible without changing tab layout. */}
           <Animated.View style={{
-            transform: [{ translateY: active && !reduceMotion ? -1.5 : 0 }, { scale: active && !reduceMotion ? 1.08 : 1 }],
+            transform: [{ translateY: highlighted && !reduceMotion ? -1.5 : 0 }, { scale: highlighted && !reduceMotion ? 1.08 : 1 }],
             transitionProperty: "transform",
-            transitionDuration: reduceMotion ? 0 : 220,
+            transitionDuration: reduceMotion ? 0 : 200,
           }}>
-            <DesignIcon name={tab.icon} size={21} tintColor={active ? colors.onAccent : colors.muted} />
+            <DesignIcon name={tab.icon} size={21} tintColor={highlighted ? colors.onAccent : colors.muted} />
           </Animated.View>
-          <Text style={[styles.tabLabel, { color: active ? colors.onAccent : colors.muted }]}>{tab.label}</Text>
+          <Text style={[styles.tabLabel, { color: highlighted ? colors.onAccent : colors.muted }]}>{tab.label}</Text>
         </View>
       </Animated.View>
     </Pressable>

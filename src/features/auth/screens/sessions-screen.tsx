@@ -72,7 +72,7 @@ export default function SessionsScreen() {
       {resource.data?.map((session) => (
         <View style={ui.card} key={session.id}>
           <Text style={typography.headline}>
-            Phiên · {session.id.slice(0, 8)}
+            Phiên đăng nhập
           </Text>
           <Text style={typography.footnote}>
             Đăng nhập {dateLabel(session.created_at)}
