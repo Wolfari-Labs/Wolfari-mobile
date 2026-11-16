@@ -5,6 +5,7 @@ import { Keyboard, Text, View } from "react-native";
 import { colors, typography } from "@/shared/theme/tokens";
 import { Button } from "@/shared/ui/button";
 import { Feedback } from "@/shared/ui/feedback";
+import { Hint } from "@/shared/ui/hint";
 import { FormField } from "@/shared/ui/form-field";
 import { ui } from "@/shared/ui/journal";
 import { Sheet } from "@/shared/ui/sheet";
@@ -28,13 +29,12 @@ function PaymentQrSession({ onClose }: { onClose: () => void }) {
       {!result.ok && <Button label="Dán nội dung QR" variant="soft" onPress={() => { setResult(undefined); setManual(true); }} />}
     </> : <>
       {manual ? <>
-        <Text style={typography.body}>Dán chuỗi dữ liệu VietQR (bắt đầu bằng 000201), không phải đường dẫn hay ảnh. Dữ liệu chỉ được đọc trên thiết bị.</Text>
         <FormField label="Nội dung QR" icon="wallet" multiline value={raw} onChangeText={setRaw}
           autoCapitalize="none" autoCorrect={false} maxLength={MAX_PAYMENT_QR_LENGTH + 1} placeholder="000201..." />
         <Button label="Đọc thông tin QR" disabled={!raw.trim()} onPress={() => read(raw)} />
       </> : <PaymentQrCamera onScan={read} />}
       <Button label={manual ? "Dùng camera" : "Dán nội dung QR"} variant="soft" onPress={() => { setRaw(""); setManual(value => !value); }} />
-      <Text style={typography.footnote}>Hỗ trợ VietQR chuyển khoản đến tài khoản bằng VND. Không tự mở liên kết, lưu thông tin ngân hàng hoặc đánh dấu đã thanh toán.</Text>
+      <Hint title="Lưu ý khi quét" points={["Chỉ hỗ trợ VietQR chuyển khoản bằng VND.", "Khi dán: dùng chuỗi bắt đầu bằng 000201, không phải đường dẫn hay ảnh.", "Mã chỉ được đọc trên máy; app không lưu và không tự đánh dấu đã thanh toán."]} />
     </>}
   </Sheet>;
 }
@@ -46,7 +46,6 @@ export function PaymentQrEntry() {
   return <>
     <View style={[ui.card, { backgroundColor: colors.mint }]}>
       <Text accessibilityRole="header" style={typography.headline}>Quét QR chuyển khoản</Text>
-      <Text style={typography.body}>Đọc VietQR, kiểm tra và sao chép thông tin để chuyển khoản trong ứng dụng ngân hàng.</Text>
       <Button label="Quét QR thanh toán" icon="wallet" onPress={() => setOpen(true)} />
     </View>
     {open && focused && <PaymentQrSession onClose={() => setOpen(false)} />}

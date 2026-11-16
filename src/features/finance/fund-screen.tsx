@@ -11,13 +11,13 @@ import { useResource } from "@/shared/hooks/use-resource";
 import { OperationFeedback } from "@/shared/operations/operation-feedback";
 import { operationCommitted } from "@/shared/operations/controller";
 import { useTripOperation } from "@/shared/operations/use-trip-operation";
-import { colors, gradients, radii, shadows, typography } from "@/shared/theme/tokens";
+import { colors, radii, shadows, typography } from "@/shared/theme/tokens";
 import { Button } from "@/shared/ui/button";
 import { Feedback } from "@/shared/ui/feedback";
 import { FadeInView, Heading, Notice, Progress, ResourceFeedback, SectionLink, Segments, StatusBadge, ui } from "@/shared/ui/journal";
 import { Hint } from "@/shared/ui/hint";
 import { Wolfi } from "@/shared/ui/carto/wolfi";
-import { Avatar, IconTile } from "./visuals";
+import { Avatar, AvatarStack, heroGradient, IconTile } from "./visuals";
 import { PastelIcon } from "@/shared/ui/pastel";
 import { Screen } from "@/shared/ui/screen";
 import { financeCommands } from "./api";
@@ -135,7 +135,7 @@ function FundWorkspace({ tripId, userId }: { tripId: string; userId: string }) {
     {trip && <>
       {fund ? <>
         <View style={styles.heroCard}>
-          <LinearGradient pointerEvents="none" colors={gradients.card} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+          <LinearGradient pointerEvents="none" colors={heroGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
           <View style={ui.recordHeader}>
             <StatusBadge status={fund.status} label={statusLabels[fund.status]} />
             <View style={styles.holderChip}>
@@ -144,13 +144,14 @@ function FundWorkspace({ tripId, userId }: { tripId: string; userId: string }) {
           </View>
           <View style={ui.recordHeader}>
             <View style={[styles.balanceHero, ui.flex]}>
-              <Text style={typography.footnote}>Số dư đã ghi nhận</Text>
-              <Text selectable style={typography.largeTitle}>{money(fund.current_balance)}</Text>
+              <Text style={[typography.footnote, styles.onHero]}>Số dư đã ghi nhận</Text>
+              <Text selectable style={[typography.largeTitle, styles.onHero]}>{money(fund.current_balance)}</Text>
+              <Text style={[typography.headline, styles.onHero]}>{Number(fund.current_balance) > 0 ? "Quỹ đang rủng rỉnh ✨" : "Quỹ còn trống, rủ cả nhóm góp nào 👋"}</Text>
             </View>
             <Wolfi pose={Number(fund.current_balance) > 0 ? "happy" : "wink"} size={84} />
           </View>
           <View style={styles.metricsRow}>
-            <View style={[styles.metricTile, { backgroundColor: colors.mint }]}>
+            <View style={[styles.metricTile, { backgroundColor: "rgba(255,255,255,0.85)" }]}>
               <Text style={typography.headline}>Khả dụng: {money(fund.available_balance)}</Text>
             </View>
             {/* Only shown while money is actually reserved; a permanent "0 ₫" tile is noise. */}
@@ -158,10 +159,11 @@ function FundWorkspace({ tripId, userId }: { tripId: string; userId: string }) {
               <Text style={typography.body}>Giữ chỗ hoàn tiền: {money(fund.reserved_refund)}</Text>
             </View>}
           </View>
+          {!!members.data?.length && <AvatarStack names={members.data.filter(member => !member.left_at).map(member => who(member.user_id))} caption={`${members.data.filter(member => !member.left_at).length} người chung quỹ`} />}
           {fund.budget_amount !== null && fund.budget_amount !== undefined && <View style={styles.budgetSection}>
             <View style={ui.recordHeader}>
-              <Text style={typography.body}>Ngân sách dự kiến: {money(fund.budget_amount)}</Text>
-              {budgetRatio !== undefined && <Text style={typography.footnote}>{Math.min(999, Math.round(budgetRatio))}%</Text>}
+              <Text style={[typography.body, styles.onHero]}>Ngân sách dự kiến: {money(fund.budget_amount)}</Text>
+              {budgetRatio !== undefined && <Text style={[typography.footnote, styles.onHero]}>{Math.min(999, Math.round(budgetRatio))}%</Text>}
             </View>
             {budgetRatio !== undefined && <Progress done={Math.min(100, Math.max(0, budgetRatio))} total={100} />}
           </View>}
@@ -177,7 +179,7 @@ function FundWorkspace({ tripId, userId }: { tripId: string; userId: string }) {
       </>}
       {(!fund || tab === "overview") && <>
       <PaymentQrEntry key={tripId} />
-      <Hint title="Quỹ hoạt động thế nào?">Tiền chuyển qua VietQR vào thẳng tài khoản người giữ quỹ; app chỉ ghi sổ và đối chiếu, không tự chuyển tiền. Chủ nhóm cấu hình quỹ và tạo yêu cầu góp. Người giữ quỹ xác nhận đã nhận tiền và các khoản chi. Người được hoàn tiền tự xác nhận đã nhận đủ. MoMo đang ở chế độ thử nghiệm (Sandbox).</Hint>
+      <Hint title="Quỹ hoạt động thế nào?" points={["Tiền vào thẳng tài khoản người giữ quỹ.", "App chỉ ghi sổ, không tự chuyển tiền.", "Chủ nhóm tạo yêu cầu góp; người giữ quỹ xác nhận.", "MoMo đang ở chế độ thử nghiệm."]} />
       <SectionLink title="Bản nháp dự trù riêng" subtitle="Khoản dự kiến, chưa ghi sổ" icon="edit" onPress={() => router.push({ pathname: "/trip/[id]/fund-drafts", params: { id: tripId } })} />
       <SectionLink title="Công cụ quỹ mở rộng" subtitle="Ghi chú, lịch sử, MoMo, đối soát" icon="wallet" onPress={() => router.push({ pathname: "/trip/[id]/fund-tools", params: { id: tripId } })} />
       </>}
@@ -214,14 +216,14 @@ function FundOverview({ fund, trip, userId, locked, open }: Context) {
       {row.account_number ? <>
         <Text selectable style={typography.body}>{row.bank_code} · {row.account_number}</Text>
         <Text selectable style={typography.body}>{row.account_name}</Text>
-      </> : row.momo_phone ? <Text selectable style={typography.body}>{row.momo_phone}</Text> : <Text style={typography.footnote}>Chi tiết tài khoản chỉ dành cho chủ nhóm/người giữ quỹ. Xem chỉ dẫn của chính khoản góp để chuyển đúng tài khoản đã chốt.</Text>}
+      </> : row.momo_phone ? <Text selectable style={typography.body}>{row.momo_phone}</Text> : <Text style={typography.footnote}>Số tài khoản có trong mã QR của khoản góp của bạn.</Text>}
       {qrUrl && (qrId === row.id ? <>
         {qrConsent ? <QrImage url={qrUrl} label={`Mã QR nhận tiền ${row.bank_code ?? ""} ${row.account_number ?? ""}`} onError={() => setQrFailed(true)} /> : <>
           <Notice>Để tải ảnh QR nhận tiền, ngân hàng, số tài khoản và tên người nhận sẽ được gửi đến Casso (img.vietqr.io). Chỉ tiếp tục nếu bạn đồng ý.</Notice>
           <Button label="Đồng ý tải ảnh QR" compact variant="soft" onPress={() => setQrConsent(true)} />
         </>}
         {qrFailed && <Feedback message="Không tải được ảnh QR. Kiểm tra mạng; thông tin tài khoản vẫn hiển thị ở trên." />}
-        {qrConsent && <Notice>Mã QR không kèm số tiền hay nội dung. Người chuyển tự nhập; để đối chiếu đúng khoản góp, dùng VietQR của khoản góp trong tab Đóng góp.</Notice>}
+        {qrConsent && <Hint title="Mã này dùng khi nào?" points={["Mã không kèm số tiền hay nội dung; người chuyển tự nhập.", "Để khớp đúng khoản góp, dùng mã QR trong tab Đóng góp."]} />}
         <Button label="Ẩn mã QR" compact variant="text" onPress={() => showQr(undefined)} />
       </> : <Button label="Xem mã QR nhận tiền" compact accessibilityLabel={`Xem mã QR nhận tiền ${row.bank_code ?? ""} ${row.account_number ?? ""}`} variant="soft" onPress={() => showQr(row.id)} />)}
       {actor.writable && !destinations.error && <View style={ui.actionRow}>
@@ -405,8 +407,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: radii.pill,
-    backgroundColor: colors.tealSoft,
+    backgroundColor: "rgba(255,255,255,0.88)",
   },
+  onHero: { color: colors.ink },
   balanceHero: {
     gap: 4,
     paddingVertical: 2,

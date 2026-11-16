@@ -7,7 +7,7 @@ import { Text, View } from 'react-native';
 import { Button } from '@/shared/ui/button';
 import { Hint } from '@/shared/ui/hint';
 import { designAssets } from '@/shared/ui/design-assets';
-import { PhotoBanner, RouteStrip } from '../../finance/visuals';
+import { PhotoBanner, RouteStrip, Sticker } from '../../finance/visuals';
 import { typography } from '@/shared/theme/tokens';
 import { EmptyState, Heading, Notice, Progress, ResourceFeedback, Segments, StatusBadge, ui } from '@/shared/ui/journal';
 import { Screen } from '@/shared/ui/screen';
@@ -201,7 +201,7 @@ function WatchWorkspace({ id, userId }: { id: string; userId: string }) {
           void trip.reload();
         }}
       />
-      <PhotoBanner source={designAssets.coast} eyebrow="Săn vé cùng Wolfi" title="Đặt ngưỡng, giá chạm là báo" />
+      <PhotoBanner source={designAssets.coast} eyebrow="Săn vé cùng Wolfi ✈️" title="Canh giá hộ bạn, rẻ là hú liền" />
       <CommandFeedback command={command} />
       <Button
         label="Tạo theo dõi giá"
@@ -227,10 +227,14 @@ function WatchWorkspace({ id, userId }: { id: string; userId: string }) {
           onPress={() => router.push(`/trip/${id}/price-watch-drafts`)}
         />
       </View>
-      <Hint title="Về giá hiển thị">
-        Giá hiện là dữ liệu mô phỏng (MOCK_FLIGHT), chưa phải giá vé thật. Mỗi người tự đặt ngưỡng
-        riêng; hệ thống gửi cảnh báo khi giá chạm ngưỡng, không phụ thuộc việc mở màn hình này.
-      </Hint>
+      <Hint
+        title="Về giá hiển thị"
+        points={[
+          'Giá hiện là dữ liệu mô phỏng, chưa phải giá vé thật.',
+          'Mỗi người tự đặt ngưỡng riêng.',
+          'Giá chạm ngưỡng là hệ thống tự báo, không cần mở màn hình này.',
+        ]}
+      />
       <Segments
         scroll
         value={filter}
@@ -273,6 +277,11 @@ function WatchWorkspace({ id, userId }: { id: string; userId: string }) {
             {w.status_reason && <Line>Lý do trạng thái: {w.status_reason}</Line>}
             {w.last_alert_at && w.last_alert_price && (
               <>
+                {Number(w.last_alert_price) < Number(w.threshold_price) && (
+                  <Sticker
+                    label={`🔥 Rẻ hơn ngưỡng ${Math.round((1 - Number(w.last_alert_price) / Number(w.threshold_price)) * 100)}%`}
+                  />
+                )}
                 <Line>
                   Cảnh báo gần nhất: {moneyLabel(w.last_alert_price)} lúc{' '}
                   {historyTimeLabel(w.last_alert_at)}

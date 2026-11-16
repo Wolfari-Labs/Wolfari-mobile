@@ -2,7 +2,7 @@ import { Image, type ImageSource } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { StyleSheet, Text, View } from "react-native";
 
-import { colors, radii, typography } from "@/shared/theme/tokens";
+import { colors, gradients, radii, typography } from "@/shared/theme/tokens";
 import { Wolfi, type WolfiPose } from "@/shared/ui/carto/wolfi";
 import type { DesignIconName } from "@/shared/ui/design-assets";
 import { DesignIcon } from "@/shared/ui/design-icon";
@@ -39,11 +39,36 @@ export function IconTile({ icon, tone = colors.mint }: { icon: DesignIconName; t
 /** Coloured circle with the first letter of a name, so people in a list are told apart at a glance. */
 export function Avatar({ name }: { name: string }) {
   const tones = [colors.mint, colors.fill, colors.tealSoft, colors.lavender];
-  const letter = name.trim().charAt(0).toUpperCase() || "?";
+  // Vietnamese given names come last, so "Huỳnh Bảo Quyên" shows Q.
+  const letter = name.trim().split(/s+/).at(-1)?.charAt(0).toUpperCase() || "?";
   const tone = tones[[...name].reduce((sum, char) => sum + char.codePointAt(0)!, 0) % tones.length];
   return (
     <View style={[styles.avatar, { backgroundColor: tone }]} {...decorative}>
       <Text style={typography.headline}>{letter}</Text>
+    </View>
+  );
+}
+
+/** Soft pastel blue-to-mint from the app palette behind a headline number; ink text stays easy to read. */
+export const heroGradient = gradients.mascot;
+
+/** Overlapping avatars with a caption, e.g. the people who share a fund. */
+export function AvatarStack({ names, caption }: { names: string[]; caption: string }) {
+  return (
+    <View style={styles.stack}>
+      <View style={styles.stackRow}>
+        {names.slice(0, 5).map((name, index) => <View key={`${name}:${index}`} style={[styles.stackItem, index > 0 && styles.stackOverlap]}><Avatar name={name} /></View>)}
+      </View>
+      <Text style={[typography.footnote, { color: colors.ink }]}>{caption}</Text>
+    </View>
+  );
+}
+
+/** Short highlighted tag such as a deal or a mood. */
+export function Sticker({ label, tone = colors.butter }: { label: string; tone?: string }) {
+  return (
+    <View style={[styles.sticker, { backgroundColor: tone }]}>
+      <Text style={typography.headline}>{label}</Text>
     </View>
   );
 }
@@ -74,6 +99,11 @@ const styles = StyleSheet.create({
   eyebrow: { letterSpacing: 0.8, textTransform: "uppercase" },
   tile: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
   avatar: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center" },
+  stack: { flexDirection: "row", alignItems: "center", gap: 10 },
+  stackRow: { flexDirection: "row" },
+  stackItem: { borderRadius: 19, borderWidth: 2, borderColor: "#FFFFFF" },
+  stackOverlap: { marginLeft: -10 },
+  sticker: { alignSelf: "flex-start", paddingHorizontal: 12, paddingVertical: 6, borderRadius: radii.pill, transform: [{ rotate: "-2deg" }] },
   route: { flexDirection: "row", alignItems: "center", gap: 8 },
   dots: { flex: 1, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   dot: { width: 5, height: 5, borderRadius: 3, backgroundColor: colors.tealPressed, opacity: 0.45 },
