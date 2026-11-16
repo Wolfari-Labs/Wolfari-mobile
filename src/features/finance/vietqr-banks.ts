@@ -1,4 +1,4 @@
-// Mirror of Wolfari-backend apps/finance-service/src/domain/vietqr-banks.ts (reviewed 2026-10-22).
+// Mirror of Wolfari-backend packages/common/src/vietqr-banks.ts (codes/BINs; names live on the server, GET /api/v1/finance/banks).
 // The backend resolves bank_code by code or BIN and fails closed (409) on unknown values,
 // so the app validates against the same directory before writing a destination.
 // Refresh together with the backend list; this is not bank verification.

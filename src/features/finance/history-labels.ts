@@ -39,6 +39,14 @@ const actions: Record<string, string> = {
   REQUEST_REFUND_REVERSAL: "Đề nghị đảo hoàn tiền",
   CONSENT_REFUND_REVERSAL: "Đồng ý đảo hoàn tiền",
   REVERSE_REFUND: "Đảo hoàn tiền",
+  ASSIGN_REFUND_VERIFIER: "Chỉ định người kiểm chứng hoàn tiền",
+  CREATE_HOLDER_HANDOVER: "Đề cử người giữ quỹ mới",
+  ACCEPT_HOLDER_HANDOVER: "Nhận đề cử giữ quỹ",
+  REFRESH_HOLDER_HANDOVER: "Cập nhật bản chốt bàn giao",
+  CONFIRM_HOLDER_HANDOVER: "Xác nhận bàn giao quỹ",
+  CANCEL_HOLDER_HANDOVER: "Hủy bàn giao quỹ",
+  CONFIRM_BANK_TRANSFER: "Tự xác nhận tiền về ngân hàng",
+  UPDATE_FUND_BUDGET: "Cập nhật ngân sách",
   CREATE_CLOSURE: "Yêu cầu chốt quỹ",
   CONFIRM_CLOSURE: "Xác nhận bản chốt quỹ",
   CANCEL_CLOSURE: "Hủy phiên chốt quỹ",
@@ -51,7 +59,7 @@ const entities: Record<string, string> = {
   contribution_request: "Đợt đóng góp", expense: "Khoản chi", refund: "Hoàn tiền", financial_note: "Ghi chú ngoài quỹ",
   closure: "Chốt quỹ", payment_attempt: "Thanh toán", payment_exception: "Đối soát", membership: "Thành viên",
 };
-const systems: Record<string, string> = { MOMO_IPN: "MoMo Sandbox", MOMO_RECONCILIATION: "Đối soát tự động" };
+const systems: Record<string, string> = { MOMO_IPN: "MoMo Sandbox", MOMO_RECONCILIATION: "Đối soát tự động", "BANK_WEBHOOK:SEPAY": "Ngân hàng (SePay) báo tiền về" };
 
 export function historyActionLabel(action: string) {
   return actions[action] ?? action;

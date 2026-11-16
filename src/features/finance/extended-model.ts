@@ -1,4 +1,5 @@
 import type { PaymentInstruction } from './types';
+import { parsePaymentQr } from '../payments/model/payment-qr.ts';
 export type { Page, Fund, Destination, Contribution, ContributionRequest, Expense, Refund, FinancialNote, Transaction as LedgerEntry, AuditEntry, Closure, PaymentInstruction, PaymentAttempt, PaymentException, FinanceCollections } from './types';
 
 // Extended forms use money as a parser; the primary model's money formats labels.
@@ -44,25 +45,28 @@ export const statusLabel: Record<string, string> = {
   EXPIRED: 'Hết hạn',
   STOPPED: 'Đã dừng',
 };
-export function instructionQrUrl(instruction: PaymentInstruction): string {
-  const url = new URL(instruction.qr_url);
-  const expected = `/image/${instruction.bank_bin}-${instruction.account_number}-compact2.svg`;
+// Plain QR SVG as Finance renders it: one background rect and one path, nothing else.
+const QR_SVG =
+  /^<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg" viewBox="0 0 \d+ \d+" shape-rendering="crispEdges" role="img" aria-label="[A-Za-z0-9 ]*"><rect width="\d+" height="\d+" fill="#ffffff"\/><path d="(?:M\d+ \d+h\d+v1h-\d+z)+" fill="#000000"\/><\/svg>$/;
+/**
+ * Data URI of the server-rendered VietQR. Published only when the NAPAS payload (checked by the same
+ * reader the scanner uses, CRC included) carries exactly this instruction's bank, account, amount and
+ * transfer content, and the SVG is the plain shape Finance produces.
+ */
+export function instructionQrImage(instruction: PaymentInstruction): string {
+  const parsed = parsePaymentQr(instruction.qr_payload);
   if (
-    instruction.environment !== 'TEST' ||
-    url.protocol !== 'https:' ||
-    url.hostname !== 'img.vietqr.io' ||
-    url.username ||
-    url.password ||
-    url.port ||
-    url.hash ||
-    url.pathname !== expected ||
-    url.searchParams.get('amount') !== instruction.amount ||
-    url.searchParams.get('addInfo') !== instruction.reference ||
-    url.searchParams.get('accountName') !== instruction.recipient_name ||
-    [...url.searchParams.keys()].length !== 3
+    instruction.environment !== 'LIVE' ||
+    !parsed.ok ||
+    parsed.payment.bankBin !== instruction.bank_bin ||
+    parsed.payment.account !== instruction.account_number ||
+    parsed.payment.amount !== instruction.amount ||
+    parsed.payment.note !== instruction.reference ||
+    instruction.qr_svg.length > 65536 ||
+    !QR_SVG.test(instruction.qr_svg)
   )
-    throw Error('Liên kết QR không khớp hướng dẫn chuyển khoản TEST.');
-  return url.href;
+    throw Error('Mã QR không khớp hướng dẫn chuyển khoản.');
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(instruction.qr_svg)}`;
 }
 /**
  * Bank apps that a VietQR deeplink opens with account, amount and note pre-filled
@@ -76,11 +80,11 @@ export const AUTOFILL_BANK_APPS: readonly { id: string; name: string }[] = [
   { id: 'acb', name: 'ACB' },
   { id: 'ocb', name: 'OCB' },
 ];
-/** https://dl.vietqr.io/pay deeplink for this TEST instruction. The user still confirms in the bank app. */
+/** https://dl.vietqr.io/pay deeplink for this instruction. The user still confirms in the bank app. */
 export function bankAppDeeplink(instruction: PaymentInstruction, appId: string, returnUrl: string): string {
   const bank = instruction.bank_code.trim().toLowerCase();
   if (
-    instruction.environment !== 'TEST' ||
+    instruction.environment !== 'LIVE' ||
     !AUTOFILL_BANK_APPS.some(app => app.id === appId) ||
     !/^[a-z0-9]{1,20}$/.test(bank) ||
     !/^[A-Za-z0-9]{1,19}$/.test(instruction.account_number) ||

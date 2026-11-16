@@ -6,7 +6,7 @@ import type {
   Page,
   PaymentAttempt,
   PaymentInstruction,
-  Closure, DestinationInput, ExpenseInput, Receipt, WriteResult,
+  Closure, DestinationInput, ExpenseInput, HolderHandover, Receipt, WriteResult,
 } from './types';
 import type { OperationCommand } from '../../shared/operations/controller';
 
@@ -144,6 +144,18 @@ export const financeCommands = {
   refund: (fund: Fund, input: { member_user_id: string; amount: string; reason: string }) => command("Tạo hoàn tiền", `/funds/${id(fund.id)}/refunds`, { ...input, ...versions(fund) }),
   refundAction: (fund: Fund, row: Versioned, action: "report-paid" | "confirm-received" | "confirm-nonreceipt" | "cancel" | "request-reversal" | "consent-reversal" | "reverse", reason?: string) =>
     command("Cập nhật hoàn tiền", `/refunds/${id(row.id)}/${action}`, { ...(reason !== undefined ? { reason } : {}), ...versions(fund, row) }),
+  /** Owner names an independent verifier when Owner, Holder and recipient are one person (FR-FN07). */
+  refundVerifier: (fund: Fund, row: Versioned, verifier_user_id: string) =>
+    command("Chỉ định người kiểm chứng", `/refunds/${id(row.id)}/assign-verifier`, { verifier_user_id, ...versions(fund, row) }),
+  /** FR-FN06: Owner nominates; nominee accepts; both Holders confirm the same snapshot. */
+  handover: (fund: Fund, new_holder_user_id: string) =>
+    command("Đề cử người giữ quỹ mới", `/funds/${id(fund.id)}/holder-handovers`, { new_holder_user_id, expected_finance_version: fund.finance_version }),
+  handoverAction: (fund: Fund, row: HolderHandover, action: "accept" | "refresh-snapshot" | "confirm" | "cancel", reason?: string) =>
+    command("Cập nhật bàn giao quỹ", `/holder-handovers/${id(row.id)}/${action}`, {
+      ...versions(fund, row),
+      ...(action === "confirm" && row.snapshot_finance_version ? { expected_snapshot_finance_version: row.snapshot_finance_version } : {}),
+      ...(action === "cancel" ? { reason } : {}),
+    }),
   closure: (fund: Fund) => command("Yêu cầu đóng quỹ", `/funds/${id(fund.id)}/closures`, versions(fund)),
   closureAction: (row: Closure, action: "confirm" | "cancel" | "remind", reason?: string) => command("Cập nhật đóng quỹ", `/closures/${id(row.id)}/${action}`, action === "confirm" ? { snapshot_hash: row.snapshot_hash } : action === "cancel" ? { reason } : {}),
 };
@@ -196,8 +208,15 @@ export function createFinanceApi(client: ApiClient) {
     async instruction(id: string, signal?: AbortSignal) {
       const row = object(await client.request(`/contributions/${enc(id)}/vietqr`, { signal }));
       validateMoney(row.amount);
-      if (row.contribution_id !== id || row.environment !== 'TEST' || row.currency !== 'VND')
-        throw new ApiError('INVALID_RESPONSE', 'Chỉ hỗ trợ hướng dẫn chuyển khoản TEST.');
+      if (
+        row.contribution_id !== id ||
+        row.environment !== 'LIVE' ||
+        row.currency !== 'VND' ||
+        typeof row.qr_payload !== 'string' ||
+        typeof row.qr_svg !== 'string' ||
+        typeof row.bank_name !== 'string'
+      )
+        throw new ApiError('INVALID_RESPONSE', 'Hướng dẫn chuyển khoản không hợp lệ.');
       return row as PaymentInstruction;
     },
     async attempt(id: string) {
@@ -230,6 +249,21 @@ export function createFinanceApi(client: ApiClient) {
     },
     closure: (closureId: string, signal?: AbortSignal) => client.request<Closure>(`/closures/${id(closureId)}`, { signal }),
     uploadReceipt: (fundId: string, body: FormData) => client.request<Receipt>(`/funds/${id(fundId)}/receipts`, { method: "POST", body }),
+    /** Current receipt of an expense by its ID; works after reload and for other members. */
+    expenseReceipt: (expenseId: string, signal?: AbortSignal) =>
+      client.request<Blob>(`/expenses/${id(expenseId)}/receipt`, { responseType: "blob", signal }),
+    /** Newest-first Holder handovers (≤100). The route takes no paging query. */
+    async handovers(fundId: string, signal?: AbortSignal): Promise<HolderHandover[]> {
+      const page = object(await client.request(`/funds/${enc(fundId)}/holder-handovers`, { signal }));
+      const items = page.items ?? [];
+      if (!Array.isArray(items)) throw new ApiError('INVALID_RESPONSE', 'Danh sách bàn giao không hợp lệ.');
+      return items.map((row) => {
+        const value = decodeRow<HolderHandover>(row, { field: 'fund_id', id: fundId });
+        if (!['NOMINATED', 'ACCEPTED', 'COMPLETED', 'CANCELLED'].includes(value.status) || value.old_holder_user_id === value.new_holder_user_id)
+          throw new ApiError('INVALID_RESPONSE', 'Bàn giao quỹ không hợp lệ.');
+        return value;
+      });
+    },
     downloadReceipt: (fundId: string, objectKey: string, signal?: AbortSignal) => client.request<Blob>(`/funds/${id(fundId)}/receipts/download?${new URLSearchParams({ object_key: objectKey })}`, { responseType: "blob", signal }),
     execute: (input: OperationCommand, key: string) => client.request<WriteResult>(input.path, { method: input.method, body: input.body, headers: { "Idempotency-Key": key } }),
     operation: (key: string) => client.request<unknown>(`/operations/${enc(key)}`),

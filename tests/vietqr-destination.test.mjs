@@ -20,10 +20,11 @@ test("bank directory resolves code or BIN like the backend, failing closed", () 
 
 test("mobile bank directory mirrors the sibling backend list when available", async (t) => {
   let source;
-  try { source = await readFile(new URL("../../backend/apps/finance-service/src/domain/vietqr-banks.ts", import.meta.url), "utf8"); }
+  try { source = await readFile(new URL("../../backend/packages/common/src/vietqr-banks.ts", import.meta.url), "utf8"); }
   catch { t.skip("backend checkout not present"); return; }
   const backend = [...source.matchAll(/code:\s*'([^']+)',\s*bin:\s*'(\d+)'/g)].map(([, code, bin]) => ({ code, bin }));
-  assert.deepEqual([...VIETQR_BANKS], backend);
+  const byCode = (a, b) => a.code.localeCompare(b.code);
+  assert.deepEqual([...VIETQR_BANKS].sort(byCode), backend.sort(byCode));
 });
 
 test("destination input normalizes bank code and enforces the QuickLink account rule", () => {

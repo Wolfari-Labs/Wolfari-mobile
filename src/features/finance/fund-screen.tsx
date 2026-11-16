@@ -1,7 +1,7 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Image, StyleSheet, Text, View } from "react-native";
 import { useSession } from "@/features/auth/session/session-provider";
 import { collectPages } from "@/features/trips/api/pagination";
 import type { Membership, Trip } from "@/features/trips/types";
@@ -27,9 +27,9 @@ import { resolveVietQrBank } from "./vietqr-banks";
 import { PaymentQrEntry } from "@/features/payments/components/payment-qr-entry";
 import { historyTimeLabel as timeAt } from "./history-labels";
 import { PagedRecords } from "./components/paged-records";
-import { actionLabels, budgetForm, closureActionForm, closureForm, contributionForm, contributionRequestEditForm, contributionRequestForm, destinationForm, enableForm, expenseActionForm, expenseForm, refundActionForm, refundForm } from "./forms";
-import { contributionActions, expenseActions, financeActor, money, refundActions, statusLabels } from "./model";
-import type { Destination, Fund, FinanceCollections } from "./types";
+import { actionLabels, budgetForm, closureActionForm, closureForm, contributionForm, contributionRequestEditForm, contributionRequestForm, destinationForm, enableForm, expenseActionForm, expenseForm, handoverActionForm, handoverCreateForm, refundActionForm, refundForm, refundVerifierForm } from "./forms";
+import { contributionActions, expenseActions, financeActor, money, refundActions, refundConfirmer, statusLabels, type RefundContext } from "./model";
+import type { Destination, Fund, FinanceCollections, HolderHandover } from "./types";
 
 /** Receiving QR (no amount/reference) for a VietQR destination whose details the viewer can already see. */
 function destinationQrUrl(row: Destination): string | undefined {
@@ -40,12 +40,50 @@ function destinationQrUrl(row: Destination): string | undefined {
   return url.href;
 }
 
-type Tab = "overview" | keyof FinanceCollections;
+type Tab = "overview" | "handovers" | keyof FinanceCollections;
 const tabs: { value: Tab; label: string }[] = [
   { value: "overview", label: "Tổng quan" }, { value: "contributions", label: "Đóng góp" },
   { value: "contribution-requests", label: "Đợt góp" }, { value: "expenses", label: "Khoản chi" },
-  { value: "refunds", label: "Hoàn tiền" }, { value: "transactions", label: "Lịch sử" }, { value: "closures", label: "Đóng quỹ" },
+  { value: "refunds", label: "Hoàn tiền" }, { value: "transactions", label: "Lịch sử" },
+  { value: "handovers", label: "Bàn giao" }, { value: "closures", label: "Đóng quỹ" },
 ];
+const confirmationModes: Record<string, string> = {
+  RECIPIENT: "Người nhận tự xác nhận",
+  OWNER: "Chủ nhóm kiểm chứng thay người nhận (người nhận là người giữ quỹ)",
+  ASSIGNED_MEMBER: "Thành viên được chỉ định kiểm chứng độc lập",
+  SELF_UNVERIFIED: "Tự xác nhận — chuyến chỉ có một thành viên",
+};
+const handoverStatus: Record<HolderHandover["status"], string> = {
+  NOMINATED: "Chờ người được đề cử đồng ý", ACCEPTED: "Chờ hai bên xác nhận", COMPLETED: "Đã hoàn tất", CANCELLED: "Đã hủy",
+};
+
+/** Opens the current receipt of an expense by its ID: images inline, PDFs point to the Web app. */
+function ExpenseReceipt({ expenseId }: { expenseId: string }) {
+  const api = useApi();
+  const [state, setState] = useState<{ uri?: string; message?: string; loading?: boolean }>({});
+  async function load() {
+    setState({ loading: true });
+    try {
+      const blob = await api.finance.expenseReceipt(expenseId);
+      if (blob.type === "application/pdf") return setState({ message: "Chứng từ là PDF. Mở trên Web để xem hoặc tải về." });
+      if (!["image/jpeg", "image/png"].includes(blob.type)) return setState({ message: "Định dạng chứng từ không được hỗ trợ." });
+      const uri = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => (typeof reader.result === "string" ? resolve(reader.result) : reject(new Error("read")));
+        reader.onerror = () => reject(reader.error ?? new Error("read"));
+        reader.readAsDataURL(blob);
+      });
+      setState({ uri });
+    } catch (cause) {
+      setState({ message: cause instanceof ApiError && cause.status === 404 ? "Không tìm thấy chứng từ (có thể đã được thay)." : "Không tải được chứng từ; thử lại." });
+    }
+  }
+  return <View style={ui.stack}>
+    {!state.uri && <Button label={state.loading ? "Đang tải chứng từ…" : "Xem chứng từ"} compact variant="soft" disabled={state.loading} onPress={() => { void load(); }} />}
+    {state.uri && <Image source={{ uri: state.uri }} style={styles.receiptImage} resizeMode="contain" accessibilityLabel="Ảnh chứng từ khoản chi" />}
+    {state.message && <Text style={typography.footnote}>{state.message}</Text>}
+  </View>;
+}
 export default function FundScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { profile } = useSession();
@@ -130,7 +168,7 @@ function FundWorkspace({ tripId, userId }: { tripId: string; userId: string }) {
         <ResourceFeedback {...members} hasData={!!members.data} onRetry={() => { void members.reload(); }} />
         {owner && !archived && <Button label="Mở quỹ nhóm" disabled={locked || !members.data || members.loading || !!members.error} onPress={() => open(enableForm(tripId, members.data!, userId))} />}
       </>}
-      <Notice>Sổ quỹ đối chiếu qua backend; không tự chuyển tiền ngân hàng. VietQR hiện là TEST và MoMo là Sandbox.</Notice>
+      <Notice>Tiền chuyển qua VietQR vào thẳng tài khoản người giữ quỹ; app chỉ ghi sổ và đối chiếu, không tự chuyển tiền. MoMo đang ở chế độ Sandbox.</Notice>
       <PaymentQrEntry key={tripId} />
       <SectionLink title="Bản nháp dự trù riêng" subtitle="Giữ các khoản dự kiến cũ · không ghi vào sổ quỹ" icon="edit" onPress={() => router.push({ pathname: "/trip/[id]/fund-drafts", params: { id: tripId } })} />
       <SectionLink title="Công cụ quỹ mở rộng" subtitle="Ghi chú ngoài quỹ · lịch sử kiểm toán · MoMo Sandbox · đối soát" icon="wallet" onPress={() => router.push({ pathname: "/trip/[id]/fund-tools", params: { id: tripId } })} />
@@ -187,10 +225,18 @@ function FundOverview({ fund, trip, userId, locked, open }: Context) {
 }
 
 function FundRecords({ fund, trip, userId, locked, open, who, tab, members, onInstruction, onClosure }: Context & {
-  tab: keyof FinanceCollections; members: Membership[]; onInstruction(id: string): void; onClosure(id: string): void;
+  tab: Exclude<Tab, "overview">; members: Membership[]; onInstruction(id: string): void; onClosure(id: string): void;
 }) {
   const api = useApi();
   const actor = financeActor(fund, userId, trip.current_membership.role === "OWNER", trip.lifecycle === "ARCHIVED");
+  const active = members.filter(member => !member.left_at);
+  const refundContext: RefundContext = {
+    holderUserId: fund.holder_user_id,
+    ownerUserId: active.find(member => member.role === "OWNER")?.user_id ?? (actor.owner ? userId : null),
+    activeMemberCount: active.length,
+  };
+  const handovers = useResource(useCallback((signal: AbortSignal) => api.finance.handovers(fund.id, signal), [api, fund.id]), tab === "handovers");
+  const openHandover = handovers.data?.find(row => row.status === "NOMINATED" || row.status === "ACCEPTED");
   const contributions = useCallback((cursor: string | undefined, signal: AbortSignal) => api.finance.list(fund.id, "contributions", cursor, signal), [api, fund.id]);
   const requests = useCallback((cursor: string | undefined, signal: AbortSignal) => api.finance.list(fund.id, "contribution-requests", cursor, signal), [api, fund.id]);
   const expenses = useCallback((cursor: string | undefined, signal: AbortSignal) => api.finance.list(fund.id, "expenses", cursor, signal), [api, fund.id]);
@@ -214,7 +260,7 @@ function FundRecords({ fund, trip, userId, locked, open, who, tab, members, onIn
       {row.cancelled_reason && <Text style={typography.body}>Lý do hủy: {row.cancelled_reason}</Text>}
       {row.rejected_reason && <Text style={typography.body}>Lý do từ chối gần nhất: {row.rejected_reason}</Text>}
       <View style={ui.actionRow}>
-        {actor.writable && row.member_user_id === userId && row.status === "PENDING" && <Button label="Xem VietQR TEST" compact variant="soft" disabled={locked} onPress={() => onInstruction(row.id)} />}
+        {actor.writable && row.member_user_id === userId && row.status === "PENDING" && <Button label="Mã QR chuyển khoản" compact variant="soft" disabled={locked} onPress={() => onInstruction(row.id)} />}
         {contributionActions(row, actor).map(action => <Button key={action} label={actionLabels[action]} compact accessibilityLabel={`${actionLabels[action]} ${row.id.slice(0, 8)}`} variant="soft" disabled={locked} onPress={() => open(contributionForm(fund, row, action, who))} />)}
       </View>
     </>} /></>}
@@ -238,7 +284,7 @@ function FundRecords({ fund, trip, userId, locked, open, who, tab, members, onIn
         {!!row.category && <Text style={typography.footnote}>{row.category}</Text>}
         {!!row.description && <Text style={typography.body}>{row.description}</Text>}
         {!!row.rejected_reason && <Text style={typography.body}>Lý do từ chối: {row.rejected_reason}</Text>}
-        {row.receipt_available && <Notice>Đã gắn chứng từ riêng tư. Backend hiện chưa trả mã tải trong danh sách; chưa thể mở chứng từ từ bản ghi này.</Notice>}
+        {row.receipt_available && <ExpenseReceipt expenseId={row.id} />}
         <View style={ui.actionRow}>
           {expenseActions(row, actor).map(action => <Button key={action} label={actionLabels[action]} compact accessibilityLabel={`${actionLabels[action]} ${row.title}`} variant="soft" disabled={locked} onPress={() => open(action === "edit" ? expenseForm(fund, row) : expenseActionForm(fund, row, action, trip.timezone))} />)}
         </View>
@@ -253,9 +299,14 @@ function FundRecords({ fund, trip, userId, locked, open, who, tab, members, onIn
         </View>
         <Text style={typography.body}>{row.reason}</Text>
         {row.nonreceipt_confirmed_at && <Notice>Người nhận đã báo chưa nhận tiền.</Notice>}
-        {row.reversal_requested_at && <Notice>Đã yêu cầu đảo hoàn tiền · {row.reversal_consented_at ? "Người nhận đã đồng ý" : "Chờ người nhận đồng ý"}</Notice>}
+        {row.reversal_requested_at && <Notice>Đã yêu cầu đảo hoàn tiền · {row.reversal_consented_at ? "Người nhận đã đồng ý" : "Chờ người nhận đồng ý"}{row.reversal_reason ? ` · Lý do: ${row.reversal_reason}` : ""}</Notice>}
+        {(row.status === "PENDING" || row.status === "HOLDER_REPORTED") && (() => {
+          const confirmer = refundConfirmer(row, refundContext);
+          return <Text style={typography.footnote}>{confirmer ? `Người xác nhận đã nhận: ${confirmer === userId ? "Bạn" : who(confirmer)}` : "Cần chủ nhóm chỉ định người kiểm chứng trước khi xác nhận."}</Text>;
+        })()}
+        {row.confirmation_mode && <Text style={typography.footnote}>Cách xác nhận: {confirmationModes[row.confirmation_mode] ?? row.confirmation_mode}</Text>}
         <View style={ui.actionRow}>
-          {refundActions(row, actor).map(action => <Button key={action} label={actionLabels[action]} compact accessibilityLabel={`${actionLabels[action]} ${row.id.slice(0, 8)}`} variant="soft" disabled={locked} onPress={() => open(refundActionForm(fund, row, action, who))} />)}
+          {refundActions(row, actor, refundContext).map(action => <Button key={action} label={action === "assign-verifier" && row.verifier_user_id ? "Đổi người kiểm chứng" : actionLabels[action]} compact accessibilityLabel={`${actionLabels[action]} ${row.id.slice(0, 8)}`} variant="soft" disabled={locked} onPress={() => open(action === "assign-verifier" ? refundVerifierForm(fund, row, members, userId, who) : refundActionForm(fund, row, action, who))} />)}
         </View>
       </>} />
     </>}
@@ -268,6 +319,36 @@ function FundRecords({ fund, trip, userId, locked, open, who, tab, members, onIn
       <Text style={typography.body}>Số dư sau: {money(row.balance_after)}</Text>
       {row.reason && <Text style={typography.body}>{row.reason}</Text>}
     </>} />}
+    {tab === "handovers" && <>
+      <Text style={typography.body}>Người giữ quỹ hiện tại: {fund.holder_user_id === userId ? "Bạn" : who(fund.holder_user_id)}. Bàn giao chỉ đổi người chịu trách nhiệm; tiền được giao nhận bên ngoài ứng dụng và số dư không đổi.</Text>
+      {actor.owner && actor.writable && !openHandover && !handovers.loading && <Button label="Đề cử người giữ quỹ mới" disabled={locked || active.length < 2} onPress={() => open(handoverCreateForm(fund, members, userId))} />}
+      <ResourceFeedback {...handovers} hasData={!!handovers.data} onRetry={() => { void handovers.reload(); }} />
+      {handovers.data && !handovers.data.length && <Text style={typography.body}>Chưa có lần bàn giao nào.</Text>}
+      {handovers.data?.map(row => {
+        const old = row.old_holder_user_id === userId, next = row.new_holder_user_id === userId, party = actor.owner || old || next;
+        const pending = row.status === "NOMINATED" || row.status === "ACCEPTED";
+        const actions: ("accept" | "refresh-snapshot" | "confirm" | "cancel")[] = [];
+        if (actor.writable && pending) {
+          if (row.status === "NOMINATED" && next) actions.push("accept");
+          if (row.status === "ACCEPTED" && row.snapshot_stale && party) actions.push("refresh-snapshot");
+          if (row.status === "ACCEPTED" && !row.snapshot_stale && ((old && !row.old_holder_confirmed_at) || (next && !row.new_holder_confirmed_at))) actions.push("confirm");
+          if (party) actions.push("cancel");
+        }
+        return <View key={row.id} style={ui.record}>
+          <View style={ui.recordHeader}>
+            <Text style={typography.headline}>{who(row.old_holder_user_id)} → {who(row.new_holder_user_id)}</Text>
+            <StatusBadge status={row.status === "COMPLETED" ? "CONFIRMED" : row.status === "CANCELLED" ? "CANCELLED" : "PENDING"} label={handoverStatus[row.status]} />
+          </View>
+          {row.snapshot && <Text style={typography.body}>Số dư khi chốt: {money(row.snapshot.current_balance)} · Có thể chi: {money(row.snapshot.available_balance)}</Text>}
+          {row.status === "ACCEPTED" && row.snapshot_stale && <Notice>Số liệu quỹ đã thay đổi sau khi chốt. Cập nhật bản chốt rồi hai bên xác nhận lại.</Notice>}
+          {row.status === "ACCEPTED" && !row.snapshot_stale && <Text style={typography.footnote}>Người giữ quỹ cũ: {row.old_holder_confirmed_at ? "đã xác nhận" : "chưa xác nhận"} · Người giữ quỹ mới: {row.new_holder_confirmed_at ? "đã xác nhận" : "chưa xác nhận"}</Text>}
+          {row.cancellation_reason && <Text style={typography.footnote}>Lý do hủy: {row.cancellation_reason}</Text>}
+          {!!actions.length && <View style={ui.actionRow}>
+            {actions.map(action => { const spec = handoverActionForm(fund, row, action, who, userId); return <Button key={action} label={spec.title} compact variant="soft" disabled={locked} onPress={() => open(spec)} />; })}
+          </View>}
+        </View>;
+      })}
+    </>}
     {tab === "closures" && <>
       {actor.owner && actor.writable && <Button label="Yêu cầu đóng quỹ" disabled={locked} onPress={() => open(closureForm(fund))} />}
       <PagedRecords title="phiên đóng quỹ" load={closures} render={row => <>
@@ -319,5 +400,11 @@ const styles = StyleSheet.create({
   budgetSection: {
     gap: 8,
     paddingTop: 4,
+  },
+  receiptImage: {
+    width: "100%",
+    height: 260,
+    borderRadius: radii.control,
+    backgroundColor: colors.fill,
   },
 });
