@@ -15,6 +15,9 @@ import { colors, gradients, radii, shadows, typography } from "@/shared/theme/to
 import { Button } from "@/shared/ui/button";
 import { Feedback } from "@/shared/ui/feedback";
 import { FadeInView, Heading, Notice, Progress, ResourceFeedback, SectionLink, Segments, StatusBadge, ui } from "@/shared/ui/journal";
+import { Hint } from "@/shared/ui/hint";
+import { Wolfi } from "@/shared/ui/carto/wolfi";
+import { IconTile } from "./visuals";
 import { PastelIcon } from "@/shared/ui/pastel";
 import { Screen } from "@/shared/ui/screen";
 import { financeCommands } from "./api";
@@ -134,22 +137,26 @@ function FundWorkspace({ tripId, userId }: { tripId: string; userId: string }) {
         <View style={styles.heroCard}>
           <LinearGradient pointerEvents="none" colors={gradients.card} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
           <View style={ui.recordHeader}>
-            <StatusBadge status={fund.status} label={`${statusLabels[fund.status]} · VND · Phiên bản ${fund.finance_version}`} />
+            <StatusBadge status={fund.status} label={statusLabels[fund.status]} />
             <View style={styles.holderChip}>
               <Text style={typography.footnote}>Người giữ quỹ: {who(fund.holder_user_id)}</Text>
             </View>
           </View>
-          <View style={styles.balanceHero}>
-            <Text style={typography.footnote}>Số dư đã ghi nhận</Text>
-            <Text selectable style={typography.largeTitle}>{money(fund.current_balance)}</Text>
+          <View style={ui.recordHeader}>
+            <View style={[styles.balanceHero, ui.flex]}>
+              <Text style={typography.footnote}>Số dư đã ghi nhận</Text>
+              <Text selectable style={typography.largeTitle}>{money(fund.current_balance)}</Text>
+            </View>
+            <Wolfi pose={Number(fund.current_balance) > 0 ? "happy" : "wink"} size={84} />
           </View>
           <View style={styles.metricsRow}>
             <View style={[styles.metricTile, { backgroundColor: colors.mint }]}>
               <Text style={typography.headline}>Khả dụng: {money(fund.available_balance)}</Text>
             </View>
-            <View style={[styles.metricTile, { backgroundColor: colors.fill }]}>
+            {/* Only shown while money is actually reserved; a permanent "0 ₫" tile is noise. */}
+            {Number(fund.reserved_refund) > 0 && <View style={[styles.metricTile, { backgroundColor: colors.fill }]}>
               <Text style={typography.body}>Giữ chỗ hoàn tiền: {money(fund.reserved_refund)}</Text>
-            </View>
+            </View>}
           </View>
           <View style={styles.budgetSection}>
             <View style={ui.recordHeader}>
@@ -168,10 +175,10 @@ function FundWorkspace({ tripId, userId }: { tripId: string; userId: string }) {
         <ResourceFeedback {...members} hasData={!!members.data} onRetry={() => { void members.reload(); }} />
         {owner && !archived && <Button label="Mở quỹ nhóm" disabled={locked || !members.data || members.loading || !!members.error} onPress={() => open(enableForm(tripId, members.data!, userId))} />}
       </>}
-      <Notice>Tiền chuyển qua VietQR vào thẳng tài khoản người giữ quỹ; app chỉ ghi sổ và đối chiếu, không tự chuyển tiền. MoMo đang ở chế độ Sandbox.</Notice>
       <PaymentQrEntry key={tripId} />
-      <SectionLink title="Bản nháp dự trù riêng" subtitle="Giữ các khoản dự kiến cũ · không ghi vào sổ quỹ" icon="edit" onPress={() => router.push({ pathname: "/trip/[id]/fund-drafts", params: { id: tripId } })} />
-      <SectionLink title="Công cụ quỹ mở rộng" subtitle="Ghi chú ngoài quỹ · lịch sử kiểm toán · MoMo Sandbox · đối soát" icon="wallet" onPress={() => router.push({ pathname: "/trip/[id]/fund-tools", params: { id: tripId } })} />
+      <Hint title="Quỹ hoạt động thế nào?">Tiền chuyển qua VietQR vào thẳng tài khoản người giữ quỹ; app chỉ ghi sổ và đối chiếu, không tự chuyển tiền. Chủ nhóm cấu hình quỹ và tạo yêu cầu góp. Người giữ quỹ xác nhận đã nhận tiền và các khoản chi. Người được hoàn tiền tự xác nhận đã nhận đủ. MoMo đang ở chế độ thử nghiệm (Sandbox).</Hint>
+      <SectionLink title="Bản nháp dự trù riêng" subtitle="Khoản dự kiến, chưa ghi sổ" icon="edit" onPress={() => router.push({ pathname: "/trip/[id]/fund-drafts", params: { id: tripId } })} />
+      <SectionLink title="Công cụ quỹ mở rộng" subtitle="Ghi chú, lịch sử, MoMo, đối soát" icon="wallet" onPress={() => router.push({ pathname: "/trip/[id]/fund-tools", params: { id: tripId } })} />
     </>}
     {form && <FinanceForm spec={form} busy={operation.busy} onSubmit={operation.run} onClose={() => setForm(undefined)} />}
     {instruction && <InstructionSheet contributionId={instruction} onClose={() => setInstruction(undefined)} />}
@@ -195,8 +202,11 @@ function FundOverview({ fund, trip, userId, locked, open }: Context) {
     <Text accessibilityRole="header" style={typography.section}>Tài khoản nhận tiền</Text>
     <ResourceFeedback {...destinations} hasData={!!destinations.data} onRetry={() => { void destinations.reload(); }} />
     {destinations.data?.map(row => { const qrUrl = row.destination_type === "VIETQR" && row.active ? destinationQrUrl(row) : undefined; return <View key={row.id} style={ui.record}>
+      <View style={ui.row}>
+        <IconTile icon="wallet" tone={row.destination_type === "VIETQR" ? colors.mint : colors.fill} />
+        <Text style={[typography.headline, ui.flex]}>{row.destination_type === "VIETQR" ? "VietQR" : "MoMo · SANDBOX"}{row.is_default ? " · Mặc định" : ""}</Text>
+      </View>
       <View style={ui.recordHeader}>
-        <Text style={typography.headline}>{row.destination_type === "VIETQR" ? "VietQR" : "MoMo · SANDBOX"}{row.is_default ? " · Mặc định" : ""}</Text>
         <StatusBadge status={row.active && row.confirmed_by_holder_at ? "CONFIRMED" : row.active ? "PENDING" : "CLOSED"} label={`${row.active ? "Đang hoạt động" : "Đã tắt"} · ${row.confirmed_by_holder_at ? "Người giữ quỹ đã xác nhận" : "Chưa được người giữ quỹ xác nhận"}`} />
       </View>
       {row.account_number ? <>
@@ -220,7 +230,6 @@ function FundOverview({ fund, trip, userId, locked, open }: Context) {
         </>}
       </View>}
     </View>; })}
-    {actor.writable && <Notice>Chủ nhóm cấu hình quỹ và phát hành yêu cầu. Người giữ quỹ xác nhận nhận tiền/chi. Người được hoàn tự xác nhận nhận đủ.</Notice>}
   </FadeInView>;
 }
 
