@@ -36,6 +36,18 @@ export function IconTile({ icon, tone = colors.mint }: { icon: DesignIconName; t
   );
 }
 
+/** Coloured circle with the first letter of a name, so people in a list are told apart at a glance. */
+export function Avatar({ name }: { name: string }) {
+  const tones = [colors.mint, colors.fill, colors.tealSoft, colors.lavender];
+  const letter = name.trim().charAt(0).toUpperCase() || "?";
+  const tone = tones[[...name].reduce((sum, char) => sum + char.codePointAt(0)!, 0) % tones.length];
+  return (
+    <View style={[styles.avatar, { backgroundColor: tone }]} {...decorative}>
+      <Text style={typography.headline}>{letter}</Text>
+    </View>
+  );
+}
+
 /** Flight path drawing: origin pin, dotted line, plane, dotted line, destination pin. */
 export function RouteStrip() {
   const dots = (key: string) => (
@@ -61,6 +73,7 @@ const styles = StyleSheet.create({
   onPhoto: { color: "#FFFFFF" },
   eyebrow: { letterSpacing: 0.8, textTransform: "uppercase" },
   tile: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
+  avatar: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center" },
   route: { flexDirection: "row", alignItems: "center", gap: 8 },
   dots: { flex: 1, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   dot: { width: 5, height: 5, borderRadius: 3, backgroundColor: colors.tealPressed, opacity: 0.45 },

@@ -17,7 +17,7 @@ import { Feedback } from "@/shared/ui/feedback";
 import { FadeInView, Heading, Notice, Progress, ResourceFeedback, SectionLink, Segments, StatusBadge, ui } from "@/shared/ui/journal";
 import { Hint } from "@/shared/ui/hint";
 import { Wolfi } from "@/shared/ui/carto/wolfi";
-import { IconTile } from "./visuals";
+import { Avatar, IconTile } from "./visuals";
 import { PastelIcon } from "@/shared/ui/pastel";
 import { Screen } from "@/shared/ui/screen";
 import { financeCommands } from "./api";
@@ -158,13 +158,13 @@ function FundWorkspace({ tripId, userId }: { tripId: string; userId: string }) {
               <Text style={typography.body}>Giữ chỗ hoàn tiền: {money(fund.reserved_refund)}</Text>
             </View>}
           </View>
-          <View style={styles.budgetSection}>
+          {fund.budget_amount !== null && fund.budget_amount !== undefined && <View style={styles.budgetSection}>
             <View style={ui.recordHeader}>
               <Text style={typography.body}>Ngân sách dự kiến: {money(fund.budget_amount)}</Text>
               {budgetRatio !== undefined && <Text style={typography.footnote}>{Math.min(999, Math.round(budgetRatio))}%</Text>}
             </View>
             {budgetRatio !== undefined && <Progress done={Math.min(100, Math.max(0, budgetRatio))} total={100} />}
-          </View>
+          </View>}
         </View>
         {(fund.status !== "OPEN" || archived) && <Notice>{fund.status === "CLOSING" ? "Đang chốt quỹ: các giao dịch khác và thay đổi thành viên bị khóa. Mở tab Đóng quỹ để xem/xác nhận hoặc hủy phiên." : "Quỹ đã đóng hoặc chuyến đi đã lưu trữ: chỉ đọc lịch sử."}</Notice>}
         <Segments scroll items={tabs} value={tab} onChange={setTab} />
@@ -175,10 +175,12 @@ function FundWorkspace({ tripId, userId }: { tripId: string; userId: string }) {
         <ResourceFeedback {...members} hasData={!!members.data} onRetry={() => { void members.reload(); }} />
         {owner && !archived && <Button label="Mở quỹ nhóm" disabled={locked || !members.data || members.loading || !!members.error} onPress={() => open(enableForm(tripId, members.data!, userId))} />}
       </>}
+      {(!fund || tab === "overview") && <>
       <PaymentQrEntry key={tripId} />
       <Hint title="Quỹ hoạt động thế nào?">Tiền chuyển qua VietQR vào thẳng tài khoản người giữ quỹ; app chỉ ghi sổ và đối chiếu, không tự chuyển tiền. Chủ nhóm cấu hình quỹ và tạo yêu cầu góp. Người giữ quỹ xác nhận đã nhận tiền và các khoản chi. Người được hoàn tiền tự xác nhận đã nhận đủ. MoMo đang ở chế độ thử nghiệm (Sandbox).</Hint>
       <SectionLink title="Bản nháp dự trù riêng" subtitle="Khoản dự kiến, chưa ghi sổ" icon="edit" onPress={() => router.push({ pathname: "/trip/[id]/fund-drafts", params: { id: tripId } })} />
       <SectionLink title="Công cụ quỹ mở rộng" subtitle="Ghi chú, lịch sử, MoMo, đối soát" icon="wallet" onPress={() => router.push({ pathname: "/trip/[id]/fund-tools", params: { id: tripId } })} />
+      </>}
     </>}
     {form && <FinanceForm spec={form} busy={operation.busy} onSubmit={operation.run} onClose={() => setForm(undefined)} />}
     {instruction && <InstructionSheet contributionId={instruction} onClose={() => setInstruction(undefined)} />}
@@ -264,7 +266,10 @@ function FundRecords({ fund, trip, userId, locked, open, who, tab, members, onIn
         <Text style={typography.headline}>{money(row.amount)}</Text>
         {status(row.status)}
       </View>
-      <Text style={typography.body}>{row.member_user_id === userId ? "Khoản đóng của bạn" : who(row.member_user_id)}</Text>
+      <View style={ui.row}>
+        <Avatar name={who(row.member_user_id)} />
+        <Text style={[typography.body, ui.flex]}>{row.member_user_id === userId ? "Khoản đóng của bạn" : who(row.member_user_id)}</Text>
+      </View>
       {row.waived_reason && <Text style={typography.body}>Lý do miễn: {row.waived_reason}</Text>}
       {row.cancelled_reason && <Text style={typography.body}>Lý do hủy: {row.cancelled_reason}</Text>}
       {row.rejected_reason && <Text style={typography.body}>Lý do từ chối gần nhất: {row.rejected_reason}</Text>}
@@ -280,7 +285,16 @@ function FundRecords({ fund, trip, userId, locked, open, who, tab, members, onIn
       </View>
       {row.note && <Text style={typography.body}>{row.note}</Text>}
       <Text style={typography.footnote}>{row.due_at ? `Hạn: ${timeAt(row.due_at, trip.timezone)}` : "Không đặt hạn"}</Text>
-      {row.contributions?.map(item => <Text key={item.id} style={typography.body}>{who(item.member_user_id)} · {money(item.amount)} · {statusLabels[item.status]}</Text>)}
+      {!!row.contributions?.length && <>
+        <View style={ui.recordHeader}>
+          <Text style={typography.footnote}>Đã góp {row.contributions.filter(item => item.status === "CONFIRMED").length}/{row.contributions.length} người</Text>
+        </View>
+        <Progress done={row.contributions.filter(item => item.status === "CONFIRMED").length} total={row.contributions.length} />
+      </>}
+      {row.contributions?.map(item => <View key={item.id} style={ui.row}>
+        <Avatar name={who(item.member_user_id)} />
+        <Text style={[typography.body, ui.flex]}>{who(item.member_user_id)} · {money(item.amount)} · {statusLabels[item.status]}</Text>
+      </View>)}
       {actor.owner && actor.writable && row.status === "OPEN" && <View style={ui.actionRow}><Button label="Sửa đợt đóng góp" compact accessibilityLabel={`Sửa đợt đóng góp ${row.title}`} variant="soft" disabled={locked} onPress={() => open(contributionRequestEditForm(fund, row, trip.timezone))} /></View>}
     </>} /></>}
     {tab === "expenses" && <>
@@ -321,7 +335,10 @@ function FundRecords({ fund, trip, userId, locked, open, who, tab, members, onIn
     </>}
     {tab === "transactions" && <PagedRecords title="giao dịch" load={transactions} render={row => <>
       <View style={ui.recordHeader}>
-        <Text style={typography.headline}>{row.direction === "IN" ? "+" : "−"}{money(row.amount)}</Text>
+        <View style={ui.row}>
+          <IconTile icon={row.direction === "IN" ? "plus" : "wallet"} tone={row.direction === "IN" ? colors.mint : colors.fill} />
+          <Text style={typography.headline}>{row.direction === "IN" ? "+" : "−"}{money(row.amount)}</Text>
+        </View>
         <StatusBadge status={row.direction === "IN" ? "CONFIRMED" : "DRAFT"} label={{ CONTRIBUTION: "Đóng góp", EXPENSE: "Khoản chi", REFUND: "Hoàn tiền", REVERSAL: "Bút toán đảo" }[row.transaction_type]} />
       </View>
       <Text style={typography.footnote}>#{row.sequence} · {timeAt(row.created_at, trip.timezone)}</Text>
