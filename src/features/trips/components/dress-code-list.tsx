@@ -10,18 +10,22 @@ import { EmptyState, Notice, Segments, ui } from "@/shared/ui/journal";
 import { Sheet } from "@/shared/ui/sheet";
 import type { useTrip } from "../hooks/use-trip";
 import { dressCodeForm, dressCodeInput, dressDayLabel, dressScopeLabel, dressScopes, DRESS_LABEL_MAX, type DressCodeForm } from "../model/dress-code";
-import type { DressCode, Plan } from "../types";
+import { dressRegion, dressSuggestionText, dressSuggestions, dressWeather, dressWeatherOptions, type DressWeather } from "../model/dress-suggestions";
+import type { DressCode, Plan, Trip } from "../types";
+import { dateKey } from "../utils";
 
 type TripApi = ReturnType<typeof useTrip>["api"];
-type Props = { api: TripApi; tripId: string; plan: Plan; days: string[]; scope: string; reload: () => Promise<unknown> | void };
+type Props = { api: TripApi; trip: Pick<Trip, "id" | "name" | "start_at" | "timezone">; plan: Plan; days: string[]; scope: string; reload: () => Promise<unknown> | void };
 
 /** Dress codes saved on the server and shared with the whole group (FR-PL03). */
-export function DressCodeList({ api, tripId, plan, days, scope, reload }: Props) {
+export function DressCodeList({ api, trip, plan, days, scope, reload }: Props) {
+  const tripId = trip.id;
   const command = useCommand();
   const [form, setForm] = useState<DressCodeForm>();
   const [formError, setFormError] = useState<string>();
   const [deleting, setDeleting] = useState<DressCode>();
   const [saved, setSaved] = useState<string>();
+  const [pickedWeather, setPickedWeather] = useState<DressWeather>();
   const editable = plan.permissions.can_edit;
   const visible = plan.dress_codes.filter(code => scope === "ALL" || code.scope_type === scope);
 
@@ -55,6 +59,14 @@ export function DressCodeList({ api, tripId, plan, days, scope, reload }: Props)
     setSaved("Đã xóa dress code.");
     await reload();
   }
+  // Built-in suggestions: typical weather for the place and month, plus presets for matching places.
+  const places = [trip.name, ...plan.selected_locations.flatMap(item => [item.name, item.address ?? ""])];
+  const latitudes = plan.selected_locations.flatMap(item => item.latitude === null ? [] : [Number(item.latitude)]).filter(Number.isFinite);
+  const day = form?.scope === "DAY" && form.date ? form.date : dateKey(trip.start_at, trip.timezone);
+  const guessedWeather = dressWeather(dressRegion(places, latitudes.length ? latitudes.reduce((sum, value) => sum + value, 0) / latitudes.length : null), Number(day.slice(5, 7)));
+  const weather = pickedWeather ?? guessedWeather;
+  const chosenActivity = plan.activities.find(item => item.id === form?.activity);
+  const suggestions = dressSuggestions(weather, form?.scope === "ACTIVITY" ? (chosenActivity ? [chosenActivity.title] : []) : [...places, ...plan.activities.map(item => item.title)]);
   const failure = command.error && <>
     <Feedback message={command.error} />
     <Button label="Tải kế hoạch mới nhất" variant="soft" compact onPress={() => { command.clearError(); setForm(undefined); setDeleting(undefined); void reload(); }} />
@@ -95,6 +107,17 @@ export function DressCodeList({ api, tripId, plan, days, scope, reload }: Props)
             ? <Segments scroll value={form.activity} items={plan.activities.map(item => ({ value: item.id, label: item.title }))} onChange={activity => { if (!command.busy) change({ ...form, activity }); }} />
             : <Text style={typography.footnote}>Chưa có hoạt động nào trong lịch trình.</Text>}
         </View>}
+        <View style={ui.stack}>
+          <Text style={typography.headline}>Gợi ý theo thời tiết</Text>
+          <Segments scroll value={weather} items={dressWeatherOptions.map(option => ({ value: option.value, label: option.label }))} onChange={value => { if (!command.busy) setPickedWeather(value); }} />
+          <Text style={typography.footnote}>{weather === guessedWeather ? "Đang chọn theo nơi và tháng đi. " : ""}Chạm một gợi ý để điền sẵn, rồi sửa lại nếu cần.</Text>
+          {suggestions.map(suggestion => <View key={suggestion.id} style={[ui.row, { flexWrap: "wrap" }]}>
+            <View style={{ flexDirection: "row" }} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+              {suggestion.colors.map((item, index) => <View key={item.hex} style={{ width: 18, height: 18, borderRadius: 9, marginLeft: index ? -6 : 0, borderWidth: 1, borderColor: colors.line, backgroundColor: item.hex }} />)}
+            </View>
+            <Button compact variant="soft" label={suggestion.label} accessibilityLabel={`Dùng gợi ý ${suggestion.label}`} disabled={command.busy} onPress={() => change({ ...form, label: suggestion.label, description: dressSuggestionText(suggestion) })} />
+          </View>)}
+        </View>
         <FormField label="Mô tả trang phục" icon="edit" value={form.description} multiline maxLength={5000} editable={!command.busy} placeholder="Màu sắc, kiểu đồ, lưu ý…" onChangeText={description => change({ ...form, description })} />
         {formError && <Feedback message={formError} />}
         {failure}

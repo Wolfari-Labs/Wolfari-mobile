@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createTripsApi } from '../src/features/trips/api/trips.api.ts';
 import { dressCodeForm, dressCodeInput, dressScopeLabel } from '../src/features/trips/model/dress-code.ts';
+import { dressRegion, dressSuggestionText, dressSuggestions, dressWeather } from '../src/features/trips/model/dress-suggestions.ts';
 
 const days = ['2026-11-12', '2026-11-13'];
 const activities = [{ id: 'a1', title: 'Chùa Linh Ứng' }, { id: 'a2', title: 'Ăn tối' }];
@@ -51,4 +52,17 @@ test('API051-053 requests carry the idempotency key and plan version', async () 
   ]);
   assert.deepEqual(calls[0].body, input);
   assert.deepEqual(calls[2].body, { expected_plan_version: 7 });
+});
+
+test('suggestions follow the usual weather of the place and month, then matching places', () => {
+  assert.equal(dressRegion(['Wolfari Demo — Đà Nẵng']), 'CENTRAL');
+  assert.equal(dressRegion(['Chuyến đi mùa hè'], 21.03), 'NORTH');
+  assert.equal(dressRegion(['Chuyến đi mùa hè']), null);
+  assert.equal(dressWeather('CENTRAL', 11), 'RAINY');
+  assert.equal(dressWeather('NORTH', 1), 'COLD');
+  assert.equal(dressWeather('SOUTH', 2), 'HOT');
+  assert.equal(dressWeather('HIGHLAND', 6), 'COOL');
+  assert.deepEqual(dressSuggestions('RAINY', ['Đà Nẵng', 'Chùa Linh Ứng', 'Đến sân bay']).map(item => item.id), ['weather-rainy', 'place-beach', 'place-sacred']);
+  assert.deepEqual(dressSuggestions('HOT', ['Dạo phố', 'Nộp thuế']).map(item => item.id), ['weather-hot', 'place-city']);
+  assert.match(dressSuggestionText(dressSuggestions('HOT', [])[0]), /^Tông màu: trắng, be, xanh nhạt. /);
 });

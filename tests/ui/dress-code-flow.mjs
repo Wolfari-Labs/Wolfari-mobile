@@ -109,6 +109,18 @@ try {
   assert.equal(patch.method, "PATCH");
   assert.deepEqual([patch.body.scope_type, patch.body.plan_date, patch.body.activity_id, patch.body.expected_plan_version], ["ACTIVITY", null, activityId, 4]);
 
+  // Suggestions: November in Đà Nẵng defaults to the rainy season; a pick only fills the form.
+  await button("Thêm dress code").click();
+  await button("Dùng gợi ý Gọn nhẹ ngày mưa").waitFor();
+  await button("Dùng gợi ý Trắng – xanh biển").waitFor();
+  await tab("Nắng nóng").click();
+  await button("Dùng gợi ý Mát mẻ ngày nắng").click();
+  assert.equal(await field("Tên dress code").inputValue(), "Mát mẻ ngày nắng");
+  assert.match(await field("Mô tả trang phục").inputValue(), /^Tông màu: trắng, be, xanh nhạt./);
+  assert.equal(writes().length, 2, "Picking a suggestion does not save");
+  await screenshot("suggestions");
+  await button("Đóng").click();
+
   // Filter by scope.
   await tab("Cả chuyến").click();
   await text("Thoải mái").waitFor();

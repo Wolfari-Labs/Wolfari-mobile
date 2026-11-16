@@ -18,7 +18,7 @@ export default function DressCodeScreen() {
     {data && <>
       <Segments scroll value={scope} onChange={setScope} items={[{ value: "ALL", label: "Tất cả" }, { value: "TRIP", label: "Cả chuyến" }, { value: "DAY", label: "Theo ngày" }, { value: "ACTIVITY", label: "Hoạt động" }]} />
       {/* Servers with dress code writes share the list with the group; older ones keep device drafts. */}
-      {data.plan.capabilities?.dress_codes_write ? <DressCodeList key={id} api={resource.api} tripId={id} plan={data.plan} days={days} scope={scope} reload={resource.reload} /> :
+      {data.plan.capabilities?.dress_codes_write ? <DressCodeList key={id} api={resource.api} trip={data.trip} plan={data.plan} days={days} scope={scope} reload={resource.reload} /> :
       <DraftCollection key={id} scope={id} feature="dress-code" title="dress code" editable={data.plan.permissions.can_edit}
         base={JSON.stringify([data.plan.dress_codes, days, data.plan.activities.map(a => a.id)])}
         seed={data.plan.dress_codes.map(code => ({ id: code.id, label: code.label, scope: code.scope_type, date: code.plan_date ?? "", activity: code.activity_id ?? "", description: code.description ?? "", palette: "" }))}
