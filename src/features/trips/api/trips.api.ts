@@ -3,6 +3,8 @@ import type {
   Activity,
   ActivityInput,
   CreateTrip,
+  DressCode,
+  DressCodeInput,
   Invitation,
   InvitationPreview,
   InvitationResult,
@@ -121,6 +123,26 @@ export function createTripsApi(client: ApiClient) {
           { expected_plan_version: version, confirmed: true },
           key,
         ),
+      ),
+    saveDressCode: (
+      tripId: string,
+      dressCodeId: string | undefined,
+      input: DressCodeInput,
+      key: string,
+    ) =>
+      client.request<DressCode>(
+        `/trips/${id(tripId)}/dress-codes${dressCodeId ? `/${id(dressCodeId)}` : ""}`,
+        write(dressCodeId ? "PATCH" : "POST", input, key),
+      ),
+    removeDressCode: (
+      tripId: string,
+      dressCodeId: string,
+      version: number,
+      key: string,
+    ) =>
+      client.request<{ plan_version: number }>(
+        `/trips/${id(tripId)}/dress-codes/${id(dressCodeId)}`,
+        write("DELETE", { expected_plan_version: version }, key),
       ),
     members: (tripId: string, cursor?: string, signal?: AbortSignal, includeLeft = false) =>
       client.request<Page<Membership>>(

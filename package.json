@@ -67,6 +67,7 @@
     "test:ui:motion": "node tests/ui/motion-flow.mjs",
     "test:ui:splash": "node tests/ui/splash-flow.mjs",
     "test:ui:parity": "node tests/ui/mobile-parity-flow.mjs",
+    "test:ui:dress-code": "node tests/ui/dress-code-flow.mjs",
     "test:ui:demo": "node tests/ui/trip-demo-flow.mjs",
     "test:ui:backend": "node --env-file-if-exists=.env.backend-test.local tests/ui/backend-flow.mjs",
     "test:backend": "node --env-file-if-exists=.env.backend-test.local --experimental-strip-types scripts/check-backend.mjs",

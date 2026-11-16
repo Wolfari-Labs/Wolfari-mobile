@@ -29,6 +29,7 @@ See [Expo Go over Wi-Fi](expo-go.md) for networking and the development LAN brid
 | Plan permissions | `PUT /trips/:id/plan-policy` | OWNER_ONLY, ALL_MEMBERS, SELECTED_MEMBERS with real active membership IDs; explicit confirmation replaces the editor list because the current read API does not return it |
 | Edit trip | `PATCH /trips/:id` | Name, group/public descriptions, plan/export revisions |
 | Packing / dress code | `GET /trips/:id/plan` | Read-only shared data, packing filters, P15 modal when actual items are all complete |
+| Dress code writes | `POST /trips/:id/dress-codes`, `PATCH`/`DELETE /trips/:id/dress-codes/:dress_code_id` | Used only when the Plan reports `capabilities.dress_codes_write`; Plan Editors add, edit and delete for the whole group with `Idempotency-Key` and `expected_plan_version`. Older backends keep device drafts |
 | Edit profile | `GET/PATCH /me` | Actual profile/version, 150-character name limit |
 | Sessions | `GET /me/sessions`, `DELETE /me/sessions/:id` | All pages, explicit revocation, real session IDs without invented device names |
 
@@ -50,7 +51,7 @@ the newer backend main; a 404 from an older demo branch is an error, not empty h
 The earlier statement that Finance had no public Gateway routes is superseded.
 The current Finance API is integrated; see [coverage and limitations](mobile-finance.md).
 Price Watch is now integrated with the MOCK_FLIGHT provider; notification
-preferences are not yet integrated. Packing/dress code edits remain local, and export, archive/delete and
+preferences are not yet integrated. Packing edits remain local (dress codes too on a backend without `dress_codes_write`), and export, archive/delete and
 ownership transfer still have no mobile implementation. Do not infer backend gaps
 from missing mobile screens or from the older source audit.
 
