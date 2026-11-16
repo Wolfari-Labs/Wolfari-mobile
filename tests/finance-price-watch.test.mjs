@@ -6,7 +6,7 @@ import {
   money,
   moneyLabel,
   sandboxPaymentUrl,
-  instructionQrUrl,
+  instructionQrImage,
   bankAppDeeplink,
 } from '../src/features/finance/extended-model.ts';
 import { createCommandJournal } from '../src/features/finance/command.ts';
@@ -14,29 +14,31 @@ import { chunkedStorage } from '../src/features/finance/chunked-storage.ts';
 import { createPriceWatchApi, watchInput } from '../src/features/price-watch/api.ts';
 
 const base = 'https://gateway.test/api/v1';
-test('QR URL matches the TEST instruction and rejects foreign hosts or altered amount', () => {
+test('QR image is published only when the NAPAS payload and SVG match this instruction', () => {
+  // Built by Finance for bank 970436, account 0001234567, 180000 VND, content TESTREF (CRC 5FC6).
+  const qr_payload =
+    '00020101021238540010A00000072701240006970436011000012345670208QRIBFTTA530370454061800005802VN62110807TESTREF63045FC6';
+  const qr_svg =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 29 29" shape-rendering="crispEdges" role="img" aria-label="VietQR"><rect width="29" height="29" fill="#ffffff"/><path d="M4 4h7v1h-7z" fill="#000000"/></svg>';
   const instruction = {
-    environment: 'TEST',
-    bank_bin: '970436',
-    account_number: '0001234567',
-    amount: '180000',
-    reference: 'TESTREF',
-    recipient_name: 'TEST ONLY',
-    qr_url:
-      'https://img.vietqr.io/image/970436-0001234567-compact2.svg?amount=180000&addInfo=TESTREF&accountName=TEST+ONLY',
+    environment: 'LIVE', bank_code: 'VCB', bank_bin: '970436', bank_name: 'Vietcombank', account_number: '0001234567',
+    amount: '180000', reference: 'TESTREF', recipient_name: 'NGUYEN VAN A', qr_payload, qr_svg,
   };
-  assert.equal(instructionQrUrl(instruction), instruction.qr_url);
+  assert.equal(instructionQrImage(instruction), 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(qr_svg));
   for (const change of [
     { amount: '180001' },
-    { environment: 'PRODUCTION' },
-    { qr_url: instruction.qr_url.replace('img.vietqr.io', 'evil.test') },
-    { qr_url: instruction.qr_url + '&amount=1' },
+    { account_number: '0001234568' },
+    { reference: 'OTHER' },
+    { environment: 'TEST' },
+    { qr_payload: qr_payload.slice(0, -1) + '0' },
+    { qr_svg: '<svg onload="x"></svg>' },
+    { qr_svg: qr_svg.replace('<path', '<script>alert(1)</script><path') },
   ])
-    assert.throws(() => instructionQrUrl({ ...instruction, ...change }));
+    assert.throws(() => instructionQrImage({ ...instruction, ...change }), JSON.stringify(change));
 });
 test('bank app deeplink pre-fills only this instruction and only for autofill apps', () => {
   const instruction = {
-    environment: 'TEST', bank_code: 'VCB', bank_bin: '970436', account_number: '0001234567',
+    environment: 'LIVE', bank_code: 'VCB', bank_bin: '970436', account_number: '0001234567',
     amount: '180000', reference: 'TESTREF 01', recipient_name: 'TEST ONLY',
   };
   const url = new URL(bankAppDeeplink(instruction, 'mb', 'wolfarimobile://'));

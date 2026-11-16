@@ -47,16 +47,36 @@ export function expenseActions(row: Expense, actor: FinanceActor) {
   if (row.status === "CONFIRMED" && actor.holder) actions.push("reverse");
   return actions;
 }
-export function refundActions(row: Refund, actor: FinanceActor) {
+/** Trip context the refund verification rule needs; omit it to keep the recipient-only rule. */
+export type RefundContext = { holderUserId: string; ownerUserId: string | null; activeMemberCount: number };
+/**
+ * Mirrors the Backend rule (FR-FN07): the payer (Holder) never verifies their own refund alone.
+ * Recipient ≠ Holder → recipient; recipient = Holder ≠ Owner → Owner; Owner = Holder = recipient →
+ * the member the Owner assigned (single-member Trip: self, without independent verification).
+ * Display hint only; the server stays authoritative (after a handover it keeps the original payer).
+ */
+export function refundConfirmer(row: Refund, ctx: RefundContext): string | null {
+  if (row.member_user_id !== ctx.holderUserId) return row.member_user_id;
+  if (ctx.ownerUserId && ctx.ownerUserId !== ctx.holderUserId) return ctx.ownerUserId;
+  if (ctx.activeMemberCount === 1) return ctx.holderUserId;
+  return row.verifier_user_id ?? null;
+}
+export function refundNeedsVerifier(row: Refund, ctx: RefundContext) {
+  return row.member_user_id === ctx.holderUserId && ctx.ownerUserId === ctx.holderUserId && ctx.activeMemberCount > 1
+    && (row.status === "PENDING" || row.status === "HOLDER_REPORTED");
+}
+export function refundActions(row: Refund, actor: FinanceActor, ctx?: RefundContext) {
   if (!actor.writable) return [];
-  const actions: ("report-paid" | "confirm-received" | "confirm-nonreceipt" | "cancel" | "request-reversal" | "consent-reversal" | "reverse")[] = [];
+  const actions: ("assign-verifier" | "report-paid" | "confirm-received" | "confirm-nonreceipt" | "cancel" | "request-reversal" | "consent-reversal" | "reverse")[] = [];
   const self = row.member_user_id === actor.userId;
+  if (ctx && actor.owner && refundNeedsVerifier(row, ctx)) actions.push("assign-verifier");
   if (row.status === "PENDING") {
     if (actor.holder) actions.push("report-paid");
     if (actor.owner) actions.push("cancel");
   }
   if (row.status === "HOLDER_REPORTED") {
-    if (self) actions.push("confirm-received", "confirm-nonreceipt");
+    if (ctx ? refundConfirmer(row, ctx) === actor.userId : self) actions.push("confirm-received");
+    if (self) actions.push("confirm-nonreceipt");
     if (actor.owner && row.nonreceipt_confirmed_at) actions.push("cancel");
   }
   if (row.status === "CONFIRMED") {

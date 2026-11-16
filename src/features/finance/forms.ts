@@ -4,7 +4,7 @@ import { financeCommands as commands } from "./api.ts";
 import type { FinanceFormSpec } from "./components/finance-form";
 import { eligibleDestinations, money, parseMoney, requiredText } from "./model.ts";
 import { dateLabel, timeLabel, parseDate, localTimestamp } from "../trips/utils.ts";
-import type { Closure, Contribution, ContributionRequest, Destination, Expense, Fund, Refund } from "./types";
+import type { Closure, Contribution, ContributionRequest, Destination, Expense, Fund, HolderHandover, Refund } from "./types";
 import type { PaymentQr } from "../payments/model/payment-qr";
 import { resolveVietQrBank, validVietQrAccount } from "./vietqr-banks.ts";
 
@@ -45,6 +45,7 @@ export const actionLabels: Record<string, string> = {
   "reject-transfer": "Từ chối báo chuyển", reverse: "Đảo giao dịch", edit: "Sửa khoản chi", delete: "Xóa khoản chi nháp",
   submit: "Gửi duyệt khoản chi", withdraw: "Rút đề nghị chi", confirm: "Xác nhận đã chi", reject: "Từ chối khoản chi",
   "report-paid": "Báo đã hoàn tiền", "confirm-nonreceipt": "Báo chưa nhận tiền", "request-reversal": "Yêu cầu đảo hoàn tiền", "consent-reversal": "Đồng ý đảo hoàn tiền",
+  "assign-verifier": "Chỉ định người kiểm chứng",
 };
 export function enableForm(tripId: string, members: Membership[], self: string): FinanceFormSpec {
   return { title: "Mở quỹ nhóm", description: "Chọn người giữ quỹ và tài khoản nhận. Người giữ quỹ phải xác nhận tài khoản riêng sau khi mở; chưa có tiền được thu ở bước này.",
@@ -126,9 +127,34 @@ export function refundForm(fund: Fund, members: Membership[], self: string): Fin
 }
 export function refundActionForm(fund: Fund, row: Refund, action: Parameters<typeof commands.refundAction>[2], who: Namer = shortId): FinanceFormSpec {
   const reason = ["confirm-nonreceipt", "cancel", "request-reversal", "reverse"].includes(action);
-  return { title: actionLabels[action], description: `${money(row.amount)} · Người nhận: ${who(row.member_user_id)}. ${action === "reverse" ? "Phải nhập đúng lý do của yêu cầu đảo đã được người nhận đồng ý. Backend không trả lý do đảo trong danh sách; đối chiếu trực tiếp với người giữ quỹ." : action === "consent-reversal" ? "Chỉ đồng ý sau khi đã trao đổi lý do với người giữ quỹ. Đây là đồng ý đảo sổ, không phải tự thu hồi tiền ngân hàng." : "Người giữ quỹ báo trả; chính người nhận xác nhận đã nhận đủ. Hủy khoản đã báo trả cần người nhận báo chưa nhận trước."}`,
+  return { title: actionLabels[action], description: `${money(row.amount)} · Người nhận: ${who(row.member_user_id)}. ${action === "reverse" ? (row.reversal_reason ? "Lý do đảo được điền sẵn từ yêu cầu đảo mà người nhận đã đồng ý; giữ nguyên để máy chủ chấp nhận." : "Nhập đúng lý do của yêu cầu đảo đã được người nhận đồng ý.") : action === "consent-reversal" ? `Chỉ đồng ý sau khi đã trao đổi lý do với người giữ quỹ${row.reversal_reason ? ` (lý do: ${row.reversal_reason})` : ""}. Đây là đồng ý đảo sổ, không phải tự thu hồi tiền ngân hàng.` : action === "confirm-received" ? "Chỉ xác nhận sau khi đã kiểm tra tiền thực sự đã được hoàn." : "Người giữ quỹ báo trả; người nhận (hoặc người kiểm chứng) xác nhận đã nhận đủ. Hủy khoản đã báo trả cần người nhận báo chưa nhận trước."}`,
+    ...(action === "reverse" && row.reversal_reason ? { initial: { reason: row.reversal_reason } } : {}),
     fields: reason ? [reasonField] : [], destructive: ["cancel", "reverse", "request-reversal"].includes(action),
     build: values => commands.refundAction(fund, row, action, reason ? text(values.reason ?? "", "Lý do") : undefined) };
+}
+/** Owner = Holder = recipient: another active member must verify the refund (FR-FN07). */
+export function refundVerifierForm(fund: Fund, row: Refund, members: Membership[], self: string, who: Namer = shortId): FinanceFormSpec {
+  const candidates = memberOptions(members, self).filter(option => option.value !== fund.holder_user_id);
+  return { title: actionLabels["assign-verifier"], description: `${money(row.amount)} · Người nhận: ${who(row.member_user_id)}. Người nhận đồng thời là chủ nhóm và người giữ quỹ, nên một thành viên khác phải kiểm chứng việc đã hoàn tiền.`,
+    ...(row.verifier_user_id ? { initial: { verifier: row.verifier_user_id } } : {}),
+    fields: [{ key: "verifier", label: "Người kiểm chứng", options: candidates }],
+    build: values => { if (!candidates.some(option => option.value === values.verifier)) throw new Error("Chọn một thành viên khác người giữ quỹ."); return commands.refundVerifier(fund, row, values.verifier); } };
+}
+export function handoverCreateForm(fund: Fund, members: Membership[], self: string): FinanceFormSpec {
+  const candidates = memberOptions(members, self).filter(option => option.value !== fund.holder_user_id);
+  return { title: "Đề cử người giữ quỹ mới", description: "Người được đề cử phải đồng ý; sau đó người giữ quỹ cũ và mới cùng xác nhận bản chốt số dư. Tiền được giao nhận bên ngoài ứng dụng; số dư sổ quỹ không đổi.",
+    fields: [{ key: "holder", label: "Người giữ quỹ mới", options: candidates }],
+    build: values => { if (!candidates.some(option => option.value === values.holder)) throw new Error("Chọn thành viên đang tham gia, khác người giữ quỹ hiện tại."); return commands.handover(fund, values.holder); } };
+}
+export function handoverActionForm(fund: Fund, row: HolderHandover, action: "accept" | "refresh-snapshot" | "confirm" | "cancel", who: Namer = shortId, self?: string): FinanceFormSpec {
+  const amount = row.snapshot ? money(row.snapshot.current_balance) : "số dư";
+  const title = action === "accept" ? "Đồng ý nhận giữ quỹ" : action === "refresh-snapshot" ? "Cập nhật bản chốt" : action === "cancel" ? "Hủy bàn giao" : self === row.old_holder_user_id ? "Xác nhận đã bàn giao tiền" : "Xác nhận đã nhận đủ tiền";
+  const description = action === "accept" ? "Hệ thống chốt số dư hiện tại; sau đó hai bên giao nhận tiền và cùng xác nhận."
+    : action === "refresh-snapshot" ? "Số liệu quỹ đã thay đổi sau khi chốt. Cập nhật bản chốt rồi cả hai bên xác nhận lại."
+    : action === "cancel" ? "Hủy không hoàn tác việc giao tiền đã làm bên ngoài ứng dụng; hai bên tự đối chiếu."
+    : self === row.old_holder_user_id ? `Xác nhận bạn đã giao ${amount} cho ${who(row.new_holder_user_id)}.` : `Xác nhận bạn đã nhận ${amount} từ ${who(row.old_holder_user_id)}. Khi cả hai bên xác nhận, bạn trở thành người giữ quỹ.`;
+  return { title, description, fields: action === "cancel" ? [reasonField] : [], destructive: action === "cancel",
+    build: values => commands.handoverAction(fund, row, action, action === "cancel" ? text(values.reason ?? "", "Lý do") : undefined) };
 }
 export function closureForm(fund: Fund): FinanceFormSpec {
   return { title: "Yêu cầu đóng quỹ", description: "Cần số dư bằng 0, không còn khoản góp/chi/hoàn tiền hay thanh toán chưa xử lý. Quỹ chuyển sang đang đóng và khóa thay đổi; mọi người trong bản chốt phải xác nhận. Không tự đóng theo thời gian.", build: () => commands.closure(fund) };

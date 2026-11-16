@@ -49,6 +49,24 @@ export type Refund = {
   holder_reported_at: string | null; confirmed_at: string | null; nonreceipt_confirmed_at: string | null;
   reversal_requested_at: string | null; reversal_consented_at: string | null;
   created_at: string; updated_at: string; version: number; finance_version: number;
+  /** Optional on older Gateways: reason of the reversal request, verifier and how it was confirmed. */
+  reversal_reason?: string | null; verifier_user_id?: string | null; confirmed_by_user_id?: string | null;
+  confirmation_mode?: "RECIPIENT" | "OWNER" | "ASSIGNED_MEMBER" | "SELF_UNVERIFIED" | null;
+  independent_verification?: boolean | null;
+};
+/** FR-FN06 Holder handover; the snapshot is frozen when the nominee accepts. */
+export type HolderHandover = {
+  id: string; fund_id: string; old_holder_user_id: string; new_holder_user_id: string; nominated_by_user_id: string;
+  status: "NOMINATED" | "ACCEPTED" | "COMPLETED" | "CANCELLED";
+  version: number; finance_version: number; snapshot_finance_version: number | null; snapshot_stale: boolean;
+  snapshot: {
+    current_balance: Money; reserved_refund: Money; available_balance: Money; ledger_sequence: Money; fingerprint: string;
+    pending_contribution_ids: string[]; pending_refund_ids: string[]; pending_expense_ids: string[];
+    pending_payment_ids: string[]; payment_destination_ids: string[]; pending_payment_exception_ids: string[];
+  } | null;
+  accepted_at: string | null; old_holder_confirmed_at: string | null; new_holder_confirmed_at: string | null;
+  completed_at: string | null; cancelled_at: string | null; cancellation_reason: string | null;
+  created_at: string; updated_at: string;
 };
 export type Transaction = {
   id: string; fund_id: string; sequence: string; direction: "IN" | "OUT";
@@ -73,7 +91,7 @@ export type Closure = {
 export type PaymentInstruction = {
   contribution_id: string; amount: Money; currency: "VND"; reference: string;
   recipient_name: string; bank_code: string; bank_bin: string; account_number: string;
-  qr_url: string; environment: "TEST"; warning: string;
+  bank_name: string; qr_payload: string; qr_svg: string; environment: "LIVE"; warning: string;
 };
 export type Receipt = { object_key: string; mime_type: string; size_bytes: number };
 export type FinanceCollections = {
