@@ -9,6 +9,8 @@ It provides a mobile experience for users to access Wolfari's travel features, m
 
 ## Tech Stack
 
+Current integration work and CI/CD setup: [shared packing, dress codes, place search and GitHub checks](docs/integration-ci-cd.md). CI runs on push/PR; APK preview requires the documented GitHub/Expo environment configuration.
+
 - Expo SDK 58 / Expo Router
 - React Native / TypeScript
 - NativeWind 4 / Reanimated 4 / Skia 2
@@ -112,3 +114,5 @@ Wolfari is developed as a multi-platform system consisting of:
 ## License
 
 This project is part of the Wolfari ecosystem.
+
+Quản lý chuyến đi, lịch nhắc cá nhân, push và PDF/chứng từ: xem [hướng dẫn cấu hình và kiểm thử](docs/mobile-completion.md).

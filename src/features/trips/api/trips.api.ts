@@ -12,10 +12,14 @@ import type {
   Membership,
   MembershipOperation,
   Page,
+  PackingInput,
+  PackingItem,
   Plan,
   PlanPolicy,
+  PlanPolicySettings,
   TravelMeta,
   TravelPlace,
+  SelectedLocation,
   Trip,
 } from "../types";
 
@@ -35,6 +39,10 @@ export function createTripsApi(client: ApiClient) {
       });
       return client.request<Page<Trip>>(`/trips?${query}`, { signal });
     },
+    saveLocation: (tripId: string, input: { name: string; address: string | null; latitude: string | null; longitude: string | null; attribution: { text: string; url: string }[]; expected_plan_version: number }, key: string) =>
+      client.request<SelectedLocation>(`/trips/${id(tripId)}/selected-locations`, write("POST", input, key)),
+    removeLocation: (tripId: string, locationId: string, version: number, key: string) =>
+      client.request<{ deleted: boolean }>(`/trips/${id(tripId)}/selected-locations/${id(locationId)}`, write("DELETE", { expected_plan_version: version }, key)),
     get: (tripId: string, signal?: AbortSignal) =>
       client.request<Trip>(`/trips/${id(tripId)}`, { signal }),
     create: (input: CreateTrip, key: string) =>
@@ -149,6 +157,14 @@ export function createTripsApi(client: ApiClient) {
         `/trips/${id(tripId)}/members?limit=100${cursor ? `&cursor=${id(cursor)}` : ""}${includeLeft ? "&include_left=true" : ""}`,
         { signal },
       ),
+    savePacking: (tripId: string, itemId: string | undefined, input: PackingInput, key: string) =>
+      client.request<PackingItem>(`/trips/${id(tripId)}/packing-items${itemId ? `/${id(itemId)}` : ""}`, write(itemId ? "PATCH" : "POST", input, key)),
+    removePacking: (tripId: string, itemId: string, version: number, key: string) =>
+      client.request<{ plan_version: number }>(`/trips/${id(tripId)}/packing-items/${id(itemId)}`, write("DELETE", { expected_plan_version: version }, key)),
+    completePacking: (tripId: string, item: PackingItem, version: number, key: string) =>
+      client.request<PackingItem>(`/trips/${id(tripId)}/packing-items/${id(item.id)}/completion`, write("PATCH", { status: item.status === "COMPLETED" ? "TODO" : "COMPLETED", expected_plan_version: version }, key)),
+    getPolicy: (tripId: string, signal?: AbortSignal) =>
+      client.request<PlanPolicySettings>(`/trips/${id(tripId)}/plan-policy`, { signal }),
     leave: (trip: Trip, reason: string, key: string) => client.request<MembershipOperation>(
       `/trips/${id(trip.id)}/leave`, write("POST", { reason: reason.trim(), expected_membership_revision: trip.membership_revision }, key),
     ),

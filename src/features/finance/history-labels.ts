@@ -1,4 +1,4 @@
-// Readable labels for Finance audit history (API162). Unknown future codes fall back to the raw code.
+// Unknown future events stay readable without exposing internal codes.
 const actions: Record<string, string> = {
   ENABLE_FUND: "Mở quỹ",
   UPDATE_BUDGET: "Cập nhật ngân sách",
@@ -62,17 +62,17 @@ const entities: Record<string, string> = {
 const systems: Record<string, string> = { MOMO_IPN: "MoMo Sandbox", MOMO_RECONCILIATION: "Đối soát tự động", "BANK_WEBHOOK:SEPAY": "Ngân hàng (SePay) báo tiền về" };
 
 export function historyActionLabel(action: string) {
-  return actions[action] ?? action;
+  return actions[action] ?? "Cập nhật quỹ";
 }
 export function historyEntityLabel(entity: string) {
-  return entities[entity.toLowerCase()] ?? entity;
+  return entities[entity.toLowerCase()] ?? "Hoạt động quỹ";
 }
 export function historyActorLabel(entry: { actor_user_id: string | null; system_actor?: string | null }, who: (userId: string) => string) {
   if (entry.actor_user_id) return who(entry.actor_user_id);
-  return entry.system_actor ? systems[entry.system_actor] ?? entry.system_actor : "Hệ thống";
+  return entry.system_actor ? systems[entry.system_actor] ?? "Hệ thống" : "Hệ thống";
 }
 export function historyTimeLabel(iso: string, timezone = "Asia/Ho_Chi_Minh") {
   const date = new Date(iso);
-  if (!Number.isFinite(date.getTime())) return iso;
+  if (!Number.isFinite(date.getTime())) return "Chưa có thời gian";
   return new Intl.DateTimeFormat("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: timezone }).format(date);
 }

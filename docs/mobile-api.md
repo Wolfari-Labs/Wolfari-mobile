@@ -1,5 +1,7 @@
 # Mobile API integration
 
+Current mobile completion: [lifecycle, personal reminders, push, PDF and receipt viewing](mobile-completion.md). Packing writes and place search are described in [the current integration guide](integration-ci-cd.md). Older audit sections below remain historical.
+
 All endpoints below are relative to the existing Gateway URL ending in `/api/v1`.
 See [Expo Go over Wi-Fi](expo-go.md) for networking and the development LAN bridge.
 
@@ -14,9 +16,9 @@ See [Expo Go over Wi-Fi](expo-go.md) for networking and the development LAN brid
 | Create trip | `POST /trips` | Name, description, Vietnam timezone, validated dates; client_request_id equals Idempotency-Key |
 | Overview / itinerary | `GET /trips/:id`, `GET /trips/:id/plan` | Actual activities, packing counts, descriptions and permissions |
 | Activities | `POST /trips/:id/activities`, `PATCH/DELETE .../activities/:activityId`, `PATCH .../completion` | Add/edit/delete/complete, scheduled/unscheduled, overnight dates, public description, attach/detach existing selected location, expected plan version |
-| Reorder itinerary | `PUT /trips/:id/activities/order` | All activity IDs in one atomic, versioned order; explicit group save, no time shifts |
+| Reorder itinerary | `PUT /trips/:id/activities/order` | All activity IDs in one atomic, versioned order; explicit group save clears backwards start/end times on reordered days and preserves the Trip-local date |
 | Places | `GET /travel/places?trip_id=&q=` and plan selected locations | Actual coordinates, native map, external maps, provider attribution/stale/mock metadata |
-| Members | `GET /trips/:id/members?include_left=` | All pages; active/history filters; own profile name and short user IDs for others (endpoint does not return names) |
+| Members | `GET /trips/:id/members?include_left=` | All pages; active/history filters; display names with a readable unnamed-member fallback; internal IDs stay out of visible text and accessibility labels |
 | Leave/remove member | `POST /trips/:id/leave`, `DELETE /trips/:id/members/:memberId`, `GET /operations/:operationId` | Confirmation/reason, role checks, frozen idempotency key/body/revision on uncertain reply; foreground polling, success only for SUCCEEDED + COMMITTED; backend feature remains disabled by default |
 | Group fund | `GET/POST /trips/:id/fund`, `/funds/:id/budget`, `/destinations`, `/transactions` | Server balances, exact decimal-string VND, Owner setup, separate Holder consent, cursor ledger |
 | Contributions | `/funds/:id/contribution-requests`, `/contributions`, `/contributions/:id/*` | Create requests, edit amounts, Self transfer reporting, Holder confirmation/rejection/reversal, Owner waiver/cancellation |
@@ -127,14 +129,19 @@ changes cancel the current drag without changing the draft. Completed earlier
 reorders remain until saved or explicitly discarded. No dependency or API change
 is needed for this interaction.
 
-The preview is local until the user selects **Lưu thứ tự cho nhóm**. Changing the
-order does not change `starts_at`/`ends_at`, shift days or reschedule appointments.
-The screen displays backend `position` order, so time labels can be nonchronological.
+The preview is local until the user selects **Lưu thứ tự cho nhóm**. The editor
+previews each backwards start time that will be cleared. On Save, the backend
+clears both `starts_at` and `ends_at` for those activities and stores their original
+Trip-local day in `scheduled_date`. It retains valid times and never invents new
+durations. Undoing the draft restores the original preview. Only days whose
+relative activity order changes are reconciled; day-only items do not reset the
+comparison. The screen continues to display backend `position` order.
 
 The request includes `activity_ids` for **every activity in the trip**,
 `expected_plan_version` and a UUID `Idempotency-Key`. Only the selected day's slots
 are replaced. The existing backend validates permissions, the full permutation
-and the revision under a transaction; no backend changes are required.
+and the revision under a transaction. Order, time clearing, one version increment,
+audit, outbox and receipt are committed together. Unchanged orders are no-ops.
 
 While the editor is open, foreground polling runs every 15 seconds and on app
 resume (paused while dragging or saving). A clean editor adopts the latest plan;

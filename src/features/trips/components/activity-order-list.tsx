@@ -25,6 +25,7 @@ import { dragPosition, dragScrollOffset, orderFrames, ORDER_LIST_PADDING, ORDER_
 type Props = {
   activities: Activity[];
   timezone: string;
+  clearedTimeIds: ReadonlySet<string>;
   disabled: boolean;
   onChange: (ids: string[]) => void;
   onDragging: (dragging: boolean) => void;
@@ -56,6 +57,7 @@ function OrderRow({ id, active, target, translation, onLayout, children }: Props
 export function ActivityOrderList({
   activities,
   timezone,
+  clearedTimeIds,
   disabled,
   onChange,
   onDragging,
@@ -222,7 +224,9 @@ export function ActivityOrderList({
           >
             <View style={styles.copy}>
               <Text style={styles.time}>
-                {index + 1} · {activityTimeLabel(activity, timezone)}
+                {index + 1} · {clearedTimeIds.has(activity.id)
+                  ? `Chưa chốt giờ · bỏ ${activityTimeLabel(activity, timezone)} khi lưu`
+                  : activityTimeLabel(activity, timezone)}
               </Text>
               <Text style={typography.headline}>{activity.title}</Text>
             </View>

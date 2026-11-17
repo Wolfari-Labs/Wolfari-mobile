@@ -7,6 +7,7 @@ export type MembershipOperation = {
 };
 export type Lifecycle = "UPCOMING" | "ONGOING" | "COMPLETED" | "ARCHIVED";
 export type PlanPolicy = "OWNER_ONLY" | "SELECTED_MEMBERS" | "ALL_MEMBERS";
+export type PlanPolicySettings = { policy: PlanPolicy; editor_member_ids: string[]; membership_revision: number };
 export type Membership = { id: string; trip_id: string; user_id: string; role: "OWNER" | "MEMBER"; joined_at: string; left_at: string | null; display_name?: string | null };
 export type Trip = {
   id: string; name: string; description: string | null; public_description: string | null;
@@ -23,14 +24,15 @@ export type Activity = {
   position: number; status: "TODO" | "COMPLETED"; source: string; plan_version: number;
 };
 export type ActivityInput = { title: string; activity_type: string; description?: string | null; public_description?: string | null; starts_at?: string | null; ends_at?: string | null; scheduled_date?: string | null; selected_location_id?: string | null; position: number; expected_plan_version: number };
-export type SelectedLocation = { id: string; name: string; address: string | null; latitude: string | null; longitude: string | null; source: string };
-export type PackingItem = { id: string; name: string; quantity: string; unit: string | null; note: string | null; category: string | null; assigned_member_id: string | null; due_at: string | null; status: "TODO" | "COMPLETED" };
+export type SelectedLocation = { id: string; name: string; address: string | null; latitude: string | null; longitude: string | null; source: string; metadata?: { attribution?: { text: string; url: string }[] } };
+export type PackingItem = { id: string; name: string; quantity: string; unit: string | null; note: string | null; category: string | null; assigned_member_id: string | null; due_at: string | null; status: "TODO" | "COMPLETED"; completed_by_user_id?: string | null; plan_version?: number };
+export type PackingInput = Pick<PackingItem, "name" | "quantity" | "unit" | "note" | "category" | "assigned_member_id" | "due_at"> & { expected_plan_version: number };
 export type DressCode = { id: string; scope_type: "TRIP" | "DAY" | "ACTIVITY"; plan_date: string | null; activity_id: string | null; label: string; description: string | null; plan_version?: number };
 /** API051/052 body. PATCH keeps omitted fields, so public_description is never sent from mobile. */
 export type DressCodeInput = { scope_type: DressCode["scope_type"]; plan_date: string | null; activity_id: string | null; label: string; description: string | null; expected_plan_version: number };
 export type Plan = { trip_id: string; plan_version: number; export_revision: number; activities: Activity[]; selected_locations: SelectedLocation[]; dress_codes: DressCode[]; packing_items: PackingItem[]; permissions: { can_read: boolean; can_edit: boolean; can_complete: boolean };
   /** Writers this server offers beyond activities; absent on older backends. */
-  capabilities?: { dress_codes_write?: boolean } };
+  capabilities?: { dress_codes_write?: boolean; packing_write?: boolean; locations_write?: boolean } };
 export type Invitation = { id: string; trip_id: string; invitation_type: "EMAIL" | "LINK"; email: string | null; status: "PENDING" | "ACCEPTED" | "DECLINED" | "REVOKED" | "EXPIRED"; version: number; expires_at: string; resolved_at: string | null };
 export type InvitationResult = { invitation: Invitation; one_time_link?: string };
 export type InvitationPreview = { id: string; trip_name: string; inviter_display_name: string; status: Invitation["status"]; expires_at: string };

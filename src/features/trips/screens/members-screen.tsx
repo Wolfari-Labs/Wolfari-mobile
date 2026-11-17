@@ -139,7 +139,7 @@ export default function MembersScreen() {
                 <StatusBadge status="CLOSED" label="Đã rời" />
               ) : null}
             </View>
-            {canManage && member.role === "MEMBER" && !member.left_at && <Button label="Xóa khỏi nhóm" accessibilityLabel={`Xóa ${member.user_id.slice(0, 8)}`} variant="destructive" compact style={{ alignSelf: "flex-start" }} onPress={() => router.push({ pathname: "/trip/[id]/membership-action", params: { id, memberId: member.id } })} />}
+            {canManage && member.role === "MEMBER" && !member.left_at && <Button label="Xóa khỏi nhóm" accessibilityLabel={`Xóa ${memberName(member)}`} variant="destructive" compact style={{ alignSelf: "flex-start" }} onPress={() => router.push({ pathname: "/trip/[id]/membership-action", params: { id, memberId: member.id } })} />}
           </View>
         </FadeInView>
       ))}

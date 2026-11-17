@@ -1,3 +1,4 @@
+import { assertPublicText } from "./assert-public-text.mjs";
 import assert from "node:assert/strict";
 import { access, mkdir } from "node:fs/promises";
 import path from "node:path";
@@ -9,6 +10,7 @@ await mkdir(output, { recursive: true });
 let executablePath;
 for (const candidate of [
   process.env.WOLFARI_BROWSER_PATH,
+  chromium.executablePath(),
   "C:/Program Files/Google/Chrome/Application/chrome.exe",
   "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
 ].filter(Boolean)) {
@@ -200,6 +202,7 @@ await context.route("**/api/v1/**", async (route) => {
     return respond(201, { invitation });
   }
   if (pathname.endsWith("/plan-policy")) {
+    if (method === "GET") return respond(200, { policy: trip.plan_edit_policy, editor_member_ids: trip.plan_edit_policy === "SELECTED_MEMBERS" ? [] : [], membership_revision: trip.membership_revision });
     assert.equal(body.expected_membership_revision, trip.membership_revision);
     assert.deepEqual(body.editor_member_ids, []);
     trip = {
@@ -344,6 +347,7 @@ async function screenshot(name) {
     images.length > 0 &&
       images.every((image) => !image.src.includes("figma.com")),
   );
+  await assertPublicText(page);
   await page.screenshot({ path: path.join(output, name) });
 }
 try {
@@ -457,6 +461,11 @@ try {
     await page.getByLabel("Địa điểm / hoạt động", { exact: true }).inputValue(),
     "Mỹ Khê lúc bình minh",
   );
+  assert.equal(await button("Lưu thay đổi").isDisabled(), true);
+  await click("Dùng bản mới của nhóm");
+  await click("Dùng bản mới và chỉnh sửa lại");
+  assert.equal(await page.getByLabel("Địa điểm / hoạt động", { exact: true }).inputValue(), "Bãi biển Mỹ Khê");
+  await page.getByLabel("Địa điểm / hoạt động", { exact: true }).fill("Mỹ Khê lúc bình minh");
   await click("Lưu thay đổi");
   await button("Mỹ Khê lúc bình minh, 08:00, đã hoàn thành").waitFor();
   // PLAN-03: timed → day-only sends both timestamps null with the calendar date.
@@ -544,6 +553,7 @@ try {
   );
   console.log(`Screenshots: ${output}`);
 } catch (error) {
+  await assertPublicText(page);
   await page.screenshot({ path: path.join(output, "trip-failure.png") });
   console.error(
     "Page:",

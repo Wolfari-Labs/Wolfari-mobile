@@ -74,7 +74,8 @@
           "icon": "./assets/images/wolfari-adaptive-foreground.png",
           "color": "#0E8C8C"
         }
-      ]
+      ],
+      "expo-sharing"
     ],
     "experiments": {
       "typedRoutes": true,

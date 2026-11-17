@@ -1,3 +1,4 @@
+import { assertPublicText } from "./assert-public-text.mjs";
 import assert from 'node:assert/strict';
 import { access, mkdir } from 'node:fs/promises';
 import path from 'node:path';
@@ -6,6 +7,7 @@ const appUrl = process.env.WOLFARI_PREVIEW_URL ?? 'http://localhost:8082';
 let executablePath;
 for (const candidate of [
   process.env.WOLFARI_BROWSER_PATH,
+  chromium.executablePath(),
   'C:/Program Files/Google/Chrome/Application/chrome.exe',
   'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
 ].filter(Boolean))
@@ -34,6 +36,7 @@ const tripId = uid(1),
 let actor = ownerId,
   loseConfirmation = true,
   stale = true;
+let receiptMode = "image";
 const calls = [],
   errors = [],
   receipts = new Map();
@@ -272,6 +275,11 @@ await context.route('**/api/v1/**', async (route) => {
     };
   if (p.startsWith(`/funds/${fundId}/`) && method === 'GET' && lists[collection])
     return ok({ items: lists[collection], next_cursor: null });
+  if (p === `/expenses/${uid(400)}/receipt` && method === 'GET') {
+    assert.ok(req.headers().authorization?.startsWith('Bearer '));
+    if (receiptMode === 'missing') return fail(404, 'RESOURCE_NOT_FOUND');
+    return route.fulfill({ headers, status: 200, contentType: receiptMode === 'pdf' ? 'application/pdf' : 'image/png', body: receiptMode === 'pdf' ? Buffer.from('%PDF-1.7\nfixture\n%%EOF') : Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jS1kAAAAASUVORK5CYII=', 'base64') });
+  }
   if (p.endsWith('/expenses') && method === 'POST') {
     const e = {
       id: uid(400),
@@ -281,7 +289,7 @@ await context.route('**/api/v1/**', async (route) => {
       finance_version: ++fund.finance_version,
       created_by_user_id: actor,
       status: 'DRAFT',
-      receipt_available: false,
+      receipt_available: true,
     };
     expenses.push(e);
     return ok(e);
@@ -323,7 +331,7 @@ try {
   const fundTab = async () => {
     await goto('fund');
     await tab('Đóng góp').click();
-    await page.getByText(/^(Khoản đóng của bạn|Bạn đồng hành #)/).first().waitFor();
+    await page.getByText(/^(Khoản đóng của bạn|Bạn đồng hành)/).first().waitFor();
   };
   const confirmSheet = async () => {
     await button('Tiếp tục').click();
@@ -336,7 +344,7 @@ try {
   await goto('fund');
   await page.getByText('Số dư đã ghi nhận', { exact: true }).waitFor();
   await tab('Đóng góp').click();
-  await page.getByText(/^Bạn đồng hành #/).first().waitFor();
+  await page.getByText(/^Bạn đồng hành/).first().waitFor();
   assert.equal(await starts('Xác nhận đã nhận đủ').count(), 0, 'Owner does not gain Holder rights');
   actor = memberId;
   await fundTab();
@@ -384,6 +392,7 @@ try {
   assert.deepEqual(confirms[0].body, confirms[1].body);
   await tab('Lịch sử').click();
   await page.getByText('+300.000 ₫', { exact: true }).waitFor();
+  await assertPublicText(page);
   await page.screenshot({ path: path.join(shots, 'fund-ledger.png'), fullPage: true });
   await tab('Khoản chi').click();
   await button('Tạo khoản chi').click();
@@ -393,6 +402,23 @@ try {
   await settle();
   await page.getByText('Bữa trưa thử nghiệm · 100.000 ₫', { exact: true }).waitFor();
   assert.equal(fund.current_balance, '500000', 'Draft expense has no ledger effect');
+  await button('Xem chứng từ').click();
+  await page.getByLabel('Ảnh chứng từ khoản chi', { exact: true }).waitFor();
+  const imageDownload = page.waitForEvent('download');
+  await button('Tải / chia sẻ chứng từ').click();
+  assert.equal((await imageDownload).suggestedFilename(), 'wolfari-receipt.png');
+  await button('Ẩn chứng từ').click();
+  receiptMode = 'pdf';
+  await button('Xem chứng từ').click();
+  await button('Mở PDF chứng từ').waitFor();
+  const pdfDownload = page.waitForEvent('download');
+  await button('Tải / chia sẻ chứng từ').click();
+  assert.equal((await pdfDownload).suggestedFilename(), 'wolfari-receipt.pdf');
+  await button('Ẩn chứng từ').click();
+  receiptMode = 'missing';
+  await button('Xem chứng từ').click();
+  await page.getByText('Không tìm thấy chứng từ (có thể đã được thay).', { exact: true }).waitFor();
+
   // Side links live on the overview tab; record tabs show records only.
   await tab('Tổng quan').click();
   await button('Công cụ quỹ mở rộng').click();
@@ -422,6 +448,7 @@ try {
     0,
     'Stale fare is not a fresh threshold hit',
   );
+  await assertPublicText(page);
   await page.screenshot({ path: path.join(shots, 'price-stale.png'), fullPage: true });
   stale = false;
   await button('Làm mới lịch sử giá').click();

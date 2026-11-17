@@ -40,7 +40,7 @@ test("floating chrome uses opaque soft clay and a decorative pastel canvas (dire
   assert.match(glass, /shadows\.card/);
   assert.match(glass, /backgroundColor: colors\.surface/);
   const screen = await readFile(new URL("../src/shared/ui/screen.tsx", import.meta.url), "utf8");
-  assert.match(screen, /BlurTargetView ref=\{blurTarget\}/);
+  assert.match(screen, /BlurTargetView\s+ref=\{blurTarget\}/);
   assert.match(screen, /onHeightChange=\{setTabHeight\}/);
   // The pastel canvas is decoration only and never intercepts touches.
   assert.match(screen, /<LinearGradient pointerEvents="none" colors=\{gradients.canvas\}/);

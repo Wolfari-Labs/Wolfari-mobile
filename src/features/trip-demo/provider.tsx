@@ -14,6 +14,7 @@ import {
   type DemoState,
 } from "./model";
 import { releaseCoverUrl } from "./cover-resource";
+import { errorMessage } from "@/shared/api/errors";
 
 type DemoContextValue = {
   state: DemoState;
@@ -41,9 +42,7 @@ export function TripDemoProvider({ children }: PropsWithChildren) {
       setState(next);
       return undefined;
     } catch (cause) {
-      return cause instanceof Error
-        ? cause.message
-        : "Chưa cập nhật được bản mẫu.";
+      return errorMessage(cause, "Chưa cập nhật được bản mẫu.");
     }
   }
   return (

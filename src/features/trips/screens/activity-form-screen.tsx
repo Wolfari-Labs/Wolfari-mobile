@@ -15,6 +15,7 @@ import {
   Segments,
   ui,
 } from "@/shared/ui/journal";
+import { Sheet } from "@/shared/ui/sheet";
 import { Screen } from "@/shared/ui/screen";
 import { useTrip } from "../hooks/use-trip";
 import type { Activity } from "../types";
@@ -33,6 +34,7 @@ import {
 
 export default function ActivityFormScreen() {
   const resource = useTrip();
+  const [edition, setEdition] = useState(0);
   const { activityId } = useLocalSearchParams<{ activityId?: string }>();
   if (!resource.data)
     return (
@@ -69,7 +71,8 @@ export default function ActivityFormScreen() {
     );
   return (
     <ActivityForm
-      key={activityId ?? "new"}
+      key={`${activityId ?? "new"}:${edition}`}
+      onUseLatest={() => setEdition(value => value + 1)}
       resource={resource}
       activity={activity}
     />
@@ -78,12 +81,17 @@ export default function ActivityFormScreen() {
 function ActivityForm({
   resource,
   activity,
+  onUseLatest,
 }: {
   resource: ReturnType<typeof useTrip>;
   activity?: Activity;
+  onUseLatest(): void;
 }) {
   const { data, api, id } = resource;
   const { trip, plan } = data!;
+  const [baseVersion] = useState(plan.plan_version);
+  const [replaceDraft, setReplaceDraft] = useState(false);
+  const stale = baseVersion !== plan.plan_version;
   const {
     day,
     title: initialTitle,
@@ -126,6 +134,7 @@ function ActivityForm({
   );
   const [validation, setValidation] = useState<string>();
   async function submit() {
+    if (stale || resource.loading || resource.error || command.busy) return;
     if (!title.trim() || title.trim().length > 255) {
       setValidation("Tên hoạt động cần từ 1 đến 255 ký tự.");
       return;
@@ -168,7 +177,7 @@ function ActivityForm({
       ...(timed ? {} : { scheduled_date: mode === "day" ? first! : null }),
       selected_location_id: selectedLocation || null,
       position: activity?.position ?? plan.activities.length,
-      expected_plan_version: plan.plan_version,
+      expected_plan_version: baseVersion,
     };
     const result = await command.run(
       { activityId: activity?.id, ...input },
@@ -185,6 +194,7 @@ function ActivityForm({
         <Button
           label={activity ? "Lưu thay đổi" : "Thêm vào lịch trình"}
           loading={command.busy}
+          disabled={stale || resource.loading || !!resource.error}
           onPress={() => {
             void submit();
           }}
@@ -192,6 +202,15 @@ function ActivityForm({
       }
     >
       <Heading title="Thêm một trải nghiệm" subtitle={trip.name} />
+      {stale && <>
+        <Feedback message="Kế hoạch đã thay đổi. Bản bạn đang sửa được giữ để đối chiếu và chưa thể lưu. Dùng bản mới của nhóm rồi chỉnh sửa lại để tránh ghi đè." />
+        <Button label="Dùng bản mới của nhóm" variant="soft" disabled={resource.loading || !!resource.error} onPress={() => setReplaceDraft(true)} />
+      </>}
+      {resource.error && <Feedback message={resource.error} />}
+      <Sheet visible={replaceDraft} title="Thay bản đang chỉnh sửa?" onClose={() => setReplaceDraft(false)}>
+        <Text style={typography.body}>Các thay đổi chưa lưu trong biểu mẫu này sẽ được thay bằng nội dung mới nhất vừa tải từ nhóm.</Text>
+        <Button label="Dùng bản mới và chỉnh sửa lại" disabled={resource.loading || !!resource.error} onPress={onUseLatest} />
+      </Sheet>
       {validation && <Feedback message={validation} />}
       {command.error && (
         <>
@@ -223,7 +242,7 @@ function ActivityForm({
           { value: "TRANSPORT", label: "Di chuyển" },
           { value: "OTHER", label: "Khác" },
           ...(!["SIGHTSEEING", "MEAL", "TRANSPORT", "OTHER"].includes(type)
-            ? [{ value: type, label: type }]
+            ? [{ value: type, label: "Loại hoạt động khác" }]
             : []),
         ]}
         value={type}

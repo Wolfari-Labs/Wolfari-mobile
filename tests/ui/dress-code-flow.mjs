@@ -1,3 +1,4 @@
+import { assertPublicText } from "./assert-public-text.mjs";
 import assert from "node:assert/strict";
 import { access, mkdir } from "node:fs/promises";
 import path from "node:path";
@@ -6,7 +7,8 @@ import { chromium } from "playwright-core";
 // Every API request is intercepted. This suite never modifies a real trip/account.
 const appUrl = process.env.WOLFARI_PREVIEW_URL ?? "http://localhost:8082";
 let executablePath;
-for (const candidate of [process.env.WOLFARI_BROWSER_PATH, "C:/Program Files/Google/Chrome/Application/chrome.exe", "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"].filter(Boolean)) {
+for (const candidate of [process.env.WOLFARI_BROWSER_PATH,
+  chromium.executablePath(), "C:/Program Files/Google/Chrome/Application/chrome.exe", "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"].filter(Boolean)) {
   if (await access(candidate).then(() => true, () => false)) { executablePath = candidate; break; }
 }
 assert.ok(executablePath);
@@ -71,6 +73,7 @@ const output = path.resolve(".cache/visual/dress-code");
 await mkdir(output, { recursive: true });
 async function screenshot(name) {
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), "No horizontal page overflow");
+  await assertPublicText(page);
   await page.screenshot({ path: path.join(output, name + ".png") });
 }
 const writes = () => calls.filter(call => call.pathname.includes("/dress-codes") && call.method !== "GET");
@@ -138,7 +141,7 @@ try {
   await button("Xóa Thoải mái").click();
   await button("Xóa dress code").click();
   await text("Đã xóa dress code.").waitFor();
-  assert.equal(await text("Thoải mái").count(), 0);
+  await text("Thoải mái").waitFor({ state: "hidden" });
   assert.deepEqual(writes().at(-1).body, { expected_plan_version: server.version - 1 });
 
   // Viewers read the shared list without any write control.

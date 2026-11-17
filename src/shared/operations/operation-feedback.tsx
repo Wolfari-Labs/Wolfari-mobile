@@ -24,9 +24,8 @@ export function OperationFeedback({ operation, onFinish, finishLabel = "Tải l�
         <View style={ui.actionRow}>
           <Button label="Kiểm tra trạng thái" compact variant="soft" loading={operation.busy} onPress={() => { void operation.check(); }} />
           {pending.command && pending.operation?.state !== "NEEDS_REVIEW" && <Button label="Gửi lại cùng yêu cầu" compact loading={operation.busy} onPress={() => { void operation.retry(); }} />}
-          {!pending.operation && <Button label="Bỏ yêu cầu này" compact variant="text" disabled={operation.busy} onPress={() => { void (async () => { if (await operation.discard()) await onFinish(); })(); }} />}
         </View>
-        <Notice>Yêu cầu được giữ khi mở lại app. Nội dung nhạy cảm không được lưu xuống thiết bị; sau khi khởi động lại chỉ tra cứu kết quả, không tự tạo giao dịch mới.</Notice>
+        <Notice>Ứng dụng sẽ tiếp tục kiểm tra yêu cầu này khi bạn mở lại. Hãy kiểm tra trạng thái trước khi thực hiện thao tác khác.</Notice>
       </>}
     </View>}
   </FadeInView>;

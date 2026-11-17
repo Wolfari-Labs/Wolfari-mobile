@@ -9,6 +9,7 @@ await mkdir(output, { recursive: true });
 let executablePath;
 for (const candidate of [
   process.env.WOLFARI_BROWSER_PATH,
+  chromium.executablePath(),
   "C:/Program Files/Google/Chrome/Application/chrome.exe",
   "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
 ].filter(Boolean)) {

@@ -1,7 +1,7 @@
 import type { MembershipOperation } from "../../features/trips/types";
 
 export type OperationCommand = {
-  kind: "finance" | "leave" | "remove"; title: string; targetId?: string;
+  kind: "finance" | "leave" | "remove" | "trip"; title: string; targetId?: string;
   method: "POST" | "PATCH" | "DELETE"; path: string; body: Record<string, unknown>;
 };
 export type OperationReceipt = Pick<OperationCommand, "kind" | "title" | "targetId"> & {
@@ -43,9 +43,9 @@ export function operationMessage(receipt?: OperationReceipt) {
   if (!receipt) return "";
   if (operationCommitted(receipt)) return "Thao tác đã hoàn tất trên máy chủ.";
   const code = receipt.rejection ?? receipt.operation?.error_code ?? receipt.operation?.outcome?.error_code;
-  if (code === "FINANCE_OBLIGATION_BLOCKED") return "Chưa thể rời hoặc xóa thành viên: cần xử lý giao dịch đang chờ, hoàn tiền hoặc quỹ đang giữ. Khoản PENDING đủ điều kiện sẽ được máy chủ miễn; lịch sử tiền được giữ nguyên.";
+  if (code === "FINANCE_OBLIGATION_BLOCKED") return receipt.kind === "trip" ? "Cần đóng quỹ trước khi lưu trữ hoặc xóa chuyến đi. Chuyển chủ nhóm yêu cầu hoàn tất phiên đóng quỹ hoặc bàn giao đang chờ; người giữ quỹ không tự thay đổi." : "Chưa thể rời hoặc xóa thành viên: cần xử lý giao dịch đang chờ, hoàn tiền hoặc quỹ đang giữ. Khoản đang chờ đủ điều kiện sẽ được máy chủ miễn; lịch sử tiền được giữ nguyên.";
   if (code === "VERSION_CONFLICT") return "Dữ liệu quỹ hoặc thành viên đã thay đổi. Tải lại rồi kiểm tra trước khi gửi yêu cầu mới.";
-  if (code === "STATE_CONFLICT") return "Trạng thái chưa cho phép thao tác: kiểm tra số dư khả dụng, giao dịch đang chờ, phiên đóng quỹ và cấu hình backend.";
+  if (code === "STATE_CONFLICT") return "Trạng thái chưa cho phép thao tác: kiểm tra số dư khả dụng, giao dịch đang chờ, phiên đóng quỹ hoặc bàn giao đang chờ.";
   if (receipt.operation?.state === "NEEDS_REVIEW") return "Yêu cầu cần bộ phận vận hành kiểm tra. Giữ nguyên yêu cầu này; không tạo yêu cầu khác.";
   if (operationTerminal(receipt)) return "Yêu cầu không được ghi nhận thành công. Tải lại dữ liệu trước khi thực hiện thao tác khác.";
   if (receipt.operation) return "Máy chủ đang xử lý. Chưa xác nhận thành công; app sẽ kiểm tra lại khi màn hình đang mở.";
@@ -70,12 +70,12 @@ export function createOperationController(deps: Dependencies) {
         let pending: Pending | undefined;
         if (raw) {
           const row = JSON.parse(raw) as OperationReceipt;
-          if (row.tripId !== deps.tripId || !/^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i.test(row.key) || !["finance", "leave", "remove"].includes(row.kind) || typeof row.title !== "string" || (row.operation && (!isOperation(row.operation) || row.operation.operation_id !== row.key || row.operation.trip_id !== deps.tripId)))
-            throw new Error("Mã thao tác đã lưu không hợp lệ. Cần kiểm tra trước khi ghi dữ liệu mới.");
+          if (row.tripId !== deps.tripId || !/^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i.test(row.key) || !["finance", "leave", "remove", "trip"].includes(row.kind) || typeof row.title !== "string" || (row.operation && (!isOperation(row.operation) || row.operation.operation_id !== row.key || row.operation.trip_id !== deps.tripId)))
+            throw new Error("Yêu cầu đã lưu không hợp lệ. Cần kiểm tra trước khi thực hiện thao tác mới.");
           pending = receiptForStorage(row);
         }
         update({ ready: true, pending, error: undefined });
-      } catch { update({ error: "Không đọc được mã yêu cầu đã lưu. Chưa thể ghi mới; hãy thử tải lại." }); }
+      } catch { update({ error: "Không đọc được yêu cầu đã lưu. Chưa thể thực hiện thao tác mới; hãy thử tải lại." }); }
       finally { loading = undefined; }
     })();
     return loading;
@@ -83,7 +83,7 @@ export function createOperationController(deps: Dependencies) {
   async function receive(operation: MembershipOperation) {
     const pending = snapshot.pending;
     if (!pending || operationTerminal(pending)) return;
-    if (!isOperation(operation) || operation.operation_id !== pending.key || operation.trip_id !== deps.tripId) throw new Error("Kết quả thao tác không khớp yêu cầu. Giữ mã yêu cầu để kiểm tra.");
+    if (!isOperation(operation) || operation.operation_id !== pending.key || operation.trip_id !== deps.tripId) throw new Error("Kết quả thao tác không khớp yêu cầu. Giữ nguyên yêu cầu này để kiểm tra lại.");
     if (operation.state === "SUCCEEDED" && !operation.outcome) throw new Error("Máy chủ chưa trả kết quả hoàn tất hợp lệ.");
     const next = { ...pending, operation, ...(["SUCCEEDED", "FAILED"].includes(operation.state) ? { command: undefined } : {}) };
     update({ pending: next, error: undefined });
@@ -94,11 +94,11 @@ export function createOperationController(deps: Dependencies) {
     try {
       const result = await deps.execute(pending.command, pending.key);
       if (result && typeof result === "object" && "operation_id" in result && result.operation_id !== pending.key)
-        throw new Error("Kết quả thao tác không khớp yêu cầu. Giữ mã yêu cầu để kiểm tra.");
+        throw new Error("Kết quả thao tác không khớp yêu cầu. Giữ nguyên yêu cầu này để kiểm tra lại.");
       if (isOperation(result)) await receive(result);
       else {
         // Reminder's {accepted:true} means queued, not a delivered notification.
-        if (!result || typeof result !== "object" || !("id" in result || ("deleted" in result && result.deleted === true) || ("accepted" in result && result.accepted === true && "closure_id" in result && (!('operation_id' in result) || result.operation_id === pending.key)))) throw new Error("Phản hồi chưa xác định. Kiểm tra bằng mã yêu cầu.");
+        if (!result || typeof result !== "object" || !("id" in result || ("deleted" in result && result.deleted === true) || ("accepted" in result && result.accepted === true && "closure_id" in result && (!('operation_id' in result) || result.operation_id === pending.key)))) throw new Error("Chưa xác định được kết quả. Hãy kiểm tra lại trạng thái yêu cầu.");
         await receive({ operation_id: pending.key, trip_id: deps.tripId, state: "SUCCEEDED", outcome: { status: "COMMITTED" } });
       }
       // Keep response details in memory only (for example a Sandbox payment URL).
@@ -129,7 +129,7 @@ export function createOperationController(deps: Dependencies) {
         update({ pending, sendError: undefined });
         await execute(pending, true);
         return true;
-      } catch { update({ error: "Không lưu được mã yêu cầu. Chưa gửi thay đổi lên máy chủ." }); return false; }
+      } catch { update({ error: "Không lưu được yêu cầu. Chưa gửi thay đổi lên máy chủ." }); return false; }
       finally { update({ busy: false }); }
     },
     async retry() {
@@ -145,24 +145,11 @@ export function createOperationController(deps: Dependencies) {
       try { await receive(await deps.poll(pending.key)); }
       catch (cause) {
         const notFound = (cause as { status?: number }).status === 404;
-        // 404 with no server acknowledgement: the request most likely never reached the Trip service.
+        // A delayed/temporarily invisible request may still commit after a 404.
         update({ error: notFound
-          ? (pending.operation ? "Chưa tìm thấy kết quả. Mã yêu cầu vẫn được giữ; 404 không chứng minh thao tác thất bại."
-            : `Máy chủ chưa ghi nhận yêu cầu này${snapshot.sendError ? ` (lỗi khi gửi: ${snapshot.sendError})` : ""}. Bạn có thể bỏ yêu cầu và thử lại.`)
+          ? "Chưa tìm thấy kết quả. Yêu cầu vẫn được lưu và có thể đang được xử lý. Bạn có thể gửi lại cùng yêu cầu hoặc kiểm tra trạng thái sau."
           : deps.message(cause) });
       } finally { update({ busy: false }); }
-    },
-    // Drop a request the server never acknowledged (no operation receipt), so the trip is not locked forever.
-    async discard() {
-      const pending = snapshot.pending;
-      if (snapshot.busy || !pending || pending.operation) return false;
-      update({ busy: true });
-      try {
-        await deps.storage.removeItem(deps.storageKey);
-        update({ pending: undefined, error: undefined, sendError: undefined });
-        return true;
-      } catch { update({ error: "Không xóa được mã yêu cầu đã lưu. Hãy thử lại." }); return false; }
-      finally { update({ busy: false }); }
     },
     async acknowledge() {
       if (snapshot.busy || !operationTerminal(snapshot.pending)) return false;

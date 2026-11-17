@@ -22,7 +22,6 @@ export function ClosureSheet({ closureId, owner, userId, who, writable, onClose,
     {row && <>
       <Text style={typography.headline}>{statusLabels[row.status]}</Text>
       <Text style={typography.body}>Số dư bản chốt: {money(row.snapshot.fund.current_balance)}</Text>
-      <Text style={typography.body}>Phiên bản bản chốt: {row.snapshot_finance_version}</Text>
       {row.confirmations.map(item => <Text key={item.user_id} style={typography.body}>{who(item.user_id)} · {item.confirmed_at ? "Đã xác nhận" : "Chưa xác nhận"}</Text>)}
       <Notice>Bản chốt là dữ liệu cố định tại thời điểm yêu cầu đóng, không phải số dư được tính lại trên điện thoại.</Notice>
       <Button label={expanded ? "Thu gọn bản chốt" : "Xem toàn bộ bản chốt"} variant="soft" onPress={() => setExpanded(!expanded)} />
@@ -56,14 +55,14 @@ function SnapshotSection({ label, rows, who }: { label: string; rows: Record<str
 }
 
 function SnapshotRow({ entry, who }: { entry: Record<string, unknown>; who(userId: string): string }) {
-  const txType = typeof entry.transaction_type === "string" ? txLabels[entry.transaction_type] ?? entry.transaction_type : undefined;
+  const txType = typeof entry.transaction_type === "string" ? txLabels[entry.transaction_type] ?? "Giao dịch quỹ" : undefined;
   const member = typeof entry.member_user_id === "string" ? who(entry.member_user_id) : undefined;
   const primary = String(entry.title ?? entry.description ?? entry.reason ?? txType ?? member ?? "Bản ghi");
   return <View style={ui.card}>
     <Text style={typography.body}>{primary}</Text>
     {typeof entry.amount === "string" && <Text style={typography.headline}>{money(entry.amount)}</Text>}
     {member && primary !== member && <Text style={typography.footnote}>{member}</Text>}
-    {typeof entry.status === "string" && <Text style={typography.footnote}>{statusLabels[entry.status] ?? entry.status}</Text>}
+    {typeof entry.status === "string" && <Text style={typography.footnote}>{statusLabels[entry.status] ?? "Chưa có thông tin trạng thái"}</Text>}
     {typeof entry.direction === "string" && <Text style={typography.footnote}>{entry.direction === "IN" ? "Thu" : "Chi"} · Số dư sau: {money(String(entry.balance_after))}</Text>}
   </View>;
 }

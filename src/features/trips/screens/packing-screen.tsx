@@ -8,6 +8,7 @@ import { Screen } from "@/shared/ui/screen";
 import { Button } from "@/shared/ui/button";
 import { useTrip } from "../hooks/use-trip";
 import { PackingCompletion } from "../components/packing-completion";
+import { PackingList } from "../components/packing-list";
 import { DraftCollection } from "../components/draft-collection";
 import { packingError } from "../model/local-parity";
 import { dateKey } from "../utils";
@@ -31,12 +32,15 @@ export default function PackingScreen() {
   const [completedCount, setCompletedCount] = useState(0);
   const categories = ["Quần áo", "Vệ sinh", "Giấy tờ", "Điện tử", "Y tế", "Khác"];
   return <Screen title="Hành lý" tab="trips" onRefresh={() => { void resource.reload(); }} refreshing={resource.loading && !!data}>
-    <Heading title="Sẵn sàng lên đường" subtitle="Danh sách chung lấy từ kế hoạch chuyến đi. Thay đổi của bạn được lưu thành bản nháp riêng trên máy." />
+    <Heading title="Sẵn sàng lên đường" subtitle={data?.plan.capabilities?.packing_write ? "Cùng chuẩn bị và theo dõi danh sách chung của nhóm." : "Danh sách chung lấy từ kế hoạch chuyến đi. Thay đổi của bạn được lưu thành bản nháp riêng trên máy."} />
     <ResourceFeedback {...resource} hasData={!!data} onRetry={() => { void resource.reload(); }} />
     {data && <>
       <Segments items={[{ value: "all", label: "Tất cả" }, { value: "mine", label: "Của tôi" }, { value: "todo", label: "Chưa xong" }]} value={filter} onChange={setFilter} />
       <Segments scroll value={category} onChange={setCategory} items={[{ value: "all", label: "Mọi danh mục" }, ...[...new Set([...categories, ...data.plan.packing_items.map(p => p.category || "Khác")])].map(value => ({ value, label: value }))]} />
-      <DraftCollection key={id} scope={id} feature="packing" title="vật dụng"
+      {data.plan.capabilities?.packing_write ? <>
+        <ResourceFeedback {...members} hasData={!!members.data} onRetry={() => { void members.reload(); }} />
+        <PackingList api={api} trip={data.trip} plan={data.plan} members={members.data ?? []} membersReady={!!members.data && !members.loading && !members.error} reload={resource.reload} filter={filter} category={category} />
+      </> : <DraftCollection key={id} scope={id} feature="packing" title="vật dụng"
         base={JSON.stringify(data.plan.packing_items)}
         seed={data.plan.packing_items.map(item => ({ id: item.id, name: item.name, quantity: item.quantity, unit: item.unit ?? "", note: item.note ?? "", category: item.category ?? "Khác", assignee: item.assigned_member_id ?? "", due: item.due_at ? dateKey(item.due_at, data.trip.timezone) : "", reminder: "", status: item.status }))}
         editable={data.plan.permissions.can_edit} completable={data.plan.permissions.can_complete}
@@ -64,7 +68,7 @@ export default function PackingScreen() {
         render={row => <><Text style={typography.headline}>{row.name}</Text><Text style={typography.footnote}>{row.quantity} {row.unit} · {row.status === "COMPLETED" ? "Đã chuẩn bị" : "Chưa chuẩn bị"}</Text>
           <Text style={typography.footnote}>{row.assignee ? nameOf(row.assignee) : "Chưa phân công"}</Text>
           {!!row.due && <Text style={typography.footnote}>Hạn: {row.due}</Text>}{!!row.reminder && <Text style={typography.footnote}>Nhắc: {row.reminder}</Text>}{!!row.note && <Text style={typography.body}>{row.note}</Text>}
-        </>} />
+        </>} />}
       <PackingCompletion visible={celebrate} count={completedCount} onClose={() => setCelebrate(false)} />
     </>}
   </Screen>;

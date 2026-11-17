@@ -139,7 +139,7 @@ export function FinanceForm({ spec, busy, onSubmit, onClose }: {
         <View style={ui.actionRow}>
           {POPULAR_BANKS.map(code => {
             const activeBank = resolveVietQrBank(values.bank_code ?? "")?.code === code;
-            return <Pressable key={code} disabled={disabled} onPress={() => set("bank_code", code)}
+            return <Pressable cssInterop={false} key={code} disabled={disabled} onPress={() => set("bank_code", code)}
               style={({ pressed }) => [{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, backgroundColor: activeBank ? colors.mint : colors.fill, borderWidth: 1, borderColor: activeBank ? colors.pinGreen : colors.line }, pressed && { opacity: 0.7 }]}>
               <Text style={[typography.footnote, { color: activeBank ? colors.pinGreen : colors.ink }]}>{code}</Text>
             </Pressable>;
@@ -149,7 +149,7 @@ export function FinanceForm({ spec, busy, onSubmit, onClose }: {
       {field.numeric && <>
         {moneyPreview(values[field.key]) && <Text style={[typography.footnote, { color: colors.teal }]}>Định dạng: {moneyPreview(values[field.key])}</Text>}
         <View style={ui.actionRow}>
-          {QUICK_AMOUNTS.map(preset => <Pressable key={preset.value} disabled={disabled} onPress={() => set(field.key, preset.value)}
+          {QUICK_AMOUNTS.map(preset => <Pressable cssInterop={false} key={preset.value} disabled={disabled} onPress={() => set(field.key, preset.value)}
             style={({ pressed }) => [{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, backgroundColor: values[field.key] === preset.value ? colors.mint : colors.fill, borderWidth: 1, borderColor: values[field.key] === preset.value ? colors.pinGreen : colors.line }, pressed && { opacity: 0.7 }]}>
             <Text style={[typography.footnote, { color: values[field.key] === preset.value ? colors.pinGreen : colors.ink }]}>{preset.label}</Text>
           </Pressable>)}

@@ -6,7 +6,7 @@ export function activityOrder(activities: Activity[]) {
     .map((a) => a.id);
 }
 
-/** Replace only this day's slots. Other days and all timestamps stay untouched. */
+/** Replace only this day's slots. Time reconciliation happens atomically on save. */
 export function replaceDayOrder(
   allIds: string[],
   dayIds: string[],
@@ -201,7 +201,7 @@ export function createOrderSession(deps: Dependencies) {
           update({
             uncertain: true,
             error:
-              "Chưa nhận được xác nhận lưu. Thử lưu lại sẽ dùng cùng mã thao tác để tránh ghi trùng; chưa đổi thứ tự thêm lúc này.",
+              "Chưa nhận được xác nhận lưu. Thử lưu lại sẽ gửi đúng yêu cầu trước đó để tránh lưu trùng; chưa đổi thứ tự thêm lúc này.",
           });
         }
         return false;

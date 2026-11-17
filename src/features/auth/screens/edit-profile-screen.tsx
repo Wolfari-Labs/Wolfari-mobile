@@ -12,12 +12,14 @@ import { ProfileAvatar } from "../components/profile-avatar";
 import { Feedback } from "@/shared/ui/feedback";
 import { FormField } from "@/shared/ui/form-field";
 import { Heading, ResourceFeedback, ui } from "@/shared/ui/journal";
+import { SnapshotConflict } from "@/shared/ui/snapshot-conflict";
 import { Screen } from "@/shared/ui/screen";
 import { useSession } from "../session/session-provider";
 import type { Profile } from "../types";
 
 export default function EditProfileScreen() {
   const api = useApi();
+  const [edition, setEdition] = useState(0);
   const resource = useResource(
     useCallback(
       (signal: AbortSignal) => api.request<Profile>("/me", { signal }),
@@ -36,17 +38,22 @@ export default function EditProfileScreen() {
         />
       </Screen>
     );
-  return <ProfileForm resource={resource} />;
+  return <ProfileForm key={edition} resource={resource} onReplace={() => setEdition(value => value + 1)} />;
 }
 function ProfileForm({
   resource,
+  onReplace,
 }: {
   resource: ReturnType<typeof useResource<Profile>>;
+  onReplace(): void;
 }) {
   const api = useApi(),
     command = useCommand();
   const { updateProfile } = useSession();
   const profile = resource.data!;
+  const [baseVersion] = useState(profile.version);
+  const stale = baseVersion !== profile.version;
+  const blocked = stale || resource.loading || !!resource.error;
   const [name, setName] = useState(profile.full_name);
   const [validation, setValidation] = useState<string>();
   const [photo, setPhoto] = useState<ImagePicker.ImagePickerAsset | null>();
@@ -69,12 +76,13 @@ function ProfileForm({
     finally { pickerLock.current = false; setPicking(false); }
   }
   async function save() {
+    if (blocked || command.busy || picking) return;
     if (!name.trim() || name.trim().length > 150) {
       setValidation("Họ và tên cần từ 1 đến 150 ký tự.");
       return;
     }
     setValidation(undefined);
-    const input = { full_name: name.trim(), expected_version: profile.version };
+    const input = { full_name: name.trim(), expected_version: baseVersion };
     const result = await command.run({ ...input, photo: photo?.uri ?? photo }, async () => {
       if (photo && !uploaded.current) {
         const body = new FormData();
@@ -104,7 +112,7 @@ function ProfileForm({
         <Button
           label="Lưu thay đổi"
           loading={command.busy}
-          disabled={picking}
+          disabled={picking || blocked}
           onPress={() => {
             void save();
           }}
@@ -122,6 +130,8 @@ function ProfileForm({
       <Button label="Chọn ảnh đại diện" variant="soft" loading={picking} disabled={command.busy} onPress={() => { void choosePhoto(); }} />
       {(photo || (profile.avatar && photo !== null)) && <Button label="Gỡ ảnh đại diện" variant="destructive" disabled={command.busy || picking} onPress={() => { uploaded.current = undefined; setPhoto(null); }} />}
       <Text style={typography.footnote}>JPEG/PNG · Tối đa 10 MB. Ảnh chỉ thay đổi khi bấm Lưu thay đổi.</Text>
+      <SnapshotConflict stale={stale} disabled={resource.loading || !!resource.error} onReplace={onReplace} />
+      {resource.error && <Feedback message={resource.error} />}
       {validation && <Feedback message={validation} />}
       {command.error && (
         <>

@@ -1,4 +1,5 @@
 import type { AuthTokens, LoginInput, Profile } from "../types";
+import { errorMessage } from "../../../shared/api/errors.ts";
 
 type TokenStorage = {
   get: () => Promise<string | null>;
@@ -122,7 +123,7 @@ export function createAuthSession({ storage, login, refresh, logout, web = false
           if (generation === currentGeneration) {
             update({
               status: "unavailable", profile: null,
-              error: error instanceof Error ? error.message : "Không thể khôi phục phiên đăng nhập.",
+              error: errorMessage(error, "Không thể khôi phục phiên đăng nhập."),
             });
           }
         } finally {

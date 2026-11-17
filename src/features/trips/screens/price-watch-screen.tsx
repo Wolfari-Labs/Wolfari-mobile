@@ -1,3 +1,4 @@
+import { errorMessage } from "@/shared/api/errors";
 import { useCallback, useRef, useState } from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSession } from '@/features/auth/session/session-provider';
@@ -23,6 +24,7 @@ import { moneyLabel, statusLabel } from '../../finance/extended-model';
 import { historyTimeLabel } from '../../finance/history-labels';
 import { useFinanceCommand } from '../../finance/use-finance-command';
 import { watchInput, type Watch, type Observations } from '../../price-watch/api';
+import { priceProviderLabel, watchStatusReason } from '../../price-watch/labels';
 
 const cabins = [
   { value: 'ECONOMY', label: 'Phổ thông' },
@@ -122,7 +124,7 @@ function WatchWorkspace({ id, userId }: { id: string; userId: string }) {
     setForm({
       title: w ? 'Sửa theo dõi giá' : 'Tạo theo dõi giá',
       message:
-        'Nguồn MOCK_FLIGHT mô phỏng giá, không phải giá vé để đặt mua. Ngưỡng là riêng cho bạn. Ngày đi được lưu theo UTC; 12:00 UTC là 19:00 Việt Nam.',
+        'Nguồn hiện tại mô phỏng giá, không phải giá vé để đặt mua. Ngưỡng là riêng cho bạn. Ngày đi được lưu theo UTC; 12:00 UTC là 19:00 Việt Nam.',
       fields: watchFields(w),
       submit: async (values) => {
         const input = watchInput(values);
@@ -179,7 +181,7 @@ function WatchWorkspace({ id, userId }: { id: string; userId: string }) {
           : old,
       );
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Không tải được trang tiếp theo.');
+      setError(errorMessage(e, 'Không tải được trang tiếp theo.'));
     } finally {
       setLoadingMore(false);
     }
@@ -261,7 +263,7 @@ function WatchWorkspace({ id, userId }: { id: string; userId: string }) {
           <Card
             key={w.id}
             title={`${w.normalized_query.origin} → ${w.normalized_query.destination}`}
-            right={<StatusBadge status={w.status} label={statusLabel[w.status] ?? w.status} />}
+            right={<StatusBadge status={w.status} label={statusLabel[w.status]} />}
           >
             <RouteStrip />
             {/* The badge already shows the status; say whose request it is only when it is not yours. */}
@@ -274,7 +276,7 @@ function WatchWorkspace({ id, userId }: { id: string; userId: string }) {
               · {passengerLabel(w.normalized_query.passengers)}
             </Line>
             <Line>Báo khi giá từ {moneyLabel(w.threshold_price)} trở xuống</Line>
-            {w.status_reason && <Line>Lý do trạng thái: {w.status_reason}</Line>}
+            {w.status_reason && <Line>{watchStatusReason(w.status_reason)}</Line>}
             {w.last_alert_at && w.last_alert_price && (
               <>
                 {Number(w.last_alert_price) < Number(w.threshold_price) && (
@@ -385,7 +387,7 @@ function WatchHistory({ watch }: { watch: Watch }) {
             : old,
         );
     } catch (e) {
-      setMoreError(e instanceof Error ? e.message : 'Không thể tải thêm giá.');
+      setMoreError(errorMessage(e, 'Không thể tải thêm giá.'));
     } finally {
       setMoreBusy(false);
     }
@@ -428,7 +430,7 @@ function WatchHistory({ watch }: { watch: Watch }) {
           )}
           {source?.items.map((o) => (
             <Line key={o.id}>
-              {moneyLabel(o.price)} · {o.provider} · Quan sát: {historyTimeLabel(o.observed_at)} · Thu thập:{' '}
+              {moneyLabel(o.price)} · {priceProviderLabel(o.provider)} · Quan sát: {historyTimeLabel(o.observed_at)} · Thu thập:{' '}
               {historyTimeLabel(o.fetched_at)}
             </Line>
           ))}

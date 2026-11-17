@@ -24,14 +24,15 @@ function stylesIn(text) {
   return styles;
 }
 
-test("reading sections and navigation rows do not recreate nested cards", async () => {
+test("reading sections stay on the canvas and records use the shared pastel surface", async () => {
   const styles = stylesIn(await source("shared/ui/journal.tsx"));
-  for (const name of ["section", "record", "group", "link", "rowIcon", "empty"]) {
+  for (const name of ["section", "group", "link", "rowIcon", "empty"]) {
     assert.ok(styles.has(name), `${name} exists`);
     assert.doesNotMatch(styles.get(name), /backgroundColor|borderRadius|shadows\./, `${name} stays on the canvas`);
   }
   assert.match(styles.get("link"), /minHeight: 76/);
-  assert.match(styles.get("record"), /borderBottomColor: colors.line/);
+  assert.match(styles.get("record"), /backgroundColor: colors.surface/);
+  assert.match(styles.get("record"), /borderRadius: radii.card/);
 });
 
 test("quiet actions retain accessible button semantics and a 44-point target", async () => {
@@ -77,7 +78,8 @@ test("inline filters use a sliding pastel marker while keeping selected state an
   assert.match(journal, /colors=\{gradients.primary\}/);
   assert.match(styles.get("segment"), /minHeight: 44/);
   assert.match(journal, /accessibilityState=\{\{ selected: value === item.value \}\}/);
-  assert.match(journal, /reduceMotion \? Math.max\(0, selectedIndex\)/);
+  assert.match(journal, /selectedIndex = Math.max\(0, items.findIndex/);
+  assert.match(journal, /reduceMotion \? selectedIndex : withSpring\(selectedIndex/);
 });
 
 test("trip previews use rounded clay cards but the overview is not a self-navigation button", async () => {
