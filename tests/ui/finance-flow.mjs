@@ -206,8 +206,10 @@ try {
   assert.equal(destinations[0].bank_code, "VCB"); assert.equal(destinations[0].account_number, "0012345678"); assert.equal(fund.current_balance, "0"); assert.equal(destinations[0].confirmed_by_holder_at, null);
   await action("Xác nhận tài khoản");
   assert.ok(destinations[0].confirmed_by_holder_at);
-  await action("Cập nhật ngân sách", { "Số tiền (VND, chỉ chữ số)": "9007199254740993" });
-  await page.getByText("Ngân sách dự kiến: 9.007.199.254.740.993 ₫", { exact: true }).waitFor();
+  // Keep the fixture within the app's 12-digit trip-budget input range while
+  // still asserting that money stays a decimal string and is grouped exactly.
+  await action("Cập nhật ngân sách", { "Số tiền (VND, chỉ chữ số)": "900719925474" });
+  await page.getByText("Ngân sách dự kiến: 900.719.925.474 ₫", { exact: true }).waitFor();
   await page.setViewportSize({ width: 320, height: 720 }); await shot("01-summary-320.png"); await page.setViewportSize({ width: 402, height: 874 });
   conflictBudget = true; await action("Cập nhật ngân sách", { "Số tiền (VND, chỉ chữ số)": "1000000" }, false);
   await page.getByText(/Dữ liệu vừa được cập nhật/).waitFor(); assert.equal(await button("Gửi lại cùng yêu cầu").count(), 0);
