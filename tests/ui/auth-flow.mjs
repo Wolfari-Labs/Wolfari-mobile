@@ -1,3 +1,4 @@
+import { assertPublicText } from "./assert-public-text.mjs";
 import assert from "node:assert/strict";
 import { mkdir, access } from "node:fs/promises";
 import path from "node:path";
@@ -9,6 +10,7 @@ await mkdir(output, { recursive: true });
 
 const candidates = [
   process.env.WOLFARI_BROWSER_PATH,
+  chromium.executablePath(),
   "C:/Program Files/Google/Chrome/Application/chrome.exe",
   "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
 ].filter(Boolean);
@@ -81,6 +83,7 @@ try {
   const guestImages = await checkImages(12);
   assert.ok(guestImages.some((img) => Math.abs(img.width - 342) < 1 && Math.abs(img.height - 268) < 1), "D destination illustration fits inside its white clay frame.");
   await noHorizontalOverflow();
+  await assertPublicText(page);
   await page.screenshot({ path: path.join(output, "m01-guest.png") });
   await page.getByRole("button", { name: "Bắt đầu hành trình", exact: true }).click();
   await page.waitForURL("**/sign-up");
@@ -88,6 +91,7 @@ try {
   await page.goto(`${appUrl}/sign-up?preview=1`, { waitUntil: "networkidle" });
   await page.getByRole("checkbox").click();
   await checkImages(9);
+  await assertPublicText(page);
   await page.screenshot({ path: path.join(output, "m03-sign-up.png") });
   await page.getByRole("button", { name: "Tạo tài khoản", exact: true }).click();
   await page.getByText("Vui lòng nhập địa chỉ email hợp lệ.", { exact: true }).waitFor();
@@ -139,6 +143,7 @@ try {
   await page.goto(`${appUrl}/sign-in?preview=1`, { waitUntil: "networkidle" });
   const signInImages = await checkImages(8);
   assert.ok(signInImages.some((img) => Math.abs(img.width - 120) < 1 && Math.abs(img.height - 112.5) < 1), "D sign-in uses the exported mascot inside its circular pastel backdrop.");
+  await assertPublicText(page);
   await page.screenshot({ path: path.join(output, "m02-sign-in.png") });
   await page.getByLabel("Email", { exact: true }).fill("demo@example.test");
   await page.getByLabel("Mật khẩu", { exact: true }).fill("wrong password");
@@ -150,6 +155,7 @@ try {
   assert.equal(await page.getByLabel("Mật khẩu", { exact: true }).inputValue(), "wrong password");
   await page.getByRole("button", { name: "Đăng nhập", exact: true }).click();
   await page.getByText("Email hoặc mật khẩu chưa đúng. Vui lòng kiểm tra lại.", { exact: true }).waitFor();
+  await assertPublicText(page);
   await page.screenshot({ path: path.join(output, "m02-invalid-credentials.png") });
   await page.getByLabel("Email", { exact: true }).fill("unavailable@example.test");
   await page.getByRole("button", { name: "Đăng nhập", exact: true }).click();
@@ -174,6 +180,7 @@ try {
   await page.goto(`${appUrl}/sign-up?preview=1`, { waitUntil: "networkidle" });
   await noHorizontalOverflow();
   await page.getByRole("button", { name: "Tạo tài khoản", exact: true }).scrollIntoViewIfNeeded();
+  await assertPublicText(page);
   await page.screenshot({ path: path.join(output, "m03-small-phone.png") });
   assert.deepEqual(pageErrors, []);
   process.stdout.write("UI checks passed: all three screens, local assets and geometry, navigation, registration validation/consent/202, login 401/503/success, and 360px layout.\n");

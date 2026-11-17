@@ -1,3 +1,4 @@
+import { assertPublicText } from "./assert-public-text.mjs";
 import assert from "node:assert/strict";
 import { access, mkdir } from "node:fs/promises";
 import path from "node:path";
@@ -7,7 +8,8 @@ import { makeQr } from "../fixtures/payment-qr.mjs";
 // Local contract fixtures only. Every Gateway request is intercepted; no real money or DB writes.
 const appUrl = process.env.WOLFARI_PREVIEW_URL ?? "http://localhost:8082";
 let executablePath;
-for (const candidate of [process.env.WOLFARI_BROWSER_PATH, "C:/Program Files/Google/Chrome/Application/chrome.exe", "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"].filter(Boolean)) {
+for (const candidate of [process.env.WOLFARI_BROWSER_PATH,
+  chromium.executablePath(), "C:/Program Files/Google/Chrome/Application/chrome.exe", "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"].filter(Boolean)) {
   if (await access(candidate).then(() => true, () => false)) { executablePath = candidate; break; }
 }
 assert.ok(executablePath, "A local Chromium browser is required");
@@ -181,6 +183,7 @@ async function verifyRefund() {
 }
 async function shot(name) {
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+  await assertPublicText(page);
   await page.screenshot({ path: path.join(screenshotDir, name) });
 }
 try {
@@ -251,7 +254,7 @@ try {
   await button("Tạo hoàn tiền").click(); await page.getByRole("radio", { name: "Người nhận hoàn: Bạn · Chủ nhóm" }).click();
   await field("Số tiền (VND, chỉ chữ số)").fill("100000"); await field("Lý do").fill("Kiểm tra báo chưa nhận"); await confirm();
   await action("Báo đã hoàn tiền");
-  await button(`Hủy ${refunds.at(-1).id.slice(0, 8)}`).waitFor({ state: "hidden" });
+  await page.getByRole("button", { name: /^Hủy ·/ }).waitFor({ state: "hidden" });
   await action("Báo chưa nhận tiền", { "Lý do": "Chưa nhận tiền thực tế" }); await action("Hủy", { "Lý do": "Hủy sau khi người nhận đối chiếu" });
   assert.equal(fund.current_balance, "500000"); assert.equal(fund.available_balance, "500000");
   await button("Tạo hoàn tiền").click(); await page.getByRole("radio", { name: "Người nhận hoàn: Bạn · Chủ nhóm" }).click();
@@ -271,6 +274,7 @@ try {
   assert.deepEqual(errors, []); assert.deepEqual(unexpected, []);
   console.log("PASS Finance UI: setup/Holder consent, exact money, version conflict, contribution/receipt/VietQR privacy, expense CRUD/settlement/reversal, lost-reply retry+restart, refunds/reservations/consent/reversal, ledger, closure, read-only/role boundaries, 320px layout. No real backend writes.");
 } catch (error) {
+  await assertPublicText(page);
   await page.screenshot({ path: path.join(screenshotDir, "failure.png") });
   console.error("UI errors", errors, "Recent request paths", calls.slice(-8).map(({ p, method }) => ({ p, method })));
   console.error((await page.locator("body").innerText()).slice(-2500));

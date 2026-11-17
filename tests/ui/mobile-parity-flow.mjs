@@ -7,7 +7,8 @@ import { dynamicQr, staticQr } from "../fixtures/payment-qr.mjs";
 // Every API request is intercepted. This suite never modifies a real trip/account.
 const appUrl = process.env.WOLFARI_PREVIEW_URL ?? "http://localhost:8082";
 let executablePath;
-for (const candidate of [process.env.WOLFARI_BROWSER_PATH, "C:/Program Files/Google/Chrome/Application/chrome.exe", "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"].filter(Boolean)) {
+for (const candidate of [process.env.WOLFARI_BROWSER_PATH,
+  chromium.executablePath(), "C:/Program Files/Google/Chrome/Application/chrome.exe", "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"].filter(Boolean)) {
   if (await access(candidate).then(() => true, () => false)) { executablePath = candidate; break; }
 }
 assert.ok(executablePath);

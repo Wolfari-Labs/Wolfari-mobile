@@ -1,3 +1,4 @@
+import { assertPublicText } from "./assert-public-text.mjs";
 import assert from "node:assert/strict";
 import { access, mkdir } from "node:fs/promises";
 import path from "node:path";
@@ -6,7 +7,8 @@ import { chromium } from "playwright-core";
 // Contract fixtures only: no emails, passwords, memberships or backend data are changed.
 const appUrl = process.env.WOLFARI_PREVIEW_URL ?? "http://localhost:8082";
 let executablePath;
-for (const candidate of [process.env.WOLFARI_BROWSER_PATH, "C:/Program Files/Google/Chrome/Application/chrome.exe", "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"].filter(Boolean)) {
+for (const candidate of [process.env.WOLFARI_BROWSER_PATH,
+  chromium.executablePath(), "C:/Program Files/Google/Chrome/Application/chrome.exe", "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"].filter(Boolean)) {
   if (await access(candidate).then(() => true, () => false)) { executablePath = candidate; break; }
 }
 assert.ok(executablePath);
@@ -68,6 +70,7 @@ await context.route("**/api/v1/**", async route => {
   if (pathname.endsWith("/plan")) return respond(200, { trip_id: tripId, plan_version: 1, export_revision: 1, activities: [], selected_locations: [], packing_items: [], dress_codes: [], permissions: { can_read: true, can_edit: true, can_complete: true } });
   if (pathname.endsWith("/members") && method === "GET") return respond(200, { items: [owner, ...(!removed || url.searchParams.get("include_left") === "true" ? [{ ...member, left_at: removed ? "2026-10-18T00:00:00Z" : null }] : [])], next_cursor: null });
   if (pathname.endsWith("/plan-policy")) {
+    if (method === "GET") return respond(200, { policy: trip.plan_edit_policy, editor_member_ids: trip.plan_edit_policy === "SELECTED_MEMBERS" ? [memberId] : [], membership_revision: trip.membership_revision });
     assert.equal(body.expected_membership_revision, trip.membership_revision);
     assert.deepEqual(body.editor_member_ids, [memberId]);
     trip = { ...trip, plan_edit_policy: body.policy, membership_revision: trip.membership_revision + 1 };
@@ -111,6 +114,7 @@ await mkdir(shots, { recursive: true });
 async function screenshot(name) {
   await page.waitForFunction(() => Array.from(document.images).every(image => image.complete && image.naturalWidth > 0));
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+  await assertPublicText(page);
   await page.screenshot({ path: path.join(shots, name) });
 }
 try {
@@ -205,7 +209,7 @@ try {
   await page.getByRole("tab", { name: "Chọn thành viên", exact: true }).click();
   await page.getByRole("checkbox").click();
   await button("Lưu quyền của nhóm").click();
-  assert.equal(calls.filter(call => call.pathname.endsWith("/plan-policy")).length, 0);
+  assert.equal(calls.filter(call => call.pathname.endsWith("/plan-policy") && call.method === "PUT").length, 0);
   await button("Xác nhận thay thế quyền").click();
   await page.getByText("Đã cập nhật quyền chỉnh sửa của nhóm.").waitFor();
   await screenshot("permissions.png");
@@ -213,7 +217,7 @@ try {
   await page.setViewportSize({ width: 360, height: 740 });
   await screenshot("members-small-phone.png");
   await page.setViewportSize({ width: 402, height: 874 });
-  await button(`Xóa ${memberUserId.slice(0, 8)}`).click();
+  await button("Xóa Bạn đồng hành").click();
   await field("Lý do").fill("Thành viên yêu cầu rời nhóm");
   await button("Xóa thành viên").click();
   assert.equal(calls.filter(call => call.method === "DELETE").length, 0);
@@ -234,9 +238,9 @@ try {
   await button("Kiểm tra trạng thái").click();
   await button("Hoàn tất").click();
   await page.waitForURL(`**/trip/${tripId}/members`);
-  assert.equal(await button(`Xóa ${memberUserId.slice(0, 8)}`).count(), 0);
+  assert.equal(await button("Xóa Bạn đồng hành").count(), 0);
   await page.getByRole("tab", { name: "Cả lịch sử", exact: true }).click();
-  await page.getByText(/Đã rời/).waitFor();
+  await page.getByText("Đã rời", { exact: true }).waitFor();
   removed = false; rejectFinance = true;
   trip = { ...trip, current_membership: { ...member, user_id: userId }, permissions: { can_read: true, can_update: false } };
   await goto(`/trip/${tripId}/settings`);
@@ -259,7 +263,7 @@ try {
   assert.equal(await button("Tạo liên kết mời").count(), 0);
   await goto(`/trip/${tripId}/members`);
   await page.getByText("invitee@example.test", { exact: true }).waitFor();
-  for (const name of ["Mời thành viên", "Gửi lại", "Thu hồi", `Xóa ${memberUserId.slice(0, 8)}`]) assert.equal(await button(name).count(), 0);
+  for (const name of ["Mời thành viên", "Gửi lại", "Thu hồi", "Xóa Bạn đồng hành"]) assert.equal(await button(name).count(), 0);
   assert.equal(calls.filter(call => ["POST", "PATCH", "PUT", "DELETE"].includes(call.method) && call.pathname.startsWith("/trips/")).length, writesBeforeArchive);
   await goto("/profile");
   await button("Đăng xuất").click();
@@ -276,6 +280,7 @@ try {
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
   console.log("Backend feature UI fixtures passed: recovery, verification, password change, avatar, LINK invitations, selected editors, member history, lost replies, async completion, finance block and archived Trip read-only controls.");
 } catch (error) {
+  await assertPublicText(page);
   await page.screenshot({ path: path.join(shots, "failure.png") });
   console.error("Page:", page.url(), "Errors:", errors, "Recent requests:", calls.slice(-8).map(({ pathname, method }) => ({ pathname, method })));
   console.error((await page.locator("body").innerText()).slice(-1800));

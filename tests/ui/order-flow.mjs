@@ -1,3 +1,4 @@
+import { assertPublicText } from "./assert-public-text.mjs";
 import assert from "node:assert/strict";
 import { access, mkdir } from "node:fs/promises";
 import path from "node:path";
@@ -7,6 +8,7 @@ const appUrl = process.env.WOLFARI_PREVIEW_URL ?? "http://localhost:8081";
 let executablePath;
 for (const candidate of [
   process.env.WOLFARI_BROWSER_PATH,
+  chromium.executablePath(),
   "C:/Program Files/Google/Chrome/Application/chrome.exe",
   "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
 ].filter(Boolean)) {
@@ -67,7 +69,8 @@ let activities = ["Ăn sáng", "Tham quan", "Ăn trưa", "Ngày khác"].map(
     position: index,
     activity_type: "OTHER",
     starts_at: `2026-11-${index === 3 ? "13" : "12"}T0${index + 1}:00:00Z`,
-    ends_at: null,
+    ends_at: `2026-11-${index === 3 ? "13" : "12"}T0${index + 1}:30:00Z`,
+    scheduled_date: null,
     status: "TODO",
     plan_version: 1,
   }),
@@ -142,10 +145,27 @@ await context.route("**/api/v1/**", async (route) => {
       [...body.activity_ids].sort(),
       activities.map((a) => a.id).sort(),
     );
-    activities = body.activity_ids.map((id, position) => ({
-      ...activities.find((a) => a.id === id),
-      position,
-    }));
+    // Model the server policy in this HTTP fixture. Real atomic persistence,
+    // timezone conversion and replay are covered by Plan integration tests.
+    const localDay = a => a.starts_at
+      ? new Date(Date.parse(a.starts_at) + 7 * 3600000).toISOString().slice(0, 10)
+      : a.scheduled_date;
+    const changedDays = new Set(activities.map(localDay).filter(day => day &&
+      JSON.stringify(activities.filter(a => localDay(a) === day).map(a => a.id)) !==
+      JSON.stringify(body.activity_ids.filter(id => localDay(activities.find(a => a.id === id)) === day))));
+    const latest = new Map();
+    activities = body.activity_ids.map((id, position) => {
+      const activity = { ...activities.find(a => a.id === id), position };
+      const day = localDay(activity);
+      if (changedDays.has(day) && activity.starts_at) {
+        const time = Date.parse(activity.starts_at);
+        if (time < (latest.get(day) ?? -Infinity)) {
+          activity.starts_at = activity.ends_at = null;
+          activity.scheduled_date = day;
+        } else latest.set(day, time);
+      }
+      return activity;
+    });
     trip.plan_version++;
     trip.export_revision++;
     commits++;
@@ -169,6 +189,7 @@ page.setDefaultNavigationTimeout(90_000);
 page.on("pageerror", (error) => errors.push(error.message));
 const button = (name) => page.getByRole("button", { name, exact: true });
 async function openEditor() {
+  await page.bringToFront(); // The collaboration scenario also opens a peer tab.
   await button("Sắp xếp lịch trình").click();
   await page.waitForFunction(
     () =>
@@ -244,7 +265,7 @@ async function checkTouchGestures() {
         delete document.visibilityState;
         document.dispatchEvent(new Event("visibilitychange"));
       });
-      await page.getByText("Phiên bản 1 · Đã đồng bộ", { exact: true }).waitFor();
+      await page.getByText("Đã đồng bộ", { exact: true }).waitFor();
     }
     if (reason === "resize") await page.setViewportSize({ width: 402, height: 874 });
     assert.equal(await save.isDisabled(), true, `${reason} must not reorder`);
@@ -257,8 +278,11 @@ async function checkTouchGestures() {
   await idle.waitFor();
   assert.equal(await save.isDisabled(), false);
   assert.equal(writes.length, 0);
+  await page.getByText("Chưa chốt giờ · bỏ 08:00 khi lưu", { exact: false }).waitFor();
+  assert.equal(activities.find(a => a.title === "Ăn sáng").starts_at, "2026-11-12T01:00:00Z");
   await dragTo("Ăn sáng", "Tham quan");
   assert.equal(await save.isDisabled(), true);
+  assert.equal(await page.getByText(/Khi lưu sẽ bỏ giờ bắt đầu/).count(), 0);
   await cdp.detach();
 }
 try {
@@ -298,19 +322,27 @@ try {
   assert.equal(await button("Lưu thứ tự cho nhóm").isDisabled(), true);
   await dragTo("Ăn sáng", "Ăn trưa");
   await dragTo("Ăn sáng", "Ăn trưa");
+  await assertPublicText(page);
   await page.screenshot({
     path: path.join(output, "glass-itinerary-order.png"),
   });
   await button("Lưu thứ tự cho nhóm").click();
   await page
     .getByText(
-      "Đã lưu thứ tự cho cả nhóm. Giờ của các hoạt động được giữ nguyên.",
+      "Đã lưu thứ tự cho cả nhóm. Các giờ bị lệch thứ tự đã được bỏ, vẫn giữ nguyên ngày.",
     )
     .waitFor();
   assert.deepEqual(
     activities.map((a) => a.title),
     ["Tham quan", "Ăn sáng", "Ăn trưa", "Ngày khác"],
   );
+  const breakfast = activities.find(a => a.title === "Ăn sáng");
+  assert.equal(breakfast.starts_at, null);
+  assert.equal(breakfast.ends_at, null);
+  assert.equal(breakfast.scheduled_date, "2026-11-12");
+  await button("Ăn sáng, Cả ngày").waitFor();
+  await page.reload({ waitUntil: "networkidle" });
+  await button("Ăn sáng, Cả ngày").waitFor();
 
   // Two editors hold the same version; the second cannot overwrite the first.
   await openEditor();
@@ -331,7 +363,7 @@ try {
     .click();
   await peer
     .getByText(
-      "Đã lưu thứ tự cho cả nhóm. Giờ của các hoạt động được giữ nguyên.",
+      "Đã lưu thứ tự cho cả nhóm. Các giờ bị lệch thứ tự đã được bỏ, vẫn giữ nguyên ngày.",
     )
     .waitFor();
   const peerOrder = activities.map((a) => a.id);
@@ -342,11 +374,12 @@ try {
     peerOrder,
   );
   assert.equal(await button("Lưu thứ tự cho nhóm").isDisabled(), true);
+  await assertPublicText(page);
   await page.screenshot({
     path: path.join(output, "glass-itinerary-conflict.png"),
   });
   await button("Bỏ bản nháp, tải bản mới").click();
-  await page.getByText(`Phiên bản ${trip.plan_version} · Đã đồng bộ`).waitFor();
+  await page.getByText("Đã đồng bộ").waitFor();
 
   // A committed write with a lost reply is retried with exactly the same intent.
   await button("Đưa Ăn sáng xuống").click();
@@ -358,7 +391,7 @@ try {
   await button("Thử lưu lại").click();
   await page
     .getByText(
-      "Đã lưu thứ tự cho cả nhóm. Giờ của các hoạt động được giữ nguyên.",
+      "Đã lưu thứ tự cho cả nhóm. Các giờ bị lệch thứ tự đã được bỏ, vẫn giữ nguyên ngày.",
     )
     .waitFor();
   assert.equal(commits, before + 1);
@@ -381,6 +414,7 @@ try {
       () => document.documentElement.scrollWidth <= innerWidth,
     ),
   );
+  await assertPublicText(page);
   await page.screenshot({
     path: path.join(output, "glass-itinerary-small.png"),
   });
@@ -430,7 +464,7 @@ try {
   await button("Lưu thứ tự cho nhóm").click();
   await page
     .getByText(
-      "Đã lưu thứ tự cho cả nhóm. Giờ của các hoạt động được giữ nguyên.",
+      "Đã lưu thứ tự cho cả nhóm. Các giờ bị lệch thứ tự đã được bỏ, vẫn giữ nguyên ngày.",
     )
     .waitFor();
   assert.ok(activities.findIndex((a) => a.title === firstTitle) > 3);
@@ -441,10 +475,12 @@ try {
     "PASS card long-press, touch drag/drop, cancel/multitouch/background/resize guards, hold-to-drag, quick-swipe guard, repeated drag/drop, long-list auto-scroll, atomic full order, two-editor conflict, lost-response idempotency, revoked permissions, discard and 320px layout (API fixtures only).",
   );
 } catch (error) {
+  console.error(error);
   await page
     .screenshot({ path: path.join(output, "order-failure.png") })
     .catch(() => {});
   throw error;
 } finally {
+  await page.mouse.up().catch(() => {});
   await browser.close();
 }

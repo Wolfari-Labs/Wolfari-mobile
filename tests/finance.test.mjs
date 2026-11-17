@@ -179,6 +179,31 @@ test("Known initial rejection permits explicit reload, but not a blind automatic
   assert.equal(await c.acknowledge(), true);
   assert.equal(c.getSnapshot().pending, undefined);
 });
+
+test("A committed write with a lost reply stays locked across restart and lookup 404", async () => {
+  let writes = 0;
+  const { controller: c, deps, values } = harness({ execute: async () => {
+    writes++;
+    throw new ApiError("NETWORK_ERROR", "reply lost after server commit");
+  } });
+  await c.load(); await c.run(write);
+  assert.equal(await c.acknowledge(), false);
+  assert.equal(await c.run(write), false);
+  const saved = values.get("scope");
+  let found = false;
+  const restored = createOperationController({ ...deps, poll: async () => {
+    if (!found) throw new ApiError("RESOURCE_NOT_FOUND", "not visible yet", 404);
+    return done;
+  } });
+  await restored.load(); await restored.check();
+  assert.equal(await restored.acknowledge(), false);
+  assert.equal(await restored.run(write), false);
+  assert.equal(values.get("scope"), saved);
+  assert.equal(writes, 1);
+  found = true; await restored.check();
+  assert.equal(operationCommitted(restored.getSnapshot().pending), true);
+  assert.equal(await restored.acknowledge(), true);
+});
 test("Durable receipt contains no bank details, reason, amount, files or tokens", async () => {
   const { controller: c, values, deps } = harness(); await c.load();
   await c.run(commands.enable(tripId, "holder", destination, "99999"));
@@ -197,7 +222,7 @@ test("Lookup 404 after restart retains the receipt; mismatched trip/operation ca
   const restarted = createOperationController({ ...deps, poll: async () => { throw new ApiError("RESOURCE_NOT_FOUND", "missing", 404); } });
   await restarted.load(); await restarted.check();
   assert.ok(restarted.getSnapshot().pending);
-  assert.match(restarted.getSnapshot().error, /404/);
+  assert.match(restarted.getSnapshot().error, /có thể đang được xử lý/);
   const wrong = createOperationController({ ...deps, poll: async () => ({ ...done, trip_id: "other" }) });
   await wrong.load(); await wrong.check();
   assert.equal(operationCommitted(wrong.getSnapshot().pending), false);

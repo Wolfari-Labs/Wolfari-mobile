@@ -11,7 +11,8 @@ test("bank directory resolves code or BIN like the backend, failing closed", () 
   assert.equal(resolveVietQrBank("970436")?.code, "VCB");
   assert.deepEqual(resolveVietQrBank("KBank"), { code: "KBank", bin: "668888" });
   assert.deepEqual(resolveVietQrBank("ubank"), { code: "Ubank", bin: "546035" });
-  assert.deepEqual(resolveVietQrBank("VIKKI"), { code: "Vikki", bin: "970406" });
+  assert.equal(resolveVietQrBank("VIKKI"), undefined);
+  assert.equal(resolveVietQrBank("HSBC"), undefined);
   assert.deepEqual(resolveVietQrBank("momo"), { code: "momo", bin: "971025" });
   assert.equal(resolveVietQrBank("XYZ"), undefined);
   assert.equal(resolveVietQrBank(""), undefined);
@@ -22,7 +23,7 @@ test("mobile bank directory mirrors the sibling backend list when available", as
   let source;
   try { source = await readFile(new URL("../../backend/packages/common/src/vietqr-banks.ts", import.meta.url), "utf8"); }
   catch { t.skip("backend checkout not present"); return; }
-  const backend = [...source.matchAll(/code:\s*'([^']+)',\s*bin:\s*'(\d+)'/g)].map(([, code, bin]) => ({ code, bin }));
+  const backend = [...source.matchAll(/\{\s*code:\s*'([^']+)',\s*bin:\s*'(\d+)',[\s\S]*?transfer_supported:\s*(true|false),[\s\S]*?\}/g)].filter(([, , , supported]) => supported === "true").map(([, code, bin]) => ({ code, bin }));
   const byCode = (a, b) => a.code.localeCompare(b.code);
   assert.deepEqual([...VIETQR_BANKS].sort(byCode), backend.sort(byCode));
 });
@@ -34,6 +35,7 @@ test("destination input normalizes bank code and enforces the QuickLink account 
   assert.deepEqual(bankInput({ bank_code: "KBank", account_number: "0012345678", account_name: "TEST ACCOUNT" }),
     { destination_type: "VIETQR", bank_code: "668888", account_number: "0012345678", account_name: "TEST ACCOUNT", active: true, is_default: true });
   assert.throws(() => bankInput({ bank_code: "XYZ", account_number: "1", account_name: "A" }), /danh mục VietQR/);
+  assert.throws(() => bankInput({ bank_code: "HSBC", account_number: "123456789", account_name: "A" }), /danh mục VietQR/);
   assert.throws(() => bankInput({ bank_code: "VCB", account_number: "12345678901234567890", account_name: "A" }), /19 ký tự/);
   assert.throws(() => bankInput({ bank_code: "VCB", account_number: "12-34", account_name: "A" }), /19 ký tự/);
   assert.throws(() => bankInput({ bank_code: "VCB", account_number: "1234", account_name: " " }));
