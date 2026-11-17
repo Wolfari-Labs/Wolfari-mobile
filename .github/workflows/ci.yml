@@ -1,0 +1,86 @@
+name: Mobile CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      ref:
+        description: Commit to verify when called by the preview workflow
+        required: false
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Mobile checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CI: '1'
+      EXPO_NO_TELEMETRY: '1'
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+
+  web:
+    name: Mobile web and UI
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      CI: '1'
+      EXPO_NO_TELEMETRY: '1'
+      # HTTP fixture tests intercept every API request; no real backend is contacted.
+      EXPO_PUBLIC_API_URL: https://ci.invalid/api/v1
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: node node_modules/playwright-core/cli.js install --with-deps chromium
+      - run: npm run export:web
+      - run: npm run test:ui:ci
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: mobile-web-and-ui-${{ github.run_id }}
+          path: |
+            dist
+            .cache/ui
+            .cache/visual
+          retention-days: 7
+
+  ready:
+    name: Mobile CI passed
+    needs: [checks, web]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require both checks
+        env:
+          CHECKS_RESULT: ${{ needs.checks.result }}
+          WEB_RESULT: ${{ needs.web.result }}
+        run: test "$CHECKS_RESULT" = success && test "$WEB_RESULT" = success
