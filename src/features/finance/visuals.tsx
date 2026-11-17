@@ -6,6 +6,7 @@ import { colors, gradients, radii, typography } from "@/shared/theme/tokens";
 import { Wolfi, type WolfiPose } from "@/shared/ui/carto/wolfi";
 import type { DesignIconName } from "@/shared/ui/design-assets";
 import { DesignIcon } from "@/shared/ui/design-icon";
+import { avatarLetter } from "./avatar-letter";
 
 /** Decorative pictures for the money screens. They carry no data, so they are hidden from screen readers. */
 const decorative = { accessibilityElementsHidden: true, importantForAccessibility: "no-hide-descendants" } as const;
@@ -39,8 +40,7 @@ export function IconTile({ icon, tone = colors.mint }: { icon: DesignIconName; t
 /** Coloured circle with the first letter of a name, so people in a list are told apart at a glance. */
 export function Avatar({ name }: { name: string }) {
   const tones = [colors.mint, colors.fill, colors.tealSoft, colors.lavender];
-  // Vietnamese given names come last, so "Huỳnh Bảo Quyên" shows Q.
-  const letter = name.trim().split(/s+/).at(-1)?.charAt(0).toUpperCase() || "?";
+  const letter = avatarLetter(name);
   const tone = tones[[...name].reduce((sum, char) => sum + char.codePointAt(0)!, 0) % tones.length];
   return (
     <View style={[styles.avatar, { backgroundColor: tone }]} {...decorative}>
