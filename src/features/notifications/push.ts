@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import Constants, { ExecutionEnvironment } from "expo-constants";
+import Constants from "expo-constants";
 import * as Notifications from "expo-notifications";
 import { AndroidImportance } from "expo-notifications";
 import { Platform } from "react-native";
@@ -15,7 +15,9 @@ const deviceKey = (userId: string) => `wolfari.push-device.v1:${userId}`;
 
 /** Remote push needs a development/production build; Expo Go and web cannot receive it. */
 export function pushSupported() {
-  return Platform.OS !== "web" && Constants.executionEnvironment !== ExecutionEnvironment.StoreClient;
+  // SDK 58 reports both Expo Go and development clients as StoreClient.
+  // expoGoConfig is populated only by Expo Go, so development builds stay enabled.
+  return Platform.OS !== "web" && Constants.expoGoConfig == null;
 }
 
 let handlerReady = false;
