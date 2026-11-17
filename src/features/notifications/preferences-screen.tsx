@@ -27,7 +27,7 @@ function Toggle({ label, value, disabled, onChange }: { label: string; value: bo
 
 export default function NotificationPreferencesScreen() {
   const api = useApi();
-  const { profile } = useSession();
+  const { profile, getSessionSnapshot } = useSession();
   const [push, setPush] = useState<PushStatus>();
   const resource = useResource(useCallback((signal: AbortSignal) => api.notifications.preferences(signal), [api]));
   // Local edits belong to the server snapshot they started from; a fresh load replaces them.
@@ -53,7 +53,7 @@ export default function NotificationPreferencesScreen() {
   }
   async function enablePush() {
     if (!profile?.id) return;
-    const status = await registerPushDevice(api.notifications, profile.id, true);
+    const status = await registerPushDevice(api.notifications, profile.id, true, () => getSessionSnapshot().profile?.id === profile.id);
     setPush(status);
     if (status === "registered" && draft && !draft.push_enabled) change({ push_enabled: true });
   }
@@ -74,7 +74,7 @@ export default function NotificationPreferencesScreen() {
       <Toggle label="Thông báo qua email" value={draft.email_enabled} disabled={busy} onChange={value => change({ email_enabled: value })} />
       {pushSupported()
         ? <Button label="Cho phép thông báo trên máy này" variant="soft" disabled={busy} onPress={() => { void enablePush(); }} />
-        : <Notice>Expo Go và bản web không nhận được thông báo đẩy. Hãy cài bản development build (eas build --profile development) để thử.</Notice>}
+        : <Notice>Phiên bản đang dùng chưa hỗ trợ thông báo đẩy. Bạn vẫn có thể xem các cập nhật trong hộp thông báo.</Notice>}
       {push === "registered" && <Feedback success message="Đã đăng ký máy này để nhận thông báo đẩy." />}
       {push === "denied" && <Feedback message="Bạn chưa cho phép thông báo. Mở Cài đặt của điện thoại → Wolfari → Thông báo để bật." />}
       {push === "error" && <Feedback message="Chưa đăng ký được thông báo đẩy. Kiểm tra kết nối rồi thử lại." />}
