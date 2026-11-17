@@ -9,7 +9,8 @@ import { Feedback } from "@/shared/ui/feedback";
 import { ResourceFeedback } from "@/shared/ui/journal";
 import { Sheet } from "@/shared/ui/sheet";
 import { createOrderSession } from "../order-session";
-import { activityDay } from "../utils";
+import { activityDay, sortedActivities } from "../utils";
+import { conflictingOrderTimes } from "../model/order-times";
 import { ActivityOrderList } from "./activity-order-list";
 
 export function ItineraryOrderEditor({
@@ -72,6 +73,16 @@ export function ItineraryOrderEditor({
       ? [activity]
       : [];
   });
+  const clearedTimeIds = new Set(
+    conflictingOrderTimes(
+      sortedActivities(state.plan?.activities ?? []).map((item) => ({
+        id: item.id,
+        day: activityDay(item, timezone) ?? null,
+        starts_at: item.starts_at,
+      })),
+      state.ids,
+    ),
+  );
   const locked =
     state.busy ||
     state.loading ||
@@ -114,7 +125,8 @@ export function ItineraryOrderEditor({
             {day === "unscheduled"
               ? "mục Chưa xếp lịch"
               : `ngày ${day.slice(8)}/${day.slice(5, 7)}`}
-            , không đổi giờ. Bấm lưu để áp dụng cho cả nhóm.
+            . Giờ bị lùi so với hoạt động phía trước sẽ được bỏ khi lưu; vẫn giữ
+            nguyên ngày. Bấm lưu để áp dụng cho cả nhóm.
           </Text>
           <ResourceFeedback
             loading={state.loading}
@@ -127,7 +139,6 @@ export function ItineraryOrderEditor({
           {state.plan && (
             <>
               <Text style={typography.footnote}>
-                Phiên bản {state.plan.plan_version} ·{" "}
                 {session.dirty() ? "Có thay đổi chưa lưu" : "Đã đồng bộ"}
               </Text>
               {!state.plan.permissions.can_edit && (
@@ -136,6 +147,7 @@ export function ItineraryOrderEditor({
               <ActivityOrderList
                 activities={activities}
                 timezone={timezone}
+                clearedTimeIds={clearedTimeIds}
                 disabled={locked}
                 onDragging={(value) => {
                   dragging.current = value;
@@ -149,6 +161,12 @@ export function ItineraryOrderEditor({
                   )
                 }
               />
+              {clearedTimeIds.size > 0 && (
+                <Text accessibilityLiveRegion="polite" style={typography.footnote}>
+                  Khi lưu sẽ bỏ giờ bắt đầu và kết thúc của {clearedTimeIds.size}
+                  {" "}hoạt động bị lệch thứ tự. Bạn có thể đặt lại giờ sau.
+                </Text>
+              )}
               {state.error && <Feedback message={state.error} />}
               {(state.conflict || (state.error && !state.uncertain)) && (
                 <Button

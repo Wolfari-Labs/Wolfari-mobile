@@ -1,3 +1,5 @@
+import { blobDataUrl, privateFileName } from "@/shared/files/private-file-model";
+import { presentPrivateFile } from "@/shared/files/private-file";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useState } from "react";
@@ -60,30 +62,36 @@ const handoverStatus: Record<HolderHandover["status"], string> = {
   NOMINATED: "Chờ người được đề cử đồng ý", ACCEPTED: "Chờ hai bên xác nhận", COMPLETED: "Đã hoàn tất", CANCELLED: "Đã hủy",
 };
 
-/** Opens the current receipt of an expense by its ID: images inline, PDFs point to the Web app. */
+/** Re-fetches by expense ID and never exposes an object key or bearer-token URL. */
 function ExpenseReceipt({ expenseId }: { expenseId: string }) {
   const api = useApi();
-  const [state, setState] = useState<{ uri?: string; message?: string; loading?: boolean }>({});
+  const [state, setState] = useState<{ uri?: string; blob?: Blob; message?: string; loading?: boolean }>({});
   async function load() {
     setState({ loading: true });
     try {
       const blob = await api.finance.expenseReceipt(expenseId);
-      if (blob.type === "application/pdf") return setState({ message: "Chứng từ là PDF. Mở trên Web để xem hoặc tải về." });
-      if (!["image/jpeg", "image/png"].includes(blob.type)) return setState({ message: "Định dạng chứng từ không được hỗ trợ." });
-      const uri = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => (typeof reader.result === "string" ? resolve(reader.result) : reject(new Error("read")));
-        reader.onerror = () => reject(reader.error ?? new Error("read"));
-        reader.readAsDataURL(blob);
-      });
-      setState({ uri });
+      privateFileName(blob, "receipt");
+      const uri = blob.type === "application/pdf" ? undefined : await blobDataUrl(blob);
+      setState({ blob, uri });
     } catch (cause) {
       setState({ message: cause instanceof ApiError && cause.status === 404 ? "Không tìm thấy chứng từ (có thể đã được thay)." : "Không tải được chứng từ; thử lại." });
     }
   }
+  async function present(mode: "preview" | "share") {
+    if (!state.blob || state.loading) return;
+    setState(old => ({ ...old, loading: true, message: undefined }));
+    try { await presentPrivateFile(state.blob, "wolfari-receipt", mode); }
+    catch { setState(old => ({ ...old, message: "Không mở được tệp. Thử tải lại hoặc chọn ứng dụng khác." })); }
+    finally { setState(old => ({ ...old, loading: false })); }
+  }
   return <View style={ui.stack}>
-    {!state.uri && <Button label={state.loading ? "Đang tải chứng từ…" : "Xem chứng từ"} compact variant="soft" disabled={state.loading} onPress={() => { void load(); }} />}
+    {!state.blob && <Button label={state.loading ? "Đang tải chứng từ…" : "Xem chứng từ"} compact variant="soft" disabled={state.loading} onPress={() => { void load(); }} />}
     {state.uri && <Image source={{ uri: state.uri }} style={styles.receiptImage} resizeMode="contain" accessibilityLabel="Ảnh chứng từ khoản chi" />}
+    {state.blob && <>
+      {state.blob.type === "application/pdf" && <Button label="Mở PDF chứng từ" compact variant="soft" disabled={state.loading} onPress={() => { void present("preview"); }} />}
+      <Button label="Tải / chia sẻ chứng từ" compact variant="soft" disabled={state.loading} onPress={() => { void present("share"); }} />
+      <Button label="Ẩn chứng từ" compact variant="text" disabled={state.loading} onPress={() => setState({})} />
+    </>}
     {state.message && <Text style={typography.footnote}>{state.message}</Text>}
   </View>;
 }
@@ -227,7 +235,7 @@ function FundOverview({ fund, trip, userId, locked, open }: Context) {
         <Button label="Ẩn mã QR" compact variant="text" onPress={() => showQr(undefined)} />
       </> : <Button label="Xem mã QR nhận tiền" compact accessibilityLabel={`Xem mã QR nhận tiền ${row.bank_code ?? ""} ${row.account_number ?? ""}`} variant="soft" onPress={() => showQr(row.id)} />)}
       {actor.writable && !destinations.error && <View style={ui.actionRow}>
-        {actor.holder && row.active && !row.confirmed_by_holder_at && <Button label="Xác nhận tài khoản nhận" compact accessibilityLabel={`Xác nhận tài khoản ${row.id.slice(0, 8)}`} disabled={locked || destinations.loading} onPress={() => open({ title: "Xác nhận tài khoản nhận", description: `${row.bank_code ?? row.destination_type} · ${row.account_number ?? row.momo_phone ?? ""} · ${row.account_name ?? ""}. Tôi là người giữ quỹ và đã kiểm tra đúng thông tin. Xác nhận này không phải xác minh của ngân hàng.`, build: () => financeCommands.confirmDestination(fund, row) })} />}
+        {actor.holder && row.active && !row.confirmed_by_holder_at && <Button label="Xác nhận tài khoản nhận" compact accessibilityLabel={`Xác nhận tài khoản ${row.bank_code ?? "ngân hàng"} ${row.account_number ?? row.momo_phone ?? row.account_name ?? ""}`} disabled={locked || destinations.loading} onPress={() => open({ title: "Xác nhận tài khoản nhận", description: `${row.bank_code ?? (row.destination_type === "VIETQR" ? "VietQR" : "MoMo")} · ${row.account_number ?? row.momo_phone ?? ""} · ${row.account_name ?? ""}. Tôi là người giữ quỹ và đã kiểm tra đúng thông tin. Xác nhận này không phải xác minh của ngân hàng.`, build: () => financeCommands.confirmDestination(fund, row) })} />}
         {actor.owner && <>
           {row.destination_type === "VIETQR" && <Button label="Sửa tài khoản nhận" compact variant="soft" disabled={locked || destinations.loading} onPress={() => open(destinationForm(fund, row))} />}
           <Button label={row.active ? "Tắt tài khoản nhận" : "Bật lại tài khoản nhận"} compact variant="soft" disabled={locked || destinations.loading} onPress={() => open({ title: row.active ? "Tắt tài khoản nhận" : "Bật lại tài khoản nhận", description: "Không sửa tài khoản đã chốt trên các khoản góp cũ. Bật lại sẽ yêu cầu người giữ quỹ xác nhận lại.", build: () => financeCommands.destination(fund, { active: !row.active, is_default: false }, row) })} />
@@ -257,7 +265,7 @@ function FundRecords({ fund, trip, userId, locked, open, who, tab, members, onIn
   const transactions = useCallback((cursor: string | undefined, signal: AbortSignal) => api.finance.list(fund.id, "transactions", cursor, signal), [api, fund.id]);
   const closures = useCallback((cursor: string | undefined, signal: AbortSignal) => api.finance.list(fund.id, "closures", cursor, signal), [api, fund.id]);
   const destinations = useResource(useCallback((signal: AbortSignal) => api.finance.destinations(fund.id, signal), [api, fund.id]), actor.owner && (tab === "contributions" || tab === "contribution-requests"));
-  const status = (value: string) => <StatusBadge status={value} label={statusLabels[value] ?? value} />;
+  const status = (value: string) => <StatusBadge status={value} label={statusLabels[value]} />;
   const contribute = actor.owner && actor.writable && <>
     <ResourceFeedback {...destinations} hasData={!!destinations.data} onRetry={() => { void destinations.reload(); }} />
     <Button label="Tạo yêu cầu đóng góp" disabled={locked || !members.length || !destinations.data || destinations.loading || !!destinations.error} onPress={() => open(contributionRequestForm(fund, members, destinations.data!, userId, trip.timezone))} />
@@ -277,7 +285,7 @@ function FundRecords({ fund, trip, userId, locked, open, who, tab, members, onIn
       {row.rejected_reason && <Text style={typography.body}>Lý do từ chối gần nhất: {row.rejected_reason}</Text>}
       <View style={ui.actionRow}>
         {actor.writable && row.member_user_id === userId && row.status === "PENDING" && <Button label="Mã QR chuyển khoản" compact variant="soft" disabled={locked} onPress={() => onInstruction(row.id)} />}
-        {contributionActions(row, actor).map(action => <Button key={action} label={actionLabels[action]} compact accessibilityLabel={`${actionLabels[action]} ${row.id.slice(0, 8)}`} variant="soft" disabled={locked} onPress={() => open(contributionForm(fund, row, action, who))} />)}
+        {contributionActions(row, actor).map(action => <Button key={action} label={actionLabels[action]} compact accessibilityLabel={`${actionLabels[action]} · ${who(row.member_user_id)} · ${money(row.amount)}`} variant="soft" disabled={locked} onPress={() => open(contributionForm(fund, row, action, who))} />)}
       </View>
     </>} /></>}
     {tab === "contribution-requests" && <>{contribute}<PagedRecords title="đợt góp" load={requests} render={row => <>
@@ -331,7 +339,7 @@ function FundRecords({ fund, trip, userId, locked, open, who, tab, members, onIn
         })()}
         {row.confirmation_mode && <Text style={typography.footnote}>Cách xác nhận: {confirmationModes[row.confirmation_mode] ?? row.confirmation_mode}</Text>}
         <View style={ui.actionRow}>
-          {refundActions(row, actor, refundContext).map(action => <Button key={action} label={action === "assign-verifier" && row.verifier_user_id ? "Đổi người kiểm chứng" : actionLabels[action]} compact accessibilityLabel={`${actionLabels[action]} ${row.id.slice(0, 8)}`} variant="soft" disabled={locked} onPress={() => open(action === "assign-verifier" ? refundVerifierForm(fund, row, members, userId, who) : refundActionForm(fund, row, action, who))} />)}
+          {refundActions(row, actor, refundContext).map(action => <Button key={action} label={action === "assign-verifier" && row.verifier_user_id ? "Đổi người kiểm chứng" : actionLabels[action]} compact accessibilityLabel={`${actionLabels[action]} · ${who(row.member_user_id)} · ${money(row.amount)}`} variant="soft" disabled={locked} onPress={() => open(action === "assign-verifier" ? refundVerifierForm(fund, row, members, userId, who) : refundActionForm(fund, row, action, who))} />)}
         </View>
       </>} />
     </>}

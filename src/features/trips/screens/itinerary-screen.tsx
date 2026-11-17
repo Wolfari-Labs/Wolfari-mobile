@@ -152,7 +152,7 @@ export default function ItineraryScreen() {
           {orderSaved && (
             <Feedback
               success
-              message="Đã lưu thứ tự cho cả nhóm. Giờ của các hoạt động được giữ nguyên."
+              message="Đã lưu thứ tự cho cả nhóm. Các giờ bị lệch thứ tự đã được bỏ, vẫn giữ nguyên ngày."
             />
           )}
           {reordering && (

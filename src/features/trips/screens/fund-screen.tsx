@@ -1,3 +1,4 @@
+import { errorMessage } from "@/shared/api/errors";
 import { useCallback, useRef, useState } from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as Linking from 'expo-linking';
@@ -33,6 +34,7 @@ import {
 import type { WriteIntent } from '../../finance/api';
 import { collectPages } from '../api/pagination';
 import { userNamer } from '../model/member-name';
+import { paymentReviewReason } from '../../finance/payment-labels';
 
 /**
  * Extended Finance tools. Everyday fund work (setup, VietQR, contributions, expenses, refunds,
@@ -187,7 +189,7 @@ function FundTools({ id, userId }: { id: string; userId: string }) {
     try {
       accept(await load());
     } catch (e) {
-      setReadError(e instanceof Error ? e.message : 'Không thể tải dữ liệu.');
+      setReadError(errorMessage(e, 'Không thể tải dữ liệu.'));
     }
   }
   async function more() {
@@ -358,9 +360,6 @@ function FundTools({ id, userId }: { id: string; userId: string }) {
                   {historyActorLabel(h, who)} · {historyTimeLabel(h.occurred_at, trip?.timezone)}
                 </Line>
                 <Line>{historyEntityLabel(h.entity_type)}</Line>
-                <Line>
-                  Phiên bản {h.from_version ?? '—'} → {h.to_version ?? '—'}
-                </Line>
                 {h.reason && <Line>{h.reason}</Line>}
               </Card>
             ))}
@@ -452,7 +451,7 @@ function FundTools({ id, userId }: { id: string; userId: string }) {
                     right={<StatusBadge status={p.reviewed_at ? 'CONFIRMED' : 'PENDING'} label={p.reviewed_at ? 'Đã đối soát' : 'Cần xử lý'} />}
                   >
                     <Line>
-                      {p.review_reason ?? 'Chưa có lý do'} ·{' '}
+                      {paymentReviewReason(p.review_reason)} ·{' '}
                       {historyTimeLabel(p.received_at, trip?.timezone)}
                     </Line>
                     <View style={ui.actionRow}>
@@ -522,7 +521,7 @@ function FundTools({ id, userId }: { id: string; userId: string }) {
       {form && <ActionSheet form={form} close={() => setForm(undefined)} />}
       {activeAttempt && (
         <Sheet visible title="Thanh toán MoMo Sandbox" onClose={closeAttempt}>
-          <Line>{statusLabel[activeAttempt.status] ?? activeAttempt.status}</Line>
+          <Line>{statusLabel[activeAttempt.status] ?? 'Chưa có thông tin trạng thái'}</Line>
           <Line>{moneyLabel(activeAttempt.amount)}</Line>
           <Button
             label="Sao chép mã lần thanh toán"

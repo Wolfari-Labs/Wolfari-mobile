@@ -4,8 +4,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import { Text, View } from "react-native";
 import { useSession } from "@/features/auth/session/session-provider";
-import { useApi } from "@/shared/api/use-api";
-import { useCommand } from "@/shared/hooks/use-command";
+import { useCreateTripRequest } from "../hooks/use-create-trip-request";
 import { useLocalDraft } from "@/shared/storage/use-local-draft";
 import { typography } from "@/shared/theme/tokens";
 import { Button } from "@/shared/ui/button";
@@ -30,17 +29,16 @@ export default function CreateTripScreen() {
 }
 
 function CreateTripForm({ initial, draft }: { initial: CreateDraft; draft: ReturnType<typeof useLocalDraft<CreateDraft>> }) {
-  const api = useApi(), command = useCommand();
+  const command = useCreateTripRequest();
   const [form, setForm] = useState(initial);
   const [step, setStep] = useState<"info" | "details">("info");
   const [validation, setValidation] = useState<string>();
   const [saved, setSaved] = useState(false);
   const [discard, setDiscard] = useState(false);
   const [coverUri, setCoverUri] = useState<string>();
-  const [createdId, setCreatedId] = useState<string>();
   const [picking, setPicking] = useState(false);
-  const busy = command.busy || draft.busy || !!createdId;
-  const timezone = "Asia/Ho_Chi_Minh";
+  const busy = !command.ready || command.busy || draft.busy || !!command.pending;
+  const timezone = form.timezone ?? "Asia/Ho_Chi_Minh";
   const update = (key: keyof CreateDraft, value: string) => { if (!busy) { setForm(old => ({ ...old, [key]: value })); setSaved(false); } };
   // Each step validates only its own fields: draft-only details never block reaching step 2.
   function validInfo() {
@@ -49,8 +47,9 @@ function CreateTripForm({ initial, draft }: { initial: CreateDraft; draft: Retur
     if (!first || !last) { setValidation("Nhập ngày hợp lệ theo định dạng DD/MM/YYYY."); return; }
     if (last < first) { setValidation("Ngày về cần bằng hoặc sau ngày khởi hành."); return; }
     setValidation(undefined);
-    // Extra planning preferences remain local; do not invent unsupported API fields.
-    return { name: form.name.trim(), start_at: localTimestamp(first, "00:00", timezone)!, end_at: localTimestamp(last, "23:59", timezone)!, timezone, ...(form.description.trim() ? { description: form.description.trim() } : {}) };
+    const startAt = localTimestamp(first, "00:00", timezone), endAt = localTimestamp(last, "23:59", timezone);
+    if (!startAt || !endAt) { setValidation("Múi giờ chưa hợp lệ. Hãy chọn lại múi giờ của chuyến đi."); return; }
+    return { name: form.name.trim(), start_at: startAt, end_at: endAt, timezone, ...(form.description.trim() ? { description: form.description.trim() } : {}) };
   }
   function validDetails() {
     if (!validMembers(form.members)) { setValidation("Số người dự kiến phải là số nguyên từ 1 trở lên."); return false; }
@@ -69,12 +68,13 @@ function CreateTripForm({ initial, draft }: { initial: CreateDraft; draft: Retur
     if (!input) { setStep("info"); return; }
     if (step === "info") { setStep("details"); return; }
     if (!validDetails()) return;
-    const trip = await command.run(input, key => api.trips.create(input, key));
-    if (trip) {
-      setCreatedId(trip.id);
-      if (await draft.clear()) router.replace({ pathname: "/trip/[id]", params: { id: trip.id } });
-      else setValidation("Chuyến đi đã tạo thành công nhưng chưa xóa được bản nháp. Không bấm tạo lại.");
-    }
+    const tripId = await command.start(input);
+    if (tripId) await finish(tripId);
+  }
+  async function finish(tripId: string) {
+    if (await draft.clear() && await command.acknowledge())
+      router.replace({ pathname: "/trip/[id]", params: { id: tripId } });
+    else setValidation("Chuyến đi đã tạo. Hãy thử mở lại chuyến đi; không tạo thêm chuyến mới.");
   }
   async function chooseCover() {
     if (busy || picking) return;
@@ -89,6 +89,16 @@ function CreateTripForm({ initial, draft }: { initial: CreateDraft; draft: Retur
     } catch { setValidation("Không mở được thư viện ảnh. Hãy thử lại."); }
     finally { setPicking(false); }
   }
+  if (!command.ready || command.pending) return <Screen title="Chuyến đi mới">
+    <Heading title={command.pending?.tripId ? "Chuyến đi đã được tạo" : "Khôi phục yêu cầu tạo chuyến đi"} />
+    {command.error && <Feedback message={command.error} />}
+    {validation && <Feedback message={validation} />}
+    {!command.ready ? <Button label="Thử đọc lại yêu cầu" loading={command.busy} onPress={() => { void command.load(); }} /> : <>
+      <Text style={typography.headline}>{command.pending!.input.name}</Text>
+      <Notice>{command.pending!.tripId ? "Yêu cầu đã hoàn tất. Mở chuyến đi để tiếp tục." : "Yêu cầu trước đã được lưu. Gửi lại yêu cầu này để kiểm tra kết quả; app sẽ không tạo thêm chuyến đi trùng."}</Notice>
+      <Button label={command.pending!.tripId ? "Mở chuyến đi đã tạo" : "Gửi lại yêu cầu đã lưu"} loading={command.busy || draft.busy} onPress={() => { void (async () => { const tripId = await command.retry(); if (tripId) await finish(tripId); })(); }} />
+    </>}
+  </Screen>;
   return <Screen title="Chuyến đi mới" onBack={() => {
     if (command.busy || draft.busy) return;
     if (step === "details") goTo("info"); else if (router.canGoBack()) router.back(); else router.replace("/(tabs)/trips");
@@ -98,14 +108,19 @@ function CreateTripForm({ initial, draft }: { initial: CreateDraft; draft: Retur
     {draft.value && <Notice>Có bản nháp trên thiết bị cho tài khoản này. Bấm Lưu bản nháp chuyến đi để giữ các thay đổi mới.</Notice>}
     {saved && !draft.error && <Feedback success message="Đã lưu bản nháp chuyến đi trên thiết bị." />}
     {validation && <Feedback message={validation} />}{command.error && <Feedback message={command.error} />}{draft.error && <Feedback message={draft.error} />}
-    {createdId && <Button label="Mở chuyến đi đã tạo" onPress={() => router.replace({ pathname: "/trip/[id]", params: { id: createdId } })} />}
     {step === "info" ? <>
       <FormField label="Tên chuyến đi" icon="trip" value={form.name} onChangeText={value => update("name", value)} placeholder="Ví dụ: Đà Nẵng 3N2Đ" maxLength={200} editable={!busy} />
       <FormField label="Điểm đến dự kiến (nháp)" icon="pin" value={form.destination} onChangeText={value => update("destination", value)} maxLength={200} editable={!busy} />
       <View style={[ui.row, { flexWrap: "wrap" }]}>{["Đà Nẵng", "Đà Lạt", "Phú Quốc"].map(value => <Button key={value} label={value} compact variant="soft" disabled={busy} onPress={() => { update("destination", value); if (!form.name) update("name", "Khám phá " + value); }} />)}</View>
       <DateTimeField label="Ngày đi" value={form.start} onChangeText={value => update("start", value)} editable={!busy} />
       <DateTimeField label="Ngày về" value={form.end} onChangeText={value => update("end", value)} editable={!busy} />
-      <Text style={typography.footnote}>Giờ Việt Nam · UTC+7. Bạn sẽ mời bạn đồng hành sau khi tạo chuyến đi.</Text>
+      <Text style={typography.footnote}>Múi giờ chuyến đi</Text>
+      <Segments scroll value={timezone} onChange={value => update("timezone", value)} items={[
+        { value: "Asia/Ho_Chi_Minh", label: "Việt Nam" }, { value: "Asia/Bangkok", label: "Thái Lan" },
+        { value: "Asia/Singapore", label: "Singapore" }, { value: "Asia/Tokyo", label: "Nhật Bản" },
+        { value: "Asia/Seoul", label: "Hàn Quốc" }, { value: "UTC", label: "Giờ quốc tế" },
+      ]} />
+      <Text style={typography.footnote}>Ngày đi, ngày về và lịch trình dùng múi giờ đã chọn. Bạn sẽ mời bạn đồng hành sau khi tạo chuyến đi.</Text>
     </> : <>
       <FormField label="Lời nhắn cho nhóm" icon="edit" value={form.description} onChangeText={value => update("description", value)} multiline maxLength={5000} editable={!busy} />
       <Notice>Điểm đến, số người, ngân sách, phong cách, mẫu và ảnh dưới đây chỉ dùng để phác thảo. Khi tạo chuyến đi, máy chủ chỉ nhận tên, ngày và lời nhắn.</Notice>

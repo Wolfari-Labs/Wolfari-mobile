@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { Platform, Text, View } from "react-native";
 import { useLocalDraft } from "@/shared/storage/use-local-draft";
 
+import { useCommand } from "@/shared/hooks/use-command";
 import { errorMessage } from "@/shared/api/errors";
 import { typography } from "@/shared/theme/tokens";
 import { Button } from "@/shared/ui/button";
@@ -27,6 +28,7 @@ import type { TravelMeta, TravelPlace } from "../types";
 import { emptyPlaceDraft, isPlaceDraft, validCoordinates, type LocalPlace } from "../model/place-draft";
 import { activityDay, tripDays } from "../utils";
 
+const providerLabel = (provider?: string) => provider?.toUpperCase() === "GEOAPIFY" ? "Geoapify" : "Dịch vụ địa điểm";
 const travelWarnings: Record<string, string> = {
   OPENING_HOURS_NOT_AVAILABLE:
     "Chưa có giờ mở cửa. Hãy kiểm tra trước khi ghé thăm.",
@@ -38,6 +40,10 @@ const travelWarnings: Record<string, string> = {
 export default function PlacesScreen() {
   const resource = useTrip();
   const { data, api, id } = resource;
+  const command = useCommand();
+  const [deleting, setDeleting] = useState<LocalPlace>();
+  const sharedWrites = data?.plan.capabilities?.locations_write === true;
+  const canWrite = !!data?.plan.permissions.can_edit && !resource.loading && !resource.error && !command.busy;
   const draft = useLocalDraft(id, "places", isPlaceDraft);
   const local = draft.value ?? emptyPlaceDraft;
   const [placeFilter, setPlaceFilter] = useState("all");
@@ -76,7 +82,7 @@ export default function PlacesScreen() {
       const response = await api.trips.searchPlaces(id, query, request.signal);
       if (!request.signal.aborted) setResult(response);
     } catch (cause) {
-      if (!request.signal.aborted) setError(errorMessage(cause) + " Bạn vẫn có thể thêm địa điểm thủ công (nháp).");
+      if (!request.signal.aborted) setError(errorMessage(cause) + " Bạn vẫn có thể tự nhập địa điểm.");
     } finally {
       if (!request.signal.aborted) setBusy(false);
     }
@@ -90,9 +96,9 @@ export default function PlacesScreen() {
           latitude: p.latitude === null ? null : Number(p.latitude),
           longitude: p.longitude === null ? null : Number(p.longitude),
           source: "Kế hoạch chung",
-          attribution: [],
+          attribution: p.metadata?.attribution ?? [],
         })), ...local.places]
-      : (result?.data ?? []).map((p) => ({ id: "search:" + p.id, name: p.name, address: p.address, ...p.coordinates, source: (result?.meta.is_mock ? "Dữ liệu mô phỏng · " : "") + (result?.meta.provider ?? "") + " · " + (result?.meta.fetched_at ?? "") + (result?.meta.stale ? " · Có thể đã cũ" : ""), attribution: result?.meta.attribution ?? [] }));
+      : (result?.data ?? []).map((p) => ({ id: "search:" + p.id, name: p.name, address: p.address, ...p.coordinates, source: (result?.meta.is_mock ? "Dữ liệu mô phỏng · " : "") + providerLabel(result?.meta.provider) + " · " + (result?.meta.fetched_at ? new Date(result.meta.fetched_at).toLocaleString("vi-VN") : "") + (result?.meta.stale ? " · Có thể đã cũ" : ""), attribution: result?.meta.attribution ?? [] }));
   const scheduled = (placeId: string) => (data?.plan.activities ?? []).filter(a => a.selected_location_id === placeId && !!(a.starts_at || a.scheduled_date));
   const places = allPlaces.filter(place => {
     const activities = scheduled(place.id);
@@ -112,14 +118,35 @@ export default function PlacesScreen() {
       places: !data.plan.selected_locations.some(p => p.id === place.id) && !local.places.some(p => p.id === place.id) ? [...local.places, place] : local.places,
     });
   }
+  const sharedLocation = (place: LocalPlace) => data?.plan.selected_locations.find(p => p.id === place.id ||
+    (p.name === place.name && (p.address ?? "") === place.address &&
+      (p.latitude === null ? place.latitude === null : place.latitude !== null && Math.abs(Number(p.latitude) - place.latitude) < 0.000001) &&
+      (p.longitude === null ? place.longitude === null : place.longitude !== null && Math.abs(Number(p.longitude) - place.longitude) < 0.000001)));
+  async function saveShared(place: LocalPlace) {
+    if (!canWrite || !data || !sharedWrites) return;
+    const existing = sharedLocation(place);
+    if (existing) return existing;
+    const input = { name: place.name.trim(), address: place.address.trim() || null,
+      latitude: place.latitude === null ? null : place.latitude.toFixed(6), longitude: place.longitude === null ? null : place.longitude.toFixed(6),
+      attribution: place.attribution.filter(a => a.url.startsWith("https://")), expected_plan_version: data.plan.plan_version };
+    const saved = await command.run(input, key => api.trips.saveLocation(id, input, key));
+    if (saved) await resource.reload();
+    return saved;
+  }
+  async function addActivity(place: LocalPlace) {
+    if (!canWrite) return;
+    const saved = sharedLocation(place) ?? (sharedWrites ? await saveShared(place) : undefined);
+    if (sharedWrites && !saved) return;
+    router.push({ pathname: "/trip/[id]/activity", params: { id, title: place.name, note: place.address, ...(saved ? { locationId: saved.id } : {}) } });
+  }
   async function addManual() {
     if (!draft.ready || draft.busy || !data?.plan.permissions.can_edit) return;
     if (!placeName.trim()) { setManualError("Nhập tên địa điểm."); return; }
     const lat = latitude.trim() ? Number(latitude) : null, lon = longitude.trim() ? Number(longitude) : null;
     if ((latitude.trim() || longitude.trim()) && !validCoordinates(lat, lon)) { setManualError("Nhập đủ vĩ độ (-90 đến 90) và kinh độ (-180 đến 180), hoặc để trống cả hai."); return; }
     const place: LocalPlace = { id: "local:" + randomUUID(), name: placeName.trim(), address: address.trim(), latitude: lat, longitude: lon, source: "Tự nhập trên thiết bị", attribution: [] };
-    if (await draft.save({ ...local, selected: [...local.selected, place.id], places: [...local.places, place] })) {
-      setManual(false); setPlaceName(""); setAddress(""); setLatitude(""); setLongitude(""); setMode("saved"); setPlaceFilter("picked"); setDayFilter("all");
+    if (sharedWrites ? !!await saveShared(place) : await draft.save({ ...local, selected: [...local.selected, place.id], places: [...local.places, place] })) {
+      setManual(false); setPlaceName(""); setAddress(""); setLatitude(""); setLongitude(""); setMode("saved"); setPlaceFilter(sharedWrites ? "all" : "picked"); setDayFilter("all");
     }
   }
   async function viewMap(latitude: number, longitude: number) {
@@ -150,10 +177,11 @@ export default function PlacesScreen() {
       {data && (
         <>
           <TripNavigation id={id} active="places" />
-          <Notice>Chọn và ẩn địa điểm chỉ lưu trên thiết bị theo tài khoản/chuyến đi, không đồng bộ với nhóm. Tìm kiếm trực tuyến phụ thuộc dịch vụ địa điểm của máy chủ.</Notice>
+          <Notice>{sharedWrites ? "Lưu địa điểm cho cả nhóm để mọi thành viên cùng xem và gắn vào lịch trình. Chọn và ẩn trên thiết bị chỉ là bộ lọc riêng của bạn." : "Chọn và ẩn địa điểm chỉ lưu trên thiết bị theo tài khoản/chuyến đi, không đồng bộ với nhóm. Tìm kiếm trực tuyến phụ thuộc dịch vụ địa điểm của máy chủ."}</Notice>
+          {command.error && <><Feedback message={command.error} /><Button label="Tải lại địa điểm của nhóm" variant="soft" onPress={() => { void resource.reload(); }} /></>}
           {draft.error && <Feedback message={draft.error} />}
           {draft.error && <Button label="Xóa dữ liệu địa điểm không đọc được" variant="soft" onPress={() => { void draft.clear(); }} />}
-          {data.plan.permissions.can_edit && <Button label="Thêm địa điểm thủ công (nháp)" variant="soft" disabled={!draft.ready || draft.busy} onPress={() => { setManualError(undefined); setManual(true); }} />}
+          {data.plan.permissions.can_edit && <Button label={sharedWrites ? "Thêm địa điểm cho nhóm" : "Thêm địa điểm thủ công (nháp)"} variant="soft" disabled={!draft.ready || draft.busy || !canWrite} onPress={() => { setManualError(undefined); setManual(true); }} />}
           <FormField
             label="Khám phá địa điểm"
             icon="search"
@@ -193,7 +221,7 @@ export default function PlacesScreen() {
           {mode === "search" && result?.meta && (
             <>
               <Text style={typography.footnote}>
-                Nguồn: {result.meta.provider} · Cập nhật{" "}
+                Nguồn: {providerLabel(result.meta.provider)} · Cập nhật{" "}
                 {new Date(result.meta.fetched_at).toLocaleString("vi-VN")}
               </Text>
               {result.meta.is_mock && (
@@ -238,6 +266,9 @@ export default function PlacesScreen() {
               <Text style={typography.footnote}>{place.source} · {scheduled(place.id).length ? "Đã xếp lịch chung" : "Chưa xếp lịch chung"}</Text>
               {place.attribution.map(source => /^https?:\/\//i.test(source.url) ? <Button key={source.url} label={source.text} variant="soft" compact onPress={() => { void openURL(source.url).catch(() => setError("Chưa thể mở nguồn địa điểm.")); }} /> : <Text key={source.text} style={typography.footnote}>{source.text}</Text>)}
               {data.plan.permissions.can_edit && <>
+                {sharedWrites && !sharedLocation(place) && <Button label="Lưu địa điểm cho nhóm" compact disabled={!canWrite} loading={command.busy} onPress={() => { void saveShared(place).then(saved => { if (saved) { setMode("saved"); setPlaceFilter("all"); } }); }} />}
+                {sharedWrites && data.plan.selected_locations.some(p => p.id === place.id) && !data.plan.activities.some(a => a.selected_location_id === place.id) && <Button label="Xóa địa điểm khỏi nhóm" compact variant="destructive" disabled={!canWrite} onPress={() => setDeleting(place)} />}
+
                 <Button label={local.selected.includes(place.id) ? "Bỏ chọn trên thiết bị" : "Chọn trên thiết bị"} compact variant="soft" disabled={!draft.ready || draft.busy} onPress={() => { void togglePlace(place); }} />
                 {!scheduled(place.id).length && <Button label="Ẩn địa điểm trên thiết bị" compact variant="soft" disabled={!draft.ready || draft.busy} onPress={() => { void draft.save({ ...local, hidden: [...new Set([...local.hidden, place.id])] }); }} />}
               </>}
@@ -258,30 +289,31 @@ export default function PlacesScreen() {
                 <Button
                   label="Thêm hoạt động tại đây"
                   compact
-                  onPress={() =>
-                    router.push({
-                      pathname: "/trip/[id]/activity",
-                      params: {
-                        id,
-                        title: place.name,
-                        note: place.address,
-                        ...(data.plan.selected_locations.some(p => p.id === place.id) ? { locationId: place.id } : {}),
-                      },
-                    })
-                  }
+                  disabled={!canWrite}
+                  onPress={() => { void addActivity(place); }}
                 />
               )}
             </View>
           ))}
           <Button label="Lên bản nháp từ địa điểm đã chọn" variant="soft" onPress={() => router.push({ pathname: "/trip/[id]/plan-draft", params: { id } })} />
-          <Sheet visible={manual} title="Địa điểm riêng trên thiết bị" dismissible={!draft.busy} onClose={() => setManual(false)}>
-            <Notice>Không tạo địa điểm chung. Tọa độ không bắt buộc; cần đủ hai tọa độ để hiện trên bản đồ.</Notice>
-            <FormField label="Tên địa điểm" icon="pin" value={placeName} onChangeText={setPlaceName} maxLength={200} editable={!draft.busy} />
-            <FormField label="Địa chỉ" icon="map" value={address} onChangeText={setAddress} maxLength={500} editable={!draft.busy} />
-            <FormField label="Vĩ độ" icon="pin" value={latitude} onChangeText={setLatitude} placeholder="16.0544" maxLength={20} editable={!draft.busy} />
-            <FormField label="Kinh độ" icon="pin" value={longitude} onChangeText={setLongitude} placeholder="108.2022" maxLength={20} editable={!draft.busy} />
+          <Sheet visible={!!deleting} title="Xóa địa điểm khỏi nhóm?" dismissible={!command.busy} onClose={() => setDeleting(undefined)}>
+            <Text style={typography.body}>{deleting?.name} sẽ bị xóa khỏi danh sách chung. Địa điểm đang gắn với hoạt động phải được gỡ khỏi hoạt động trước.</Text>
+            {command.error && <Feedback message={command.error} />}
+            <Button label="Xác nhận xóa địa điểm" variant="destructive" loading={command.busy} disabled={!canWrite} onPress={() => { void (async () => {
+              if (!deleting || !canWrite) return;
+              const result = await command.run({ remove: deleting.id, version: data.plan.plan_version }, key => api.trips.removeLocation(id, deleting.id, data.plan.plan_version, key));
+              if (result) { setDeleting(undefined); await resource.reload(); }
+            })(); }} />
+          </Sheet>
+          <Sheet visible={manual} title={sharedWrites ? "Địa điểm của nhóm" : "Địa điểm riêng trên thiết bị"} dismissible={!draft.busy && !command.busy} onClose={() => setManual(false)}>
+            <Notice>{sharedWrites ? "Địa điểm được lưu vào kế hoạch chung của nhóm." : "Không tạo địa điểm chung."} Tọa độ không bắt buộc; cần đủ hai tọa độ để hiện trên bản đồ.</Notice>
+            {command.error && <Feedback message={command.error} />}
+            <FormField label="Tên địa điểm" icon="pin" value={placeName} onChangeText={setPlaceName} maxLength={200} editable={!draft.busy && !command.busy} />
+            <FormField label="Địa chỉ" icon="map" value={address} onChangeText={setAddress} maxLength={500} editable={!draft.busy && !command.busy} />
+            <FormField label="Vĩ độ" icon="pin" value={latitude} onChangeText={setLatitude} placeholder="16.0544" maxLength={20} editable={!draft.busy && !command.busy} />
+            <FormField label="Kinh độ" icon="pin" value={longitude} onChangeText={setLongitude} placeholder="108.2022" maxLength={20} editable={!draft.busy && !command.busy} />
             {manualError && <Feedback message={manualError} />}{draft.error && <Feedback message={draft.error} />}
-            <Button label="Lưu địa điểm trên thiết bị" disabled={!draft.ready || !data.plan.permissions.can_edit} loading={draft.busy} onPress={() => { void addManual(); }} />
+            <Button label={sharedWrites ? "Lưu địa điểm cho nhóm" : "Lưu địa điểm trên thiết bị"} disabled={!draft.ready || !canWrite} loading={draft.busy || command.busy} onPress={() => { void addManual(); }} />
           </Sheet>
           {!places.length && !busy && (
             <EmptyState
