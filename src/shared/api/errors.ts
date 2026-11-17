@@ -1,18 +1,27 @@
-import { ApiError } from "./api-client";
+import { ApiError } from "./api-client.ts";
 
-export function errorMessage(error: unknown): string {
+export function errorMessage(error: unknown, fallback = "Chưa thể hoàn tất. Vui lòng thử lại."): string {
   if (error instanceof ApiError) {
+    if (error.code === "NETWORK_ERROR") return "Không thể kết nối. Kiểm tra mạng rồi thử lại.";
+    if (error.code === "REQUEST_TIMEOUT") return "Chưa nhận được phản hồi. Vui lòng kiểm tra lại trạng thái yêu cầu.";
     if (error.code === "VERSION_CONFLICT") return "Dữ liệu vừa được cập nhật. Tải lại thông tin và kiểm tra trước khi gửi yêu cầu mới.";
     if (error.code === "FINANCE_OBLIGATION_BLOCKED") return "Chưa thể rời hoặc xóa thành viên vì còn nghĩa vụ tài chính cần giải quyết.";
-    if (error.code === "STATE_CONFLICT") return "Trạng thái hiện tại chưa cho phép thao tác. Kiểm tra số dư khả dụng, giao dịch đang chờ, phiên đóng quỹ hoặc cấu hình chức năng trên backend.";
+    if (error.code === "STATE_CONFLICT") return "Trạng thái hiện tại chưa cho phép thao tác. Kiểm tra các giao dịch và yêu cầu đang chờ trước khi thử lại.";
     if (error.status === 409) return "Dữ liệu hoặc trạng thái vừa thay đổi. Tải lại rồi kiểm tra trước khi thử lại.";
     if (error.status === 403) return "Bạn chưa có quyền thực hiện thao tác này trong chuyến đi.";
     if (error.status === 404) return "Nội dung không còn khả dụng hoặc bạn không còn là thành viên.";
     if (error.status === 401) return "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.";
-    if (error.status === 503) return "Dịch vụ đang tạm gián đoạn. Bạn có thể thử lại sau.";
+    if (error.status >= 500) return "Dịch vụ đang tạm gián đoạn. Bạn có thể thử lại sau.";
     if (error.status === 429) return "Bạn thao tác hơi nhanh. Vui lòng chờ một chút rồi thử lại.";
     if (error.status === 400) return "Thông tin chưa hợp lệ. Vui lòng kiểm tra các trường đã nhập.";
-    return error.message;
+    return fallback;
   }
-  return error instanceof Error ? error.message : "Chưa thể hoàn tất. Vui lòng thử lại.";
+  // Preserve local Vietnamese validation, while native/transport diagnostics stay internal.
+  if (error instanceof Error) {
+    const message = error.message.trim();
+    const technical = /[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}|\b[\da-f]{24,}\b|\b[A-Z][A-Z\d]*(?:_[A-Z\d]+)+\b|https?:\/\/|\b(?:Error|Exception|TypeError|SyntaxError|NUL)\b/i;
+    if (/[À-ỹĐđ]/u.test(message) && !technical.test(message) && message.length <= 1000)
+      return message;
+  }
+  return fallback;
 }

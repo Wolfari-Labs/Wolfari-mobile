@@ -35,7 +35,7 @@ export function useFinanceCommand(
         }
       },
       (e) => {
-        if (current) setMessage(e.message);
+        if (current) setMessage(errorMessage(e));
       },
     );
     return () => {
@@ -102,7 +102,7 @@ export function useFinanceCommand(
         );
         render((n) => n + 1);
       } catch (e) {
-        setMessage(e instanceof Error ? e.message : 'Không thể đóng yêu cầu.');
+        setMessage(errorMessage(e, 'Không thể đóng yêu cầu.'));
       }
     },
   };

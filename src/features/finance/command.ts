@@ -108,7 +108,7 @@ export function createCommandJournal(storage: JournalStorage, scope: string) {
         }
         throw Error(
           result.state === 'NEEDS_REVIEW'
-            ? 'Yêu cầu cần vận hành kiểm tra; giữ mã yêu cầu và không gửi lệnh mới.'
+            ? 'Yêu cầu cần được kiểm tra thêm. Giữ nguyên yêu cầu này và kiểm tra trạng thái sau.'
             : 'Server đang xử lý; kiểm tra lại sau.',
         );
       } finally {

@@ -22,6 +22,7 @@ import type { DesignIconName } from "./design-assets";
 import { Feedback } from "./feedback";
 import { Wolfi } from "./carto/wolfi";
 import { useMotionActive } from "@/shared/hooks/use-motion-active";
+import { statusText } from "./status-labels";
 
 export function Heading({
   title,
@@ -474,7 +475,7 @@ export function StatusBadge({ status, label }: { status: string; label?: string 
   const tone = statusToneMap[status] ?? { bg: colors.tealSoft, fg: colors.teal };
   return (
     <View style={[ui.statusBadge, { backgroundColor: tone.bg }]}>
-      <Text style={[ui.statusBadgeText, { color: tone.fg }]}>{label ?? status}</Text>
+      <Text style={[ui.statusBadgeText, { color: tone.fg }]}>{label ?? statusText(status)}</Text>
     </View>
   );
 }

@@ -1,3 +1,4 @@
+import { errorMessage } from "@/shared/api/errors";
 import { useState, type ReactNode } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { Button } from '../../shared/ui/button';
@@ -50,7 +51,7 @@ export function ActionSheet({ form, close }: { form: ActionForm; close: () => vo
     try {
       if (await form.submit(values)) close();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Không thể lưu.');
+      setError(errorMessage(e, 'Không thể lưu.'));
     } finally {
       setBusy(false);
     }
@@ -102,6 +103,7 @@ export function ActionSheet({ form, close }: { form: ActionForm; close: () => vo
                   <View style={ui.actionRow}>
                     {QUICK_AMOUNTS.map((preset) => (
                       <Pressable
+                        cssInterop={false}
                         key={preset.value}
                         disabled={busy}
                         onPress={() => setValues((s) => ({ ...s, [field.key]: preset.value }))}
@@ -181,8 +183,8 @@ export function CommandFeedback({ command }: { command: ReturnType<typeof useFin
           ) : (
             <>
               <Notice>
-                Nếu gặp xung đột sau mất phản hồi, tải lại danh sách và đối chiếu tuyến, ngưỡng,
-                trạng thái trước khi đóng yêu cầu này. Không coi lỗi 409 là giao dịch thất bại.
+                Nếu chưa nhận được kết quả, tải lại danh sách và kiểm tra tuyến, ngưỡng giá,
+                trạng thái trước khi đóng yêu cầu này. Yêu cầu trước vẫn có thể đã được lưu.
               </Notice>
               <Button
                 label={

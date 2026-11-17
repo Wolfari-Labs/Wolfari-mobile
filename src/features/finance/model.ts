@@ -15,7 +15,7 @@ export function money(value: string | null): string {
 }
 export function requiredText(value: string, label: string, max = 1024): string {
   const text = value.trim();
-  if (!text || text.includes("\0") || [...text].length > max) throw new Error(`${label} cần từ 1 đến ${max} ký tự, không chứa ký tự NUL.`);
+  if (!text || text.includes("\0") || [...text].length > max) throw new Error(`${label} cần từ 1 đến ${max} ký tự, không chứa ký tự không hợp lệ.`);
   return text;
 }
 export function eligibleDestinations(rows: Destination[]) {

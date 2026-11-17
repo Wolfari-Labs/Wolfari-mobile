@@ -1,3 +1,4 @@
+import { errorMessage } from "@/shared/api/errors";
 import { useState } from 'react';
 import { Platform } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
@@ -63,7 +64,7 @@ export function ReceiptField({
         throw Error('Ảnh trả về không thuộc quỹ này.');
       onChange(result.object_key);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Không tải được ảnh.');
+      setError(errorMessage(e, 'Không tải được ảnh.'));
     } finally {
       setBusy(false);
       onBusy(false);
