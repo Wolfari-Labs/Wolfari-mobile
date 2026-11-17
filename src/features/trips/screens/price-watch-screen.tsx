@@ -3,9 +3,13 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useSession } from '@/features/auth/session/session-provider';
 import { useApi } from '@/shared/api/use-api';
 import { useResource } from '@/shared/hooks/use-resource';
-import { View } from 'react-native';
+import { Text, View } from 'react-native';
 import { Button } from '@/shared/ui/button';
-import { Heading, Notice, ResourceFeedback, Segments, StatusBadge, ui } from '@/shared/ui/journal';
+import { Hint } from '@/shared/ui/hint';
+import { designAssets } from '@/shared/ui/design-assets';
+import { PhotoBanner, RouteStrip, Sticker } from '../../finance/visuals';
+import { typography } from '@/shared/theme/tokens';
+import { EmptyState, Heading, Notice, Progress, ResourceFeedback, Segments, StatusBadge, ui } from '@/shared/ui/journal';
 import { Screen } from '@/shared/ui/screen';
 import {
   ActionSheet,
@@ -197,29 +201,39 @@ function WatchWorkspace({ id, userId }: { id: string; userId: string }) {
           void trip.reload();
         }}
       />
-      <Notice>
-        MOCK_FLIGHT · Giá mô phỏng từ backend. Yêu cầu theo dõi và ngưỡng thuộc từng người; các truy
-        vấn trùng có thể dùng chung nhóm truy vấn và kết quả giá. Cảnh báo do server quyết định,
-        không được tạo bởi việc mở màn hình.
-      </Notice>
+      <PhotoBanner source={designAssets.coast} eyebrow="Săn vé cùng Wolfi ✈️" title="Canh giá hộ bạn, rẻ là hú liền" />
       <CommandFeedback command={command} />
-      <Button
-        label="Tải lại danh sách theo dõi"
-        variant="soft"
-        onPress={() => {
-          void refresh();
-        }}
-        disabled={list.loading}
-      />
       <Button
         label="Tạo theo dõi giá"
         onPress={() => edit()}
         disabled={command.blocked || !writable}
       />
-      <Button
-        label="Xem yêu cầu nháp trên thiết bị"
-        variant="soft"
-        onPress={() => router.push(`/trip/${id}/price-watch-drafts`)}
+      <View style={ui.actionRow}>
+        <Button
+          label="Tải lại"
+          accessibilityLabel="Tải lại danh sách theo dõi"
+          compact
+          variant="soft"
+          onPress={() => {
+            void refresh();
+          }}
+          disabled={list.loading}
+        />
+        <Button
+          label="Bản nháp"
+          accessibilityLabel="Xem yêu cầu nháp trên thiết bị"
+          compact
+          variant="soft"
+          onPress={() => router.push(`/trip/${id}/price-watch-drafts`)}
+        />
+      </View>
+      <Hint
+        title="Về giá hiển thị"
+        points={[
+          'Giá hiện là dữ liệu mô phỏng, chưa phải giá vé thật.',
+          'Mỗi người tự đặt ngưỡng riêng.',
+          'Giá chạm ngưỡng là hệ thống tự báo, không cần mở màn hình này.',
+        ]}
       />
       <Segments
         scroll
@@ -249,29 +263,34 @@ function WatchWorkspace({ id, userId }: { id: string; userId: string }) {
             title={`${w.normalized_query.origin} → ${w.normalized_query.destination}`}
             right={<StatusBadge status={w.status} label={statusLabel[w.status] ?? w.status} />}
           >
+            <RouteStrip />
+            {/* The badge already shows the status; say whose request it is only when it is not yours. */}
+            {w.user_id !== userId && <Line>Yêu cầu của thành viên khác</Line>}
             <Line>
-              {statusLabel[w.status]} ·{' '}
-              {w.user_id === userId ? 'Yêu cầu của bạn' : 'Yêu cầu của thành viên khác'}
-            </Line>
-            <Line>
-              Khởi hành: {historyTimeLabel(w.normalized_query.departure_at)} · Hết hạn: {historyTimeLabel(w.expires_at)}
-            </Line>
-            <Line>Ngưỡng riêng: {moneyLabel(w.threshold_price)}</Line>
-            <Line>
+              Khởi hành {historyTimeLabel(w.normalized_query.departure_at)} ·{' '}
               {w.normalized_query.journey_type === 'ROUND_TRIP'
-                ? `Khứ hồi · về ${w.normalized_query.return_date}`
-                : 'Một chiều'}{' '}
-              · {w.normalized_query.passengers.adults} người lớn,{' '}
-              {w.normalized_query.passengers.children} trẻ em,{' '}
-              {w.normalized_query.passengers.infants} em bé
+                ? `khứ hồi, về ${w.normalized_query.return_date}`
+                : 'một chiều'}{' '}
+              · {passengerLabel(w.normalized_query.passengers)}
             </Line>
+            <Line>Báo khi giá từ {moneyLabel(w.threshold_price)} trở xuống</Line>
             {w.status_reason && <Line>Lý do trạng thái: {w.status_reason}</Line>}
-            <Line>
-              Cảnh báo gần nhất:{' '}
-              {w.last_alert_at && w.last_alert_price
-                ? `${moneyLabel(w.last_alert_price)} lúc ${historyTimeLabel(w.last_alert_at)}`
-                : 'Chưa ghi nhận'}
-            </Line>
+            {w.last_alert_at && w.last_alert_price && (
+              <>
+                {Number(w.last_alert_price) < Number(w.threshold_price) && (
+                  <Sticker
+                    label={`🔥 Rẻ hơn ngưỡng ${Math.round((1 - Number(w.last_alert_price) / Number(w.threshold_price)) * 100)}%`}
+                  />
+                )}
+                <Line>
+                  Cảnh báo gần nhất: {moneyLabel(w.last_alert_price)} lúc{' '}
+                  {historyTimeLabel(w.last_alert_at)}
+                </Line>
+                {/* Bar: the alerted price as a share of the personal threshold. */}
+                <Progress done={Number(w.last_alert_price)} total={Number(w.threshold_price)} />
+              </>
+            )}
+            <Text style={typography.footnote}>Theo dõi đến {historyTimeLabel(w.expires_at)}</Text>
             <WatchHistory key={`${w.id}:${w.version}`} watch={w} />
             {w.user_id === userId && ['ACTIVE', 'PAUSED'].includes(w.status) && (
               <View style={ui.actionRow}>
@@ -301,7 +320,7 @@ function WatchWorkspace({ id, userId }: { id: string; userId: string }) {
           </Card>
         ))}
       {list.data && !list.data.items.some((w) => filter === 'ALL' || w.status === filter) && (
-        <Notice>Không có yêu cầu trong các trang đã tải phù hợp bộ lọc.</Notice>
+        <EmptyState icon="plane" title="Chưa có theo dõi nào ở đây" message="Không có yêu cầu trong các trang đã tải phù hợp bộ lọc." />
       )}
       {list.data?.next_cursor && (
         <Button
@@ -315,6 +334,16 @@ function WatchWorkspace({ id, userId }: { id: string; userId: string }) {
       {form && <ActionSheet form={form} close={() => setForm(undefined)} />}
     </Screen>
   );
+}
+/** "2 người lớn" or "2 người lớn, 1 trẻ em": zero counts are left out. */
+function passengerLabel(p: { adults: number; children: number; infants: number }) {
+  return [
+    `${p.adults} người lớn`,
+    p.children > 0 && `${p.children} trẻ em`,
+    p.infants > 0 && `${p.infants} em bé`,
+  ]
+    .filter(Boolean)
+    .join(', ');
 }
 function WatchHistory({ watch }: { watch: Watch }) {
   const api = useApi(),

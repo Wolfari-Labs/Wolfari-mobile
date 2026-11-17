@@ -14,6 +14,7 @@ import { useResource } from '@/shared/hooks/use-resource';
 import { View } from 'react-native';
 import { Button } from '@/shared/ui/button';
 import { Heading, Notice, ResourceFeedback, Segments, StatusBadge, ui } from '@/shared/ui/journal';
+import { Hint } from '@/shared/ui/hint';
 import { Screen } from '@/shared/ui/screen';
 import { Sheet } from '@/shared/ui/sheet';
 import { ActionSheet, Card, Line, type ActionForm, type Field } from '../../finance/components';
@@ -295,7 +296,7 @@ function FundTools({ id, userId }: { id: string; userId: string }) {
           )}
           {tab === 'notes' && (
             <>
-              <Notice>Khoản ngoài quỹ chỉ là ghi chú; không cộng/trừ số dư sổ quỹ.</Notice>
+              <Hint title="Khoản ngoài quỹ là gì?" points={["Chỉ là ghi chú, không cộng hay trừ số dư quỹ."]} />
               {fund.status === 'OPEN' &&
                 btn('Thêm khoản ngoài quỹ', () =>
                   open(

@@ -393,6 +393,8 @@ try {
   await settle();
   await page.getByText('Bữa trưa thử nghiệm · 100.000 ₫', { exact: true }).waitFor();
   assert.equal(fund.current_balance, '500000', 'Draft expense has no ledger effect');
+  // Side links live on the overview tab; record tabs show records only.
+  await tab('Tổng quan').click();
   await button('Công cụ quỹ mở rộng').click();
   await page.waitForURL(`**/trip/${tripId}/fund-tools`);
   await tab('Ngoài quỹ').waitFor();

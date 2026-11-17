@@ -14,10 +14,11 @@ export function PagedRecords<T extends { id: string }>({ load, render, title }: 
   const resource = useResource(useCallback((signal: AbortSignal) => load(cursor, signal), [load, cursor]));
   return <FadeInView>
     <ResourceFeedback {...resource} hasData={!!resource.data} onRetry={() => { void resource.reload(); }} />
-    {!resource.loading && resource.data && !resource.data.items.length && <EmptyState title={`Chưa có ${title}`} message="Dữ liệu được đọc từ máy chủ, không dùng số liệu mẫu." icon="wallet" />}
+    {!resource.loading && resource.data && !resource.data.items.length && <EmptyState title={`Chưa có ${title}`} message="Khi có, mục này sẽ hiện ở đây." icon="wallet" />}
     {resource.data?.items.map(row => <View key={row.id} style={ui.record}>{render(row)}</View>)}
-    {resource.data && (resource.data.items.length > 0 || cursors.length > 1) && <View style={ui.recordHeader}>
-      <Text style={typography.footnote}>Trang {cursors.length} · tối đa 20 mục mỗi lần tải</Text>
+    {/* Page controls only when there is more than one page. */}
+    {resource.data && (!!resource.data.next_cursor || cursors.length > 1) && <View style={ui.recordHeader}>
+      <Text style={typography.footnote}>Trang {cursors.length}</Text>
       <View style={ui.actionRow}>
         {cursors.length > 1 && <Button label="Trang trước" compact variant="soft" disabled={resource.loading} onPress={() => setCursors(current => current.slice(0, -1))} />}
         {resource.data.next_cursor && <Button label="Trang tiếp" compact variant="soft" disabled={resource.loading || cursors.includes(resource.data.next_cursor)} onPress={() => setCursors(current => [...current, resource.data!.next_cursor!])} />}
