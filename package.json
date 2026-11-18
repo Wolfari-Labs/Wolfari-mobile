@@ -76,7 +76,9 @@
     "test:ui:finance-price-watch": "node tests/ui/finance-price-watch-flow.mjs",
     "test:backend:finance": "node --experimental-strip-types scripts/check-finance-price-watch.mjs",
     "export:web": "expo export --platform web --output-dir dist",
-    "test:ui:ci": "node scripts/check-ui.mjs"
+    "export:all": "expo export --platform all --output-dir dist",
+    "test:ui:ci": "node scripts/check-ui.mjs",
+    "test:app": "node scripts/check-app.mjs"
   },
   "private": true,
   "engines": {

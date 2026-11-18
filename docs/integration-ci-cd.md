@@ -4,6 +4,8 @@ Nhánh triển khai: `feat/mobile-integration-ci-cd` ở cả mobile và backend
 
 ## Chức năng được nối thêm
 
+Gửi email thật cho bản thử nghiệm: [cấu hình Gmail và xác thực trên điện thoại](email-gmail.md). Automation hỗ trợ SMTP có xác thực/TLS; không cần dùng Mailpit để đọc email sau khi cấu hình. Backend local vẫn cần hoạt động trong lúc thử app.
+
 - Hành lý: danh sách chung, tạo/sửa/xóa, số lượng thập phân, phân công bằng membership ID, hạn theo timezone chuyến đi và completion. Thay đổi chỉ được xác nhận sau phản hồi server; conflict yêu cầu tải Plan mới.
 - Dress code: backend cung cấp CRUD cho cả chuyến/ngày/hoạt động; mobile bật luồng server khi Plan trả `capabilities.dress_codes_write`.
 - Plan trả `capabilities.packing_write` cho hành lý. Backend cũ vẫn dùng chế độ nháp riêng. Nháp cũ được giữ trong storage nhưng không tự ghi lên nhóm khi nâng cấp.
@@ -47,30 +49,27 @@ Provider dùng [Geoapify Forward Geocoding](https://apidocs.geoapify.com/docs/ge
 
 ## CI trên GitHub
 
+Pipeline cụ thể, điều kiện đạt và checklist Gmail/QR/MoMo trên điện thoại: [app-test-pipeline.md](app-test-pipeline.md).
+
 `.github/workflows/ci.yml` chạy trên push, PR và chạy thủ công, dùng Node 24 và `npm ci`:
 
 1. `Mobile checks`: lint, typecheck, unit/contract/source guard tests.
-2. `Mobile web and UI`: export web, cài Chromium đúng phiên bản Playwright và chạy bảy suite HTTP fixture: auth, Trip, backend features, Finance/Price Watch, dress code, hành lý và mobile completion.
+2. `Mobile bundles and UI`: export Android/iOS/Web, cài Chromium đúng phiên bản Playwright và chạy 11 suite HTTP fixture: auth, trip, order, backend-features, finance, finance-price-watch, dress-code, packing, mobile-completion, reliability và mobile-parity.
 3. `Mobile CI passed`: chỉ thành công khi cả hai job trên đạt; đây là status check nên yêu cầu trước khi merge.
 
-Artifact chứa web export, log và screenshot, lưu 7 ngày. CI không cần tài khoản thật hoặc backend đang chạy. URL `https://ci.invalid/api/v1` chỉ dành cho bundle test và bị fixture intercept; không dùng cho APK.
+Artifact chứa bundle export ba nền tảng, log và screenshot, lưu 7 ngày. CI không cần tài khoản thật hoặc backend đang chạy. URL `https://ci.invalid/api/v1` chỉ dành cho bundle test và bị fixture intercept; không dùng cho APK. Export chưa biên dịch APK/IPA hoặc kiểm chứng phần cứng native.
 
 Các Action được pin bằng commit SHA đã xác minh. Workflow chỉ có `contents: read`; job kiểm tra không dùng Expo token. Sau khi push workflow, người có quyền admin vào Settings → Rules → Rulesets, yêu cầu `Mobile CI passed` cho main. Không bỏ qua test lỗi để có check xanh.
 
 Chạy cùng kiểm tra trên máy:
 
 ```powershell
-npm.cmd run lint
-npm.cmd run typecheck
-npm.cmd test
 # Nếu không có Chrome/Edge, cài browser của Playwright:
 node node_modules/playwright-core/cli.js install chromium
-$env:EXPO_PUBLIC_API_URL = 'https://ci.invalid/api/v1'
-npm.cmd run export:web
-npm.cmd run test:ui:ci
+npm.cmd run test:app
 ```
 
-Có thể chạy riêng `node scripts/check-ui.mjs packing` hoặc `node scripts/check-ui.mjs trip dress-code`. Helper tự mở server loopback tạm và dọn khi kết thúc. `WOLFARI_EXPORT_DIR` chọn thư mục export khác, `WOLFARI_BROWSER_PATH` chọn browser cài sẵn. Đây là browser fixture QA; vẫn cần kiểm tra native Android/iOS.
+`test:app` chạy tuần tự lint, typecheck, unit test, export ba nền tảng và 11 suite; dừng khi lỗi, ghi `.cache/app-tests/report.json`. Có thể chạy riêng `node scripts/check-ui.mjs packing` hoặc `node scripts/check-ui.mjs trip dress-code` sau khi export. Helper tự mở server loopback tạm và dọn khi kết thúc. `WOLFARI_EXPORT_DIR` chọn thư mục export khác khi chạy riêng helper, `WOLFARI_BROWSER_PATH` chọn browser cài sẵn. Đây là browser fixture QA; vẫn cần kiểm tra native Android/iOS.
 
 ## CD: APK preview
 

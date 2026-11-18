@@ -17,6 +17,7 @@ const available = [
   "packing",
   "mobile-completion",
   "reliability",
+  "mobile-parity",
 ];
 const selected = process.argv.slice(2);
 const suites = selected.length ? selected : available;

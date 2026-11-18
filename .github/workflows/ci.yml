@@ -42,7 +42,7 @@ jobs:
       - run: npm test
 
   web:
-    name: Mobile web and UI
+    name: Mobile bundles and UI
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
@@ -61,12 +61,12 @@ jobs:
           cache: npm
       - run: npm ci
       - run: node node_modules/playwright-core/cli.js install --with-deps chromium
-      - run: npm run export:web
+      - run: npm run export:all
       - run: npm run test:ui:ci
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         if: always()
         with:
-          name: mobile-web-and-ui-${{ github.run_id }}
+          name: mobile-bundles-and-ui-${{ github.run_id }}
           path: |
             dist
             .cache/ui
