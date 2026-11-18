@@ -9,9 +9,9 @@ import { Details } from "@/shared/ui/details";
 import { Feedback } from "@/shared/ui/feedback";
 import { FadeInView, ui } from "@/shared/ui/journal";
 import type { PaymentQr } from "../model/payment-qr";
-import { PaymentQrTransfer } from "./payment-qr-transfer";
+import { PaymentQrTransfer, type PaymentSimulationOptions } from "./payment-qr-transfer";
 
-export function PaymentQrReview({ payment, tripId }: { payment: PaymentQr; tripId?: string }) {
+export function PaymentQrReview({ payment, tripId, ...simulation }: { payment: PaymentQr; tripId?: string } & PaymentSimulationOptions) {
   const [feedback, setFeedback] = useState<{ message: string; success: boolean }>();
   const [copying, setCopying] = useState(false);
   const copy = async (value: string, label: string) => {
@@ -49,7 +49,7 @@ export function PaymentQrReview({ payment, tripId }: { payment: PaymentQr; tripI
         <Button compact variant="soft" label={`Sao chép ${field.label.toLowerCase()}`} disabled={copying} onPress={() => { void copy(field.value, field.label); }} />
       </View>
     </View>)}</Details>}
-    <PaymentQrTransfer payment={payment} tripId={tripId} />
+    <PaymentQrTransfer payment={payment} tripId={tripId} {...simulation} />
     {feedback && <Feedback {...feedback} />}
   </FadeInView>;
 }

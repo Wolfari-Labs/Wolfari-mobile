@@ -24,6 +24,8 @@ Dữ liệu quét chỉ ở trong bộ nhớ màn hình, không gửi lên API/a
 
 ## Thử với MoMo Sandbox
 
+Muốn demo ngay, không có khóa: chọn **Mô phỏng trong app** sau khi đọc QR và nhập tiền/nội dung. Xem [pipeline demo mô phỏng](payment-simulation-demo.md) để thử cả góp quỹ, cập nhật số dư mẫu và lịch sử. Lựa chọn này không gọi MoMo hay cập nhật sổ quỹ máy chủ.
+
 Sau khi nhập tiền/nội dung, **MoMo Test · Thanh toán thử** được chọn sẵn khi có chuyến đi. Danh sách ngân hàng nằm trong **Chuyển bằng ngân hàng**. Bấm **Mở MoMo Test**; native yêu cầu mở trang thanh toán ngay khi nhận được liên kết, web có nút **Mở lại MoMo Test** để tránh trình duyệt chặn popup sau request bất đồng bộ. Có thể mở lại cùng liên kết. Đây là giao dịch thử với đối tác MoMo cấu hình cho Wolfari, **không chuyển tiền tới tài khoản ngân hàng trong QR**. Chỉ số tiền/nội dung người dùng đã nhập và UUID lần thử được gửi tới backend, không gửi số tài khoản nhận.
 
 API mới: `POST /trips/:id/qr-payments/momo-sandbox`, body `{ request_id, amount, note }`, header `Idempotency-Key` bằng `request_id`. Số tiền từ 1.000–50.000.000 VND. Backend kiểm tra thành viên còn tham gia, người giữ quỹ hiện tại, quỹ đang mở, chuyến đi đang hoạt động và không khóa chốt quỹ trước mỗi lần tạo/thử lại, kể cả khi có checkout trong cache. API dùng provider sandbox hiện có, giữ nguyên order/request khi thử lại, giới hạn 5 lần thử mới trong 5 phút cho mỗi người trên một Finance process. Cache thử lại chỉ ở RAM; restart mất cache, không tạo mã order khác cho cùng khóa. Chỉ mở HTTPS host `test-payment.momo.vn`.

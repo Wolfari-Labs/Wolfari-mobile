@@ -3,16 +3,17 @@ import test from "node:test";
 import { readFile, readdir } from "node:fs/promises";
 import { releaseCoverUrl } from "../src/features/trip-demo/cover-resource.ts";
 
-test("demo feature has no API, persistent storage or payment dependency", async () => {
+test("demo feature has no direct API, persistent storage or live-payment calls", async () => {
   const directory = new URL("../src/features/trip-demo/", import.meta.url);
   for (const file of await readdir(directory)) {
     if (!/\.tsx?$/.test(file)) continue;
     const source = await readFile(new URL(file, directory), "utf8");
     assert.doesNotMatch(
       source,
-      /useApi|api-client|AsyncStorage|SecureStore|fetch\(|localStorage|PaymentQr/,
+      /useApi|api-client|AsyncStorage|SecureStore|fetch\(|localStorage|openPaymentApp|sandboxCheckout|openURL/,
       file,
     );
+    if (source.includes('<PaymentQrEntry')) assert.match(source, /<PaymentQrEntry\s+simulationOnly\b/, 'Sample QR entry must disable real providers');
   }
 });
 

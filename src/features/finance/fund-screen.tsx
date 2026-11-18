@@ -245,6 +245,7 @@ function FundWorkspace({ tripId, userId }: { tripId: string; userId: string }) {
       {tab === "overview" && canScanPayment && <PaymentQrEntry key={tripId} />}
       {(!fund || tab === "overview") && <>
       <Details title="Công cụ và hướng dẫn">
+      <SectionLink title="Thử thanh toán mô phỏng" subtitle="Góp quỹ, quét QR và xem sổ mẫu miễn phí" icon="wallet" onPress={() => router.push('/demo-trip/fund')} />
       <Hint title="Quỹ hoạt động thế nào?" points={["Tiền vào tài khoản người giữ quỹ; app ghi sổ sau xác nhận.", "Chủ nhóm tạo yêu cầu góp, người giữ quỹ đối chiếu tiền thực tế."]} />
       <SectionLink title="Bản nháp dự trù riêng" subtitle="Khoản dự kiến, chưa ghi sổ" icon="edit" onPress={() => router.push({ pathname: "/trip/[id]/fund-drafts", params: { id: tripId } })} />
       <SectionLink title="Công cụ quỹ mở rộng" subtitle="Ghi chú, lịch sử, MoMo, đối soát" icon="wallet" onPress={() => router.push({ pathname: "/trip/[id]/fund-tools", params: { id: tripId } })} />

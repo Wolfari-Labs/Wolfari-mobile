@@ -12,8 +12,9 @@ import { Sheet } from "@/shared/ui/sheet";
 import { MAX_PAYMENT_QR_LENGTH, parsePaymentQr, type PaymentQrResult } from "../model/payment-qr";
 import { PaymentQrCamera } from "./payment-qr-camera";
 import { PaymentQrReview } from "./payment-qr-review";
+import type { PaymentSimulationOptions } from './payment-qr-transfer';
 
-function PaymentQrSession({ onClose, tripId }: { onClose: () => void; tripId?: string }) {
+function PaymentQrSession({ onClose, tripId, ...simulation }: { onClose: () => void; tripId?: string } & PaymentSimulationOptions) {
   const [manual, setManual] = useState(false);
   const [raw, setRaw] = useState("");
   const [result, setResult] = useState<PaymentQrResult>();
@@ -22,9 +23,9 @@ function PaymentQrSession({ onClose, tripId }: { onClose: () => void; tripId?: s
     setResult(parsePaymentQr(value));
     setRaw("");
   }, []);
-  return <Sheet visible title={result?.ok ? "Chuyển khoản" : "Quét QR chuyển khoản"} onClose={onClose}>
+  return <Sheet visible title={simulation.simulationOnly ? 'Thanh toán mô phỏng' : result?.ok ? "Chuyển khoản" : "Quét QR chuyển khoản"} onClose={onClose}>
     {result ? <>
-      {result.ok ? <PaymentQrReview payment={result.payment} tripId={tripId} /> : <Feedback message={result.message} />}
+      {result.ok ? <PaymentQrReview payment={result.payment} tripId={tripId} {...simulation} /> : <Feedback message={result.message} />}
       <Button label="Quét mã khác" variant="soft" onPress={() => { setResult(undefined); setManual(false); }} />
       {!result.ok && <Button label="Dán nội dung QR" variant="soft" onPress={() => { setResult(undefined); setManual(true); }} />}
     </> : <>
@@ -39,15 +40,15 @@ function PaymentQrSession({ onClose, tripId }: { onClose: () => void; tripId?: s
   </Sheet>;
 }
 
-export function PaymentQrEntry() {
+export function PaymentQrEntry({ simulationOnly, onSimulatedPayment }: PaymentSimulationOptions = {}) {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const [open, setOpen] = useState(false);
   const focused = useIsFocused();
   useFocusEffect(useCallback(() => () => setOpen(false), []));
   return <>
     <View style={[ui.card, { backgroundColor: colors.mint }]}>
-      <Button label="Quét QR thanh toán" icon="wallet" onPress={() => setOpen(true)} />
+      <Button label={simulationOnly ? 'Quét QR thanh toán mô phỏng' : 'Quét QR thanh toán'} icon="wallet" onPress={() => setOpen(true)} />
     </View>
-    {open && focused && <PaymentQrSession tripId={id} onClose={() => setOpen(false)} />}
+    {open && focused && <PaymentQrSession tripId={id} simulationOnly={simulationOnly} onSimulatedPayment={onSimulatedPayment} onClose={() => setOpen(false)} />}
   </>;
 }

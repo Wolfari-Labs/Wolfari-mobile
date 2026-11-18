@@ -11,6 +11,7 @@ const available = [
   "order",
   "backend-features",
   "finance",
+  "payment-simulation",
   "finance-price-watch",
   "dress-code",
   "packing",

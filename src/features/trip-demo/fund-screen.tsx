@@ -19,10 +19,14 @@ import {
   demoMembers,
   formatMoney,
   fundTotals,
+  parseAmount,
   type DemoEntry,
   type EntryKind,
 } from "./model";
 import { useTripDemo } from "./provider";
+import { PaymentQrEntry } from '@/features/payments/components/payment-qr-entry';
+import { PaymentSimulation } from '@/features/payments/components/payment-simulation';
+import { dateKey } from '@/features/trips/utils';
 
 const kinds: { value: EntryKind; label: string }[] = [
   { value: "contribution", label: "Đóng góp" },
@@ -41,6 +45,10 @@ export default function DemoFundScreen() {
   const [editing, setEditing] = useState<DemoEntry>();
   const [error, setError] = useState<string>();
   const [confirmError, setConfirmError] = useState<string>();
+  const [contributing, setContributing] = useState(false);
+  const [contributionAmount, setContributionAmount] = useState('100000');
+  const [contributor, setContributor] = useState('linh');
+  const [preparedContribution, setPreparedContribution] = useState<{ amount: string; member: string }>();
   const [review, setReview] = useState<{
     entry: DemoEntry;
     confirm: boolean;
@@ -125,6 +133,13 @@ export default function DemoFundScreen() {
         Đây là sổ quỹ mô phỏng, không phải số dư ngân hàng. Không chuyển tiền,
         xác minh thanh toán hay gọi API tài chính.
       </Text>
+      <View style={ui.stack}>
+        <Button label="Góp quỹ mô phỏng" icon="wallet" onPress={() => { setError(undefined); setPreparedContribution(undefined); setContributing(true); }} />
+        <PaymentQrEntry simulationOnly onSimulatedPayment={(transfer, paymentId) => send({ type: 'payment.complete', value: {
+          id: `demo-payment-${paymentId}`, kind: 'expense', title: 'Thanh toán QR mô phỏng', amount: transfer.amount,
+          member: 'mai', category: 'Khác', date: dateKey(new Date().toISOString(), 'Asia/Ho_Chi_Minh'), note: 'Thanh toán bằng ví mô phỏng', status: 'PENDING',
+        } })} />
+      </View>
       <View style={layered.tint}>
       <View style={s.split}>
         <Stat
@@ -313,6 +328,21 @@ export default function DemoFundScreen() {
         </>
       )}
       </View>
+      <Sheet visible={contributing} title="Góp quỹ mô phỏng" onClose={() => setContributing(false)}>
+        {preparedContribution ? <PaymentSimulation amount={preparedContribution.amount} note="Góp quỹ nhóm mẫu" recipient="Mai · Người giữ quỹ mẫu" onSuccess={paymentId => send({ type: 'payment.complete', value: {
+          id: `demo-payment-${paymentId}`, kind: 'contribution', title: 'Góp quỹ qua ví mô phỏng', amount: preparedContribution.amount,
+          member: preparedContribution.member, category: 'Góp quỹ', date: dateKey(new Date().toISOString(), 'Asia/Ho_Chi_Minh'), note: 'Thanh toán bằng ví mô phỏng', status: 'PENDING',
+        } })} /> : <>
+          <Text style={typography.footnote}>Dùng tiền mẫu để thử góp quỹ. Chỉ cập nhật sổ quỹ mẫu trên màn hình này.</Text>
+          <MemberPicker label="Người góp mẫu" value={contributor} onChange={setContributor} />
+          <FormField label="Số tiền góp mô phỏng (VND)" icon="wallet" keyboardType="number-pad" maxLength={12} value={contributionAmount} onChangeText={setContributionAmount} />
+          {error && <Feedback message={error} />}
+          <Button label="Tiếp tục góp quỹ mô phỏng" onPress={() => {
+            try { const amount = String(parseAmount(contributionAmount.trim())); setError(undefined); setPreparedContribution({ amount, member: contributor }); }
+            catch { setError('Nhập số tiền VND nguyên lớn hơn 0, không có dấu phân cách.'); }
+          }} />
+        </>}
+      </Sheet>
       <Sheet
         visible={!!editing}
         title="Thêm khoản vào quỹ mẫu"
