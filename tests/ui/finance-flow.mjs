@@ -25,6 +25,8 @@ const now = "2026-10-28T03:00:00.000Z";
 const calls = [], errors = [], unexpected = [], receipts = new Map();
 let fund, destinations = [], contributions = [], requests = [], expenses = [], refunds = [], ledger = [], closures = [];
 let sequence = 0, rowNumber = 10, conflictBudget = false, loseSubmit = true, settle = false, uncertainKey;
+let savedClosureReceipt;
+let momoAttempt;
 const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1sAAAAASUVORK5CYII=", "base64");
 const update = row => { fund.finance_version++; if (row) { row.version++; row.finance_version = fund.finance_version; } };
 const balance = () => {
@@ -66,13 +68,15 @@ await context.route("**/api/v1/**", async route => {
     const qr_svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 29 29" shape-rendering="crispEdges" role="img" aria-label="VietQR"><rect width="29" height="29" fill="#ffffff"/><path d="M4 4h7v1h-7z" fill="#000000"/></svg>';
     return respond(200, { contribution_id: c.id, amount: c.amount, currency: "VND", reference: ref, recipient_name: "TEST ACCOUNT", bank_code: "VCB", bank_bin: "970436", bank_name: "Vietcombank", account_number: "0012345678", qr_payload, qr_svg, environment: "LIVE", warning: "Quét mã bằng ứng dụng ngân hàng." });
   }
+  if (p.startsWith('/payment-attempts/') && method === 'GET') return respond(200, momoAttempt);
   if (method === "GET") {
     if (p.endsWith("/fund")) return fund ? respond(200, fund) : fail(404, "RESOURCE_NOT_FOUND");
     if (p.endsWith("/destinations")) return respond(200, destinations);
     const collections = { contributions, "contribution-requests": requests, expenses, refunds, transactions: ledger, closures };
     const collection = p.split("/").at(-1);
     if (collections[collection]) {
-      const rows = collections[collection].map(row => ({ ...row, finance_version: fund.finance_version }));
+      const rows = collections[collection].map(row => ({ ...row, finance_version: fund.finance_version,
+        ...(collection === "contribution-requests" ? { contributions: row.contributions.map(item => ({ ...item, finance_version: fund.finance_version })) } : {}) }));
       return respond(200, { items: rows, next_cursor: null });
     }
     if (p.startsWith("/closures/")) return respond(200, closures.find(row => p.endsWith(row.id)));
@@ -100,6 +104,14 @@ await context.route("**/api/v1/**", async route => {
     contributions = body.contributions.map(c => ({ ...c, id: uid(++rowNumber), request_id: rid, fund_id: fundId, version: 1, status: "PENDING", self_contribution: c.member_user_id === fund.holder_user_id }));
     update(); result = { id: rid, fund_id: fundId, title: body.title, status: "OPEN", contributions, version: 1, finance_version: fund.finance_version };
     requests.push(result);
+  } else if (p.startsWith('/contributions/') && p.endsWith('/payment-attempts')) {
+    const allocation = contributions.find(row => p.includes(row.id));
+    assert.equal(allocation.member_user_id, profile.id);
+    assert.deepEqual(body, { provider: 'MOMO_SANDBOX', expected_version: allocation.version, expected_finance_version: fund.finance_version });
+    update();
+    momoAttempt = { id: uid(++rowNumber), contribution_id: allocation.id, provider: 'MOMO_SANDBOX', environment: 'SANDBOX', amount: allocation.amount, currency: 'VND', status: 'PENDING', payment_url: 'https://test-payment.momo.vn/v2/gateway/pay?t=fixture', needs_reconciliation: false, error_code: null, expires_at: null };
+    allocation.latest_payment_attempt_id = momoAttempt.id;
+    result = momoAttempt;
   } else if (p.startsWith("/contributions/")) {
     result = contributions.find(row => p.includes(row.id)); assert.equal(body.expected_version, result.version);
     const action = p.split("/").at(-1);
@@ -139,11 +151,16 @@ await context.route("**/api/v1/**", async route => {
     else throw new Error(`Unhandled refund ${action}`);
     update(result);
   } else if (p.endsWith("/closures")) {
+    savedClosureReceipt = await page.evaluate(key => Object.entries(localStorage).find(([, raw]) => {
+      try { return JSON.parse(raw).key === key; } catch { return false; }
+    }), key);
     assert.equal(fund.current_balance, "0"); update(); fund.status = "CLOSING";
-    result = { id: uid(++rowNumber), fund_id: fundId, status: "PENDING_CONFIRMATIONS", requested_at: now, snapshot_hash: "a".repeat(64), snapshot_finance_version: fund.finance_version, snapshot_schema_version: 1, snapshot: { schema_version: 1, fund: { ...fund }, required_user_ids: [userId], contributions, contribution_requests: requests, expenses, financial_notes: [], refunds, ledger }, confirmations: [{ user_id: userId, confirmed_at: null }], finance_version: fund.finance_version }; closures.push(result);
+    result = { id: uid(++rowNumber), fund_id: fundId, status: "PENDING_CONFIRMATIONS", requested_at: now, snapshot_hash: "a".repeat(64), snapshot_finance_version: fund.finance_version, snapshot_schema_version: 1, snapshot: { schema_version: 1, fund: { ...fund }, required_user_ids: [userId, memberUser], contributions, contribution_requests: requests, expenses, financial_notes: [], refunds, ledger }, confirmations: [userId, memberUser].map(user_id => ({ user_id, confirmed_at: null })), finance_version: fund.finance_version }; closures.push(result);
   } else if (p.startsWith("/closures/") && p.endsWith("/confirm")) {
     result = closures[0]; assert.equal(body.snapshot_hash, result.snapshot_hash);
-    result.confirmations[0].confirmed_at = now; result.status = "COMPLETED"; fund.status = "CLOSED"; fund.closed_at = now; update();
+    result.confirmations.find(row => row.user_id === profile.id).confirmed_at = now;
+    if (result.confirmations.every(row => row.confirmed_at)) { result.status = "COMPLETED"; fund.status = "CLOSED"; fund.closed_at = now; }
+    update();
   } else { unexpected.push({ p, method }); return fail(404, "RESOURCE_NOT_FOUND"); }
   receipts.set(key, { intent: { p, method, body }, data: structuredClone(result) });
   if (p.startsWith("/expenses/") && p.endsWith("/submit") && loseSubmit) { loseSubmit = false; uncertainKey = key; return route.abort("failed"); }
@@ -159,9 +176,18 @@ const field = name => page.getByLabel(name, { exact: true });
 const tab = name => page.getByRole("tab", { name, exact: true }).click();
 const screenshotDir = path.resolve(".cache/visual/finance"); await mkdir(screenshotDir, { recursive: true });
 const goto = () => page.goto(`${appUrl}/trip/${tripId}/fund`, { waitUntil: "networkidle" });
+async function settled() {
+  await page.getByText("Đã cập nhật quỹ.", { exact: true }).waitFor();
+  assert.equal(await button("Tải lại quỹ").count(), 0, "Successful changes refresh automatically.");
+}
 async function confirm({ finish = true } = {}) {
-  await button("Tiếp tục").click(); await button("Xác nhận thực hiện").click();
-  if (finish) { await page.getByText("Thao tác đã hoàn tất trên máy chủ.", { exact: true }).waitFor(); await button("Tải lại quỹ").click(); }
+  const sheet = page.getByRole("dialog");
+  await sheet.waitFor();
+  if (await sheet.getByRole("button", { name: "Tiếp tục", exact: true }).count()) {
+    await button("Tiếp tục").click(); await button("Xác nhận thực hiện").click();
+  } else await sheet.getByRole("button").last().click();
+  await sheet.waitFor({ state: "hidden" });
+  if (finish) await settled();
 }
 const action = async (label, fields = {}, finish = true) => {
   await page.getByRole("button", { name: new RegExp(`^${label}`) }).first().click();
@@ -187,10 +213,14 @@ async function shot(name) {
   await page.screenshot({ path: path.join(screenshotDir, name) });
 }
 try {
-  await goto(); await button("Mở quỹ nhóm").click();
+  await goto();
+  assert.equal(await page.getByRole("tab", { name: "Góp quỹ", exact: true }).count(), 0, "Contribution actions share the request tab.");
+  assert.equal(await button("Quét QR thanh toán").count(), 0, "No outgoing QR before a fund exists.");
+  await button("Mở quỹ nhóm").click();
   await field("Ngân sách dự kiến (VND, có thể để trống)").fill("1000000");
   // Unknown banks are rejected locally: the backend could not issue a VietQR for them (409).
-  await field("Ngân hàng (mã VD: VCB, hoặc BIN VD: 970436)").fill("XYZ");
+  await field("Tìm ngân hàng").fill("XYZ");
+  await page.getByText(/Không tìm thấy ngân hàng/).waitFor();
   await field("Số tài khoản (chữ/số, tối đa 19 ký tự)").fill("0012345678");
   await field("Tên chủ tài khoản").fill("TEST ACCOUNT");
   await button("Tiếp tục").click();
@@ -201,11 +231,13 @@ try {
   await field("Nội dung VietQR (000201…)").fill(makeQr({ bin: "970436", account: "0012345678", recipient: "TEST ACCOUNT" }));
   await button("Đọc và điền thông tin").click();
   await page.getByText("Đã điền từ VietQR. Kiểm tra lại từng trường trước khi tiếp tục.", { exact: true }).waitFor();
-  assert.equal(await field("Ngân hàng (mã VD: VCB, hoặc BIN VD: 970436)").inputValue(), "VCB");
+  await page.getByText("Đã chọn: Vietcombank · Ngoại thương", { exact: true }).waitFor();
   await confirm();
   assert.equal(destinations[0].bank_code, "VCB"); assert.equal(destinations[0].account_number, "0012345678"); assert.equal(fund.current_balance, "0"); assert.equal(destinations[0].confirmed_by_holder_at, null);
   await action("Xác nhận tài khoản");
   assert.ok(destinations[0].confirmed_by_holder_at);
+  await button("Quét QR thanh toán").waitFor();
+  assert.equal(await button("Quét QR thanh toán").count(), 1, "The current Holder can scan while the fund is open.");
   // Keep the fixture within the app's 12-digit trip-budget input range while
   // still asserting that money stays a decimal string and is grouped exactly.
   await action("Cập nhật ngân sách", { "Số tiền (VND, chỉ chữ số)": "900719925474" });
@@ -214,14 +246,18 @@ try {
   conflictBudget = true; await action("Cập nhật ngân sách", { "Số tiền (VND, chỉ chữ số)": "1000000" }, false);
   await page.getByText(/Dữ liệu vừa được cập nhật/).waitFor(); assert.equal(await button("Gửi lại cùng yêu cầu").count(), 0);
   conflictBudget = false; await button("Tải lại quỹ").click();
-  await tab("Đóng góp"); await button("Tạo yêu cầu đóng góp").click();
+  await button("Góp quỹ").click(); await button("Tạo đợt góp").click();
   await field("Nội dung").fill("Đợt góp đầu tiên"); await field("Số tiền (VND, chỉ chữ số)").fill("500000");
   await page.getByRole("checkbox", { name: "Người đóng góp: Bạn · Chủ nhóm" }).click(); await confirm();
   assert.equal(contributions.length, 1); assert.equal(fund.current_balance, "0");
-  await button("Mã QR chuyển khoản").click(); await page.getByText("Tài khoản: 0012345678", { exact: true }).waitFor();
+  await page.getByText("Đợt góp đầu tiên", { exact: true }).waitFor();
+  await page.setViewportSize({ width: 320, height: 720 }); await button("Xem QR góp quỹ").scrollIntoViewIfNeeded(); await shot("02-contribution-batch-320.png"); await page.setViewportSize({ width: 402, height: 874 });
+  await button("Xem QR góp quỹ").click(); await page.getByText("Tài khoản: 0012345678", { exact: true }).waitFor();
   await page.getByRole("img", { name: "Mã VietQR" }).waitFor(); assert.equal(qrRequests, 0);
   await shot("02-vietqr.png"); await button("Đóng").click(); assert.equal(qrRequests, 0);
   await page.getByRole("button", { name: /^Báo đã chuyển tiền/ }).click();
+  assert.equal(await button("Tiếp tục").count(), 0, "Transfer reports use one explicit submit button.");
+  await page.getByText(/500.000 ₫ · Bạn/).waitFor();
   const chooser = page.waitForEvent("filechooser"); await button("Đính kèm ảnh chứng từ").click();
   await (await chooser).setFiles({ name: "receipt.png", mimeType: "image/png", buffer: png });
   await button("Đổi ảnh chứng từ").waitFor(); await confirm(); assert.equal(fund.current_balance, "0");
@@ -233,8 +269,7 @@ try {
   await button("Gửi lại cùng yêu cầu").click(); await page.getByText(/Máy chủ đang xử lý/).waitFor();
   const submitCalls = calls.filter(call => call.p.endsWith("/submit")); assert.equal(submitCalls.length, 2); assert.equal(submitCalls[0].key, submitCalls[1].key); assert.deepEqual(submitCalls[0].body, submitCalls[1].body);
   await shot("03-pending.png");
-  settle = true; await goto(); await page.getByText("Thao tác đã hoàn tất trên máy chủ.", { exact: true }).waitFor();
-  await button("Tải lại quỹ").click(); await tab("Khoản chi");
+  settle = true; await goto(); await settled(); await tab("Khoản chi");
   await action("Rút đề nghị chi"); await action("Gửi duyệt khoản chi"); await action("Xác nhận đã chi"); assert.equal(fund.current_balance, "350000");
   await action("Đảo giao dịch", { "Lý do": "Đối chiếu chi nhầm" }); assert.equal(fund.current_balance, "500000");
   await button("Tạo khoản chi").click(); await field("Nội dung").fill("Nháp cần xóa"); await field("Số tiền (VND, chỉ chữ số)").fill("1"); await confirm();
@@ -263,17 +298,120 @@ try {
   await field("Số tiền (VND, chỉ chữ số)").fill("500000"); await field("Lý do").fill("Hoàn lại chính xác"); await confirm();
   await action("Báo đã hoàn tiền"); await verifyRefund(); assert.equal(fund.current_balance, "0");
   await tab("Lịch sử"); await shot("04-ledger.png"); assert.equal(ledger.length, 6);
-  await tab("Đóng quỹ"); await button("Yêu cầu đóng quỹ").click(); await confirm(); assert.equal(fund.status, "CLOSING");
-  await button("Xem bản chốt").click(); await button("Xem toàn bộ bản chốt").click(); await shot("05-closure.png");
-  await button("Xác nhận bản chốt này").click(); await confirm(); assert.equal(fund.status, "CLOSED");
+  await tab("Chốt quỹ"); await button("Yêu cầu chốt quỹ").click();
+  assert.equal(await button("Tiếp tục").count(), 0, "Creating a closure has one confirmation screen.");
+  await confirm(); assert.equal(fund.status, "CLOSING");
+  // Another account confirms first; only their own confirmation is recorded.
+  profile = { ...profile, id: memberUser }; trip.current_membership = member;
+  await goto(); await tab("Chốt quỹ"); await button("Xem bản chốt").click();
+  await button("Xác nhận bản chốt này").waitFor();
+  assert.equal(await button("Nhắc thành viên xác nhận").count(), 0, "Members only confirm their own snapshot.");
+  assert.equal(await button("Hủy phiên chốt quỹ").count(), 0);
+  await button("Xác nhận bản chốt này").click(); await page.getByRole("dialog").waitFor({ state: "hidden" }); await settled();
+  assert.equal(await button("Xác nhận thực hiện").count(), 0, "Viewing the snapshot is already the closure review.");
+  assert.equal(fund.status, "CLOSING", "The Owner must still confirm after the other member.");
+  assert.equal(closures[0].confirmations.find(row => row.user_id === userId).confirmed_at, null);
+  profile = { ...profile, id: userId }; trip.current_membership = owner;
+  // Restore a completed receipt from an older client, matching the reported Owner lockout.
+  assert.ok(savedClosureReceipt);
+  const [storageKey, rawReceipt] = savedClosureReceipt;
+  const restored = JSON.parse(rawReceipt);
+  restored.operation = { operation_id: restored.key, trip_id: tripId, state: "SUCCEEDED", outcome: { status: "COMMITTED" } };
+  await page.evaluate(({ storageKey, restored }) => localStorage.setItem(storageKey, JSON.stringify(restored)), { storageKey, restored });
+  await goto(); await settled();
+  await tab("Chốt quỹ"); await button("Xem bản chốt").click();
+  await button("Xác nhận bản chốt này").waitFor({ timeout: 6000 });
+  assert.equal(await button("Xác nhận bản chốt này").isEnabled(), true, "A completed request cannot keep the Owner locked out of their own confirmation.");
+  assert.equal(await button("Nhắc thành viên xác nhận").count(), 0, "Secondary closure actions start collapsed.");
+  await button("Tùy chọn chốt quỹ").click();
+  assert.equal(await button("Nhắc thành viên xác nhận").isEnabled(), true);
+  assert.equal(await button("Hủy phiên chốt quỹ").isEnabled(), true);
+  await button("Tùy chọn chốt quỹ").click();
+  const primaryBox = await button("Xác nhận bản chốt này").boundingBox();
+  const detailsBox = await button("Xem toàn bộ bản chốt").boundingBox();
+  assert.ok(primaryBox && detailsBox && primaryBox.y < detailsBox.y, "Confirmation stays ahead of the expandable snapshot.");
+  await button("Xem toàn bộ bản chốt").click(); await shot("05-closure.png");
+  const closureWritesBefore = calls.filter(call => call.p.endsWith("/confirm") && call.p.startsWith("/closures/")).length;
+  await button("Xác nhận bản chốt này").click(); await page.getByRole("dialog").waitFor({ state: "hidden" }); await settled(); assert.equal(fund.status, "CLOSED");
+  assert.equal(calls.filter(call => call.p.endsWith("/confirm") && call.p.startsWith("/closures/")).length, closureWritesBefore + 1, "One click produces exactly one closure confirmation.");
+  await tab("Đợt góp");
+  await page.getByText("Đợt góp đầu tiên", { exact: true }).waitFor();
+  assert.equal(await page.getByText("Chưa có đợt góp", { exact: true }).count(), 0, "Closing a fund retains its request and allocation history.");
+  assert.equal(await button("Tạo đợt góp").count(), 0);
+  assert.equal(await button("Xem QR góp quỹ").count(), 0);
+  assert.equal(await page.getByRole("button", { name: /^Đảo giao dịch/ }).count(), 0);
+  assert.equal(await page.getByText("Đang mở", { exact: true }).count(), 0, "A closed fund cannot display an open collection badge.");
+  await page.getByText("Khoản đóng của bạn", { exact: true }).scrollIntoViewIfNeeded();
+  await shot("06-closed-contribution-history.png");
   await tab("Khoản chi"); assert.equal(await button("Tạo khoản chi").count(), 0);
   await tab("Tổng quan"); assert.equal(await button("Cập nhật ngân sách").count(), 0);
+  assert.equal(await button("Góp quỹ").count(), 0, "A settled fund cannot offer another contribution.");
+  assert.equal(await button("Quét QR thanh toán").count(), 0, "A closed fund cannot offer outgoing QR.");
+  fund.status = "OPEN"; fund.holder_user_id = memberUser;
+  await goto();
+  assert.equal(await button("Quét QR thanh toán").count(), 0, "Owner does not inherit the Holder's outgoing-payment permission.");
   // Reload under a different account; no Owner/Holder controls leak across accounts.
-  fund.status = "OPEN"; profile = { ...profile, id: memberUser }; trip.current_membership = member;
-  await goto(); assert.equal(await button("Cập nhật ngân sách").count(), 0); await tab("Đóng góp"); assert.equal(await button("Tạo yêu cầu đóng góp").count(), 0);
+  fund.holder_user_id = userId; profile = { ...profile, id: memberUser }; trip.current_membership = member;
+  contributions.push({ ...contributions[0], id: uid(++rowNumber), member_user_id: memberUser, amount: "1000", status: "PENDING", self_contribution: false, member_reported_at: null, confirmed_at: null, confirmed_by_user_id: null, finance_version: fund.finance_version });
+  await goto();
+  assert.equal(await button("Quét QR thanh toán").count(), 0, "A regular member cannot scan an outgoing fund payment.");
+  assert.equal(await button("Cập nhật ngân sách").count(), 0);
+  await button("Góp quỹ").click();
+  assert.equal(await button("Tạo đợt góp").count(), 0);
+  await button("Xem QR góp quỹ").click();
+  await page.getByText("Góp quỹ bằng VietQR", { exact: true }).waitFor();
+  await button("Đóng").click();
+  await page.getByRole("button", { name: /^Báo đã chuyển tiền/ }).waitFor();
+  assert.equal(await page.getByRole("button", { name: /^Xác nhận đã nhận đủ/ }).count(), 0);
   assert.equal(await page.getByRole("button", { name: /^Đảo giao dịch/ }).count(), 0);
+  // The main fund workspace opens only a backend-issued MoMo Test link; reload resumes it.
+  const ownMomo = contributions.find(row => row.member_user_id === memberUser && row.status === 'PENDING');
+  ownMomo.destination_type = 'MOMO_SANDBOX';
+  await goto(); await tab('Đợt góp');
+  assert.equal(await button('Xem QR góp quỹ').count(), 0);
+  const momoCreates = () => calls.filter(call => call.method === 'POST' && call.p.endsWith('/payment-attempts'));
+  await button('Góp bằng MoMo Test').click();
+  await button('Mở MoMo Test').waitFor();
+  assert.equal(momoCreates().length, 1);
+  await context.route('https://test-payment.momo.vn/**', route => route.fulfill({ status: 200, contentType: 'text/html', body: '<title>MoMo Test fixture</title>' }));
+  const popupWait = context.waitForEvent('page');
+  await button('Mở MoMo Test').click();
+  const popup = await popupWait;
+  await popup.waitForLoadState();
+  assert.equal(new URL(popup.url()).hostname, 'test-payment.momo.vn');
+  await popup.close();
+  const balanceBeforeMomo = fund.current_balance;
+  await button('Đóng').click();
+  await goto(); await tab('Đợt góp');
+  await button('Góp bằng MoMo Test').click();
+  await button('Mở MoMo Test').waitFor();
+  assert.equal(momoCreates().length, 1, 'Resume does not create another payment');
+  assert.equal(fund.current_balance, balanceBeforeMomo, 'Opening checkout does not post money');
+  momoAttempt.status = 'SUCCEEDED'; ownMomo.status = 'CONFIRMED'; update(ownMomo); post('IN', 'CONTRIBUTION', ownMomo.amount, { contribution_id: ownMomo.id });
+  await button('Kiểm tra kết quả thanh toán').click();
+  await page.getByText('Thanh toán thử thành công', { exact: true }).waitFor();
+  await shot('07-momo-result.png');
+  await button('Đóng').click();
+  requests[0].status = "CLOSED";
+  await goto(); await tab("Đợt góp");
+  await page.getByText("Đợt góp đầu tiên", { exact: true }).waitFor();
+  assert.equal(await button("Xem QR góp quỹ").count(), 0, "An OPEN fund does not reopen a CLOSED contribution request.");
+  assert.equal(await page.getByRole("button", { name: /^Báo đã chuyển tiền/ }).count(), 0);
+  requests[0].status = "OPEN";
+  await tab("Khoản chi"); await button("Tạo khoản chi").waitFor();
+  fund.holder_user_id = memberUser;
+  await goto();
+  await button("Quét QR thanh toán").waitFor();
+  assert.equal(await button("Quét QR thanh toán").count(), 1, "A member appointed Holder still has the Holder's permission.");
+  for (const state of ["CLOSING", "CLOSED"]) {
+    fund.status = state; await goto();
+    assert.equal(await button("Quét QR thanh toán").count(), 0, "Read-only funds disable outgoing QR for the Holder.");
+  }
+  fund.status = "OPEN"; trip.lifecycle = "ARCHIVED"; await goto();
+  assert.equal(await button("Quét QR thanh toán").count(), 0, "Archived trips disable outgoing QR.");
   assert.equal(await page.evaluate(() => Object.values(localStorage).some(value => value.includes("0012345678") || value.includes("TEST ACCOUNT") || value.includes("private/"))), false);
   assert.deepEqual(errors, []); assert.deepEqual(unexpected, []);
+  assert.equal(calls.some(call => call.method === "GET" && call.p.endsWith("/contributions")), false, "The request reader supplies its complete allocations without a second flat list.");
   console.log("PASS Finance UI: setup/Holder consent, exact money, version conflict, contribution/receipt/VietQR privacy, expense CRUD/settlement/reversal, lost-reply retry+restart, refunds/reservations/consent/reversal, ledger, closure, read-only/role boundaries, 320px layout. No real backend writes.");
 } catch (error) {
   await assertPublicText(page);

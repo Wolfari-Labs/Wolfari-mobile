@@ -82,7 +82,7 @@ try {
   await field("Lý do thay đổi").fill("Lưu kế hoạch đã xong");
   await button("Lưu trữ chuyến đi").click();
   await button("Xác nhận thay đổi chuyến đi").click();
-  await page.getByText(/Cần đóng quỹ trước/).waitFor();
+  await page.getByText(/Cần chốt quỹ trước/).waitFor();
   await button("Tải lại dữ liệu").click();
   await page.getByRole("tab", { name: "Chuyển chủ", exact: true }).click();
   await button("Bạn đồng hành").click();

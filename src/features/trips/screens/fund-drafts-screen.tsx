@@ -1,9 +1,8 @@
 import { useState } from "react";
 import { Text, View } from "react-native";
-import { PaymentQrEntry } from "@/features/payments/components/payment-qr-entry";
 import { colors, typography } from "@/shared/theme/tokens";
 import { Button } from "@/shared/ui/button";
-import { Heading, Notice, ResourceFeedback, Segments, ui } from "@/shared/ui/journal";
+import { Heading, ResourceFeedback, Segments, ui } from "@/shared/ui/journal";
 import { Screen } from "@/shared/ui/screen";
 import { useTrip } from "../hooks/use-trip";
 import { DraftCollection } from "../components/draft-collection";
@@ -19,8 +18,7 @@ export default function FundDraftsScreen() {
     <Heading title="Dự trù cùng cả nhóm" subtitle={data?.trip.name} />
     <ResourceFeedback {...resource} hasData={!!data} onRetry={() => { void resource.reload(); }} />
     {data && <>
-      <Notice>Đây là bản nháp dự trù riêng, không ghi vào sổ quỹ trên máy chủ. Mở Quỹ nhóm trong công cụ chuyến đi để quản lý đóng góp, chi và hoàn tiền.</Notice>
-      <PaymentQrEntry key={id} />
+      <Text style={typography.footnote}>Khoản dự kiến riêng, chưa ghi vào quỹ nhóm.</Text>
       <Button label={demo ? "Ẩn ví dụ quỹ" : "Xem ví dụ quỹ (dữ liệu mẫu)"} variant="soft" onPress={() => setDemo(!demo)} />
       {demo && <View style={[ui.card, { backgroundColor: colors.mint }]}>
         <Text style={typography.headline}>VÍ DỤ MINH HỌA · Không phải quỹ của chuyến đi</Text>
@@ -31,7 +29,7 @@ export default function FundDraftsScreen() {
         <Text style={typography.body}>Số dư sổ mẫu: {moneyLabel(750000)}</Text>
         <Text style={typography.body}>Dự phòng hoàn mẫu: {moneyLabel(250000)}</Text>
         <Text style={typography.headline}>Khả dụng mẫu: {moneyLabel(500000)}</Text>
-        <Text style={typography.footnote}>Đang mở → Đang đóng (CLOSING) → Đã đóng (CLOSED). Ví dụ tại đây không thay đổi quỹ thật; dùng màn Quỹ nhóm để thao tác với máy chủ.</Text>
+        <Text style={typography.footnote}>Đang mở → Đang chốt (CLOSING) → Đã đóng (CLOSED). Ví dụ tại đây không thay đổi quỹ thật; dùng màn Quỹ nhóm để thao tác với máy chủ.</Text>
       </View>}
       <Segments scroll items={[...kinds, { value: "history", label: "Lịch sử nháp" }]} value={tab} onChange={setTab} />
       <DraftCollection key={id} scope={id} feature="fund" title="khoản dự kiến" editable={data.plan.permissions.can_edit}

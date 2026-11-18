@@ -7,17 +7,18 @@ import { errorMessage } from "@/shared/api/errors";
 import type { OperationCommand } from "@/shared/operations/controller";
 import { colors, typography } from "@/shared/theme/tokens";
 import { Button } from "@/shared/ui/button";
+import { Details } from "@/shared/ui/details";
 import { Feedback } from "@/shared/ui/feedback";
 import { FormField } from "@/shared/ui/form-field";
 import { DateTimeField } from "@/shared/ui/date-time-field";
-import { FadeInView, Notice, StatusBadge, ui } from "@/shared/ui/journal";
+import { FadeInView, Notice, ui } from "@/shared/ui/journal";
 import { Sheet } from "@/shared/ui/sheet";
 import type { PaymentQr } from "@/features/payments/model/payment-qr";
 import { money } from "../model";
-import { resolveVietQrBank } from "../vietqr-banks";
+import { bankDisplayName } from "../bank-names";
+import { BankPicker } from "./bank-picker";
 import { QrFill } from "./qr-fill";
 
-const POPULAR_BANKS = ["VCB", "TCB", "MB", "ACB", "BIDV", "ICB", "VPB", "TPB", "STB", "VIB"] as const;
 const QUICK_AMOUNTS = [
   { label: "100k", value: "100000" },
   { label: "200k", value: "200000" },
@@ -36,6 +37,7 @@ function moneyPreview(raw?: string): string | undefined {
 export type FormValues = Record<string, string>;
 export type FinanceFormSpec = {
   title: string; description: string; initial?: FormValues; destructive?: boolean;
+  review?: boolean; submitLabel?: string;
   fields?: { key: string; label: string; numeric?: boolean; multiline?: boolean; max?: number;
     mode?: "date" | "time";
     options?: { value: string; label: string }[]; multiple?: boolean }[];
@@ -59,6 +61,7 @@ export function FinanceForm({ spec, busy, onSubmit, onClose }: {
   const assetRef = useRef<ImagePicker.ImagePickerAsset | undefined>(undefined);
   const active = useRef(true), lock = useRef(false), uploaded = useRef<string | undefined>(undefined);
   const disabled = busy || working;
+  const review = spec.review ?? !!spec.fields?.length;
   const release = (asset?: ImagePicker.ImagePickerAsset) => {
     if (Platform.OS === "web" && asset?.uri.startsWith("blob:")) URL.revokeObjectURL(asset.uri);
   };
@@ -96,7 +99,11 @@ export function FinanceForm({ spec, busy, onSubmit, onClose }: {
         }
         command.body[spec.receipt.field] = uploaded.current;
       }
-      if (active.current) setPrepared({ ...command, title: spec.title });
+      if (active.current) {
+        if (!review) {
+          if (await onSubmit({ ...command, title: spec.title }) && active.current) onClose();
+        } else setPrepared({ ...command, title: spec.title });
+      }
     } catch (cause) { if (active.current) setError(errorMessage(cause)); }
     finally { lock.current = false; if (active.current) setWorking(false); }
   }
@@ -107,8 +114,7 @@ export function FinanceForm({ spec, busy, onSubmit, onClose }: {
     finally { lock.current = false; if (active.current) setWorking(false); }
   }
   return <Sheet visible title={prepared ? "Xác nhận thao tác" : spec.title} dismissible={!disabled} onClose={() => { if (!disabled) onClose(); }}>
-    <Text style={typography.headline}>{spec.title}</Text>
-    <Notice>{spec.description}</Notice>
+    {prepared || !review ? <Text style={typography.body}>{spec.description}</Text> : <Details title="Thông tin thao tác"><Text style={typography.footnote}>{spec.description}</Text></Details>}
     {error && <Feedback message={error} />}
     {!prepared && spec.scan && (scanning
       ? <QrFill onClose={() => setScanning(false)} onRead={payment => {
@@ -119,7 +125,7 @@ export function FinanceForm({ spec, busy, onSubmit, onClose }: {
     {filled && !prepared && <Feedback success message="Đã điền từ VietQR. Kiểm tra lại từng trường trước khi tiếp tục." />}
     {spec.fields?.map(field => prepared ? <FadeInView key={field.key}>
       <Text style={typography.footnote}>{field.label}</Text>
-      <Text selectable style={typography.body}>{field.options ? field.options.filter(option => (values[field.key] ?? "").split(",").includes(option.value)).map(option => option.label).join(" · ") || "Không chọn" : field.numeric && moneyPreview(values[field.key]) ? moneyPreview(values[field.key]) : values[field.key] || "Để trống"}</Text>
+      <Text selectable style={typography.body}>{field.key === "bank_code" ? bankDisplayName(values[field.key] ?? "") : field.options ? field.options.filter(option => (values[field.key] ?? "").split(",").includes(option.value)).map(option => option.label).join(" · ") || "Không chọn" : field.numeric && moneyPreview(values[field.key]) ? moneyPreview(values[field.key]) : values[field.key] || "Để trống"}</Text>
     </FadeInView> : field.options ? <View key={field.key} style={ui.stack}>
       <Text style={typography.headline}>{field.label}</Text>
       {!field.options.length && <Notice>Chưa có lựa chọn hợp lệ. Kiểm tra thành viên hoặc xác nhận tài khoản nhận trước.</Notice>}
@@ -132,20 +138,8 @@ export function FinanceForm({ spec, busy, onSubmit, onClose }: {
             set(field.key, field.multiple ? (selected ? current.filter(value => value !== option.value) : [...current, option.value]).join(",") : option.value);
           }}><Text style={typography.body}>{selected ? "✓ " : "○ "}{option.label}</Text></Pressable>;
       })}
-    </View> : field.mode ? <DateTimeField key={field.key} mode={field.mode} label={field.label} value={values[field.key] ?? ""} onChangeText={value => set(field.key, value)} editable={!disabled} /> : <View key={field.key} style={{ gap: 8 }}>
+    </View> : field.key === "bank_code" ? <BankPicker key={field.key} value={values[field.key] ?? ""} onChange={value => set(field.key, value)} disabled={disabled} /> : field.mode ? <DateTimeField key={field.key} mode={field.mode} label={field.label} value={values[field.key] ?? ""} onChangeText={value => set(field.key, value)} editable={!disabled} /> : <View key={field.key} style={{ gap: 8 }}>
       <FormField icon={field.numeric ? "wallet" : "edit"} label={field.label} value={values[field.key] ?? ""} onChangeText={value => set(field.key, value)} keyboardType={field.numeric ? "number-pad" : "default"} autoCapitalize="none" maxLength={field.max ?? 1024} multiline={field.multiline} editable={!disabled} />
-      {field.key === "bank_code" && <>
-        {(() => { const bank = resolveVietQrBank(values.bank_code ?? ""); return bank ? <StatusBadge status="CONFIRMED" label={`Đã nhận diện: ${bank.code} · BIN ${bank.bin}`} /> : null; })()}
-        <View style={ui.actionRow}>
-          {POPULAR_BANKS.map(code => {
-            const activeBank = resolveVietQrBank(values.bank_code ?? "")?.code === code;
-            return <Pressable cssInterop={false} key={code} disabled={disabled} onPress={() => set("bank_code", code)}
-              style={({ pressed }) => [{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, backgroundColor: activeBank ? colors.mint : colors.fill, borderWidth: 1, borderColor: activeBank ? colors.pinGreen : colors.line }, pressed && { opacity: 0.7 }]}>
-              <Text style={[typography.footnote, { color: activeBank ? colors.pinGreen : colors.ink }]}>{code}</Text>
-            </Pressable>;
-          })}
-        </View>
-      </>}
       {field.numeric && <>
         {moneyPreview(values[field.key]) && <Text style={[typography.footnote, { color: colors.teal }]}>Định dạng: {moneyPreview(values[field.key])}</Text>}
         <View style={ui.actionRow}>
@@ -160,12 +154,11 @@ export function FinanceForm({ spec, busy, onSubmit, onClose }: {
     {!prepared && spec.receipt && <>
       <Button label={photo ? "Đổi ảnh chứng từ" : "Đính kèm ảnh chứng từ"} variant="soft" disabled={disabled} onPress={() => { void choose(); }} />
       {photo && <Button label="Bỏ ảnh đã chọn" variant="soft" disabled={disabled} onPress={() => { release(assetRef.current); assetRef.current = undefined; uploaded.current = undefined; setPhoto(undefined); }} />}
-      <Text style={typography.footnote}>JPEG/PNG · tối đa 10 MiB. Ảnh được tải riêng tư khi tiếp tục; chỉ gắn vào giao dịch khi xác nhận. File chưa gắn sẽ được backend dọn sau.</Text>
+      <Text style={typography.footnote}>Ảnh JPEG/PNG · tối đa 10 MiB</Text>
     </>}
     {prepared ? <>
-      <Notice>Đây là ghi nhận nghiệp vụ trên máy chủ, không phải lệnh chuyển tiền ngân hàng. Không xác nhận đã nhận/chi khi chưa đối chiếu tiền thực tế.</Notice>
       <Button label="Xác nhận thực hiện" variant={spec.destructive ? "destructive" : "primary"} loading={disabled} onPress={() => { void submit(); }} />
       <Button label="Quay lại chỉnh sửa" variant="soft" disabled={disabled} onPress={() => setPrepared(undefined)} />
-    </> : <Button label="Tiếp tục" loading={disabled} disabled={scanning} onPress={() => { void prepare(); }} />}
+    </> : <Button label={review ? "Tiếp tục" : spec.submitLabel ?? spec.title} variant={spec.destructive ? "destructive" : "primary"} loading={disabled} disabled={scanning} onPress={() => { void prepare(); }} />}
   </Sheet>;
 }

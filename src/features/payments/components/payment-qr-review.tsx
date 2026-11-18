@@ -2,17 +2,18 @@ import * as Clipboard from "expo-clipboard";
 import { useState } from "react";
 import { Text, View } from "react-native";
 
-import { resolveVietQrBank } from "@/features/finance/vietqr-banks";
+import { bankDisplayName } from "@/features/finance/bank-names";
 import { typography } from "@/shared/theme/tokens";
 import { Button } from "@/shared/ui/button";
+import { Details } from "@/shared/ui/details";
 import { Feedback } from "@/shared/ui/feedback";
-import { FadeInView, Notice, StatusBadge, ui } from "@/shared/ui/journal";
+import { FadeInView, ui } from "@/shared/ui/journal";
 import type { PaymentQr } from "../model/payment-qr";
+import { PaymentQrTransfer } from "./payment-qr-transfer";
 
-export function PaymentQrReview({ payment }: { payment: PaymentQr }) {
+export function PaymentQrReview({ payment, tripId }: { payment: PaymentQr; tripId?: string }) {
   const [feedback, setFeedback] = useState<{ message: string; success: boolean }>();
   const [copying, setCopying] = useState(false);
-  const bank = resolveVietQrBank(payment.bankBin);
   const copy = async (value: string, label: string) => {
     setCopying(true);
     try {
@@ -25,36 +26,30 @@ export function PaymentQrReview({ payment }: { payment: PaymentQr }) {
     }
   };
   const fields = [
-    { label: "Mã ngân hàng (BIN)", value: payment.bankBin, display: bank ? `${bank.code} · ${payment.bankBin}` : payment.bankBin },
-    { label: "Số tài khoản", value: payment.account },
-    ...(payment.amount ? [{ label: "Số tiền", value: payment.amount, display: `${payment.amount.replace(/\B(?=(\d{3})+(?!\d))/g, ".")} ₫` }] : []),
-    ...(payment.note ? [{ label: "Nội dung chuyển khoản", value: payment.note }] : []),
     ...(payment.reference ? [{ label: "Mã tham chiếu", value: payment.reference }] : []),
     ...(payment.billNumber ? [{ label: "Mã hóa đơn", value: payment.billNumber }] : []),
   ];
   return <FadeInView>
-    <View style={ui.recordHeader}>
-      <Text accessibilityRole="header" style={typography.title}>Kiểm tra thông tin chuyển khoản</Text>
-      <StatusBadge status={payment.amount ? "CONFIRMED" : "PENDING"} label={payment.amount ? "VietQR có số tiền" : "VietQR tĩnh"} />
-    </View>
-    <Notice>Thông tin được đọc từ QR, chưa xác minh với ngân hàng. Hãy đối chiếu ngân hàng, tên người nhận, số tài khoản và số tiền trong ứng dụng ngân hàng trước khi xác nhận.</Notice>
     <View style={ui.card}>
-      <Text style={typography.footnote}>Tên ghi trong QR · Chưa xác minh</Text>
+      <Text style={typography.footnote}>Người nhận</Text>
       <Text selectable style={typography.headline}>{payment.recipientLabel || "QR không có tên người nhận"}</Text>
+      <Text selectable style={typography.body}>{bankDisplayName(payment.bankBin)}</Text>
+      <View style={ui.recordHeader}>
+        <Text selectable style={typography.headline}>{payment.account}</Text>
+        <Button compact variant="text" label="Sao chép số tài khoản" disabled={copying} onPress={() => { void copy(payment.account, 'Số tài khoản'); }} />
+      </View>
+      <Text style={typography.footnote}>Kiểm tra tên người nhận trong ứng dụng ngân hàng.</Text>
     </View>
-    {fields.map(field => <View key={field.label} style={ui.card}>
+    {!!fields.length && <Details title="Chi tiết QR">{fields.map(field => <View key={field.label} style={ui.row}>
       <View style={ui.recordHeader}>
         <View style={{ flex: 1, minWidth: 140, gap: 4 }}>
           <Text style={typography.footnote}>{field.label}</Text>
-          <Text selectable style={typography.headline}>{"display" in field ? field.display : field.value}</Text>
+          <Text selectable style={typography.body}>{field.value}</Text>
         </View>
         <Button compact variant="soft" label={`Sao chép ${field.label.toLowerCase()}`} disabled={copying} onPress={() => { void copy(field.value, field.label); }} />
       </View>
-    </View>)}
-    {!payment.amount && <Notice>QR chưa có số tiền. Nhập số tiền đã thống nhất trong ứng dụng ngân hàng.</Notice>}
-    {!payment.note && <Text style={typography.footnote}>QR không có nội dung chuyển khoản.</Text>}
+    </View>)}</Details>}
+    <PaymentQrTransfer payment={payment} tripId={tripId} />
     {feedback && <Feedback {...feedback} />}
-    <Text style={typography.body}>Mở ứng dụng ngân hàng của bạn để thực hiện chuyển khoản. Wolfari không chuyển tiền, kiểm tra hạn dùng của QR hay xác nhận giao dịch; quỹ và bản nháp không thay đổi.</Text>
-    <Text style={typography.footnote}>Không lưu lịch sử quét. Thông tin bạn chủ động sao chép sẽ nằm trong clipboard của thiết bị.</Text>
   </FadeInView>;
 }

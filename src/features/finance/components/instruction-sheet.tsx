@@ -6,10 +6,12 @@ import { useApi } from "@/shared/api/use-api";
 import { useResource } from "@/shared/hooks/use-resource";
 import { typography } from "@/shared/theme/tokens";
 import { Button } from "@/shared/ui/button";
+import { Details } from "@/shared/ui/details";
 import { Feedback } from "@/shared/ui/feedback";
-import { Notice, ResourceFeedback } from "@/shared/ui/journal";
+import { ResourceFeedback } from "@/shared/ui/journal";
 import { Sheet } from "@/shared/ui/sheet";
 import { money } from "../model";
+import { bankDisplayName } from "../bank-names";
 import { AUTOFILL_BANK_APPS, bankAppDeeplink, instructionQrImage } from "../extended-model";
 import type { PaymentInstruction } from "../types";
 import { QrImage } from "./qr-image";
@@ -41,31 +43,30 @@ export function InstructionSheet({ contributionId, onClose }: { contributionId: 
     catch { setCopied("Không sao chép được. Hãy chọn và sao chép thủ công."); }
   };
   const apps = row ? AUTOFILL_BANK_APPS.filter(app => deeplinkFor(row, app.id)) : [];
-  return <Sheet visible title="Chuyển khoản VietQR" onClose={onClose}>
+  return <Sheet visible title="Góp quỹ bằng VietQR" onClose={onClose}>
     <ResourceFeedback {...resource} hasData={!!row} onRetry={() => { void resource.reload(); }} />
     {row && <>
-      <Feedback message={row.warning} />
       <QrImage url={row.qr_image} onError={() => setFailed(true)} />
       {failed && <Feedback message="Không hiển thị được mã QR. Dùng thông tin bên dưới để chuyển thủ công." />}
       <Text selectable style={typography.headline}>{money(row.amount)}</Text>
-      <Text selectable style={typography.body}>Ngân hàng: {row.bank_name} ({row.bank_code})</Text>
+      <Text selectable style={typography.body}>Ngân hàng: {bankDisplayName(row.bank_bin)}</Text>
       <Text selectable style={typography.body}>Tài khoản: {row.account_number}</Text>
       <Text selectable style={typography.body}>Chủ tài khoản: {row.recipient_name}</Text>
       <Text selectable style={typography.body}>Nội dung: {row.reference}</Text>
       <Button label="Sao chép nội dung chuyển khoản" variant="soft" compact onPress={() => { void copy(row.reference, "Đã sao chép nội dung chuyển khoản."); }} />
       <Button label="Sao chép mã QR" variant="soft" compact onPress={() => { void copy(row.qr_payload, "Đã sao chép mã QR. Dán vào tính năng quét từ ảnh/mã của app ngân hàng."); }} />
-      {copied && <Feedback message={copied} />}
-      <Notice>Quét mã bằng ứng dụng ngân hàng, hoặc dán mã QR đã sao chép vào tính năng quét từ ảnh/mã của ứng dụng. Thông tin lấy từ tài khoản đã chốt khi phát hành khoản góp; tên chủ tài khoản do người giữ quỹ khai, chưa được ngân hàng xác minh.</Notice>
+      {copied && <Text style={typography.footnote}>{copied}</Text>}
       {apps.length > 0 && (consent ? <>
         <Text accessibilityRole="header" style={typography.headline}>Mở app ngân hàng</Text>
-        <Notice>Các app dưới đây tự điền tài khoản, số tiền và nội dung qua dịch vụ liên kết của VietQR.io. Bạn vẫn kiểm tra người nhận và xác nhận chuyển trong app ngân hàng; nếu máy chưa cài app, trang web VietQR sẽ mở thay.</Notice>
+        <Text style={typography.footnote}>Kiểm tra và xác nhận giao dịch trong ứng dụng ngân hàng.</Text>
         {apps.map(app => { const url = deeplinkFor(row, app.id); return url ? <Button key={app.id} label={app.name} accessibilityLabel={`Mở ${app.name} để chuyển ${money(row.amount)}`} variant="soft" compact onPress={() => { setOpenError(undefined); void openURL(url).catch(() => setOpenError(`Không mở được liên kết ${app.name}. Sao chép thông tin ở trên để chuyển thủ công.`)); }} /> : null; })}
         {openError && <Feedback message={openError} />}
       </> : <>
-        <Notice>Muốn mở thẳng app ngân hàng với thông tin đã điền? Tài khoản, số tiền và nội dung sẽ được gửi tới dl.vietqr.io (VietQR.io). Chỉ tiếp tục nếu bạn đồng ý; nếu không, hãy quét hoặc dán mã QR.</Notice>
+        <Text style={typography.footnote}>Tài khoản, số tiền và nội dung sẽ qua VietQR.io để mở ngân hàng với thông tin điền sẵn.</Text>
         <Button label="Mở app ngân hàng qua VietQR.io" variant="soft" onPress={() => setConsent(true)} />
       </>)}
-      <Notice>Xem hoặc quét mã không có nghĩa đã báo chuyển hay đã nhận tiền. Sau khi chuyển, trở lại khoản góp để báo đã chuyển.</Notice>
+      <Text style={typography.footnote}>Chuyển xong, trở lại khoản góp để báo đã chuyển.</Text>
+      <Details title="Lưu ý chuyển khoản"><Text style={typography.footnote}>Đối chiếu tên người nhận trong ngân hàng trước khi xác nhận. Mở hoặc quét mã chưa làm thay đổi số dư quỹ.</Text></Details>
     </>}
   </Sheet>;
 }

@@ -56,7 +56,7 @@ const fund = {
 const contributions = [200000, 300000].map((amount, i) => ({
   id: uid(10 + i),
   fund_id: fundId,
-  request_id: uid(7),
+  request_id: uid(7 + i),
   member_user_id: memberId,
   amount: String(amount),
   status: 'PENDING',
@@ -71,6 +71,11 @@ const ledger = [],
   notes = [],
   refunds = [],
   closures = [];
+const contributionRequests = contributions.map((row, i) => ({
+  id: row.request_id, fund_id: fundId, title: `Đợt góp ${i + 1}`, status: 'OPEN',
+  version: 1, finance_version: 1, created_by_user_id: ownerId,
+  created_at: '2026-11-18T00:00:00Z', due_at: null, note: null, contributions: [row],
+}));
 const date = new Date(Date.now() + 20 * 86400000).toISOString().slice(0, 10);
 function trip() {
   return {
@@ -264,7 +269,8 @@ await context.route('**/api/v1/**', async (route) => {
   const collection = p.split('/').at(-1),
     lists = {
       contributions,
-      'contribution-requests': [],
+      'contribution-requests': contributionRequests.map(row => ({ ...row, finance_version: fund.finance_version,
+        contributions: row.contributions.map(item => ({ ...item, finance_version: fund.finance_version })) })),
       transactions: [...ledger].reverse(),
       expenses,
       refunds,
@@ -330,20 +336,23 @@ try {
   const starts = (name) => page.getByRole('button', { name: new RegExp(`^${name}`) });
   const fundTab = async () => {
     await goto('fund');
-    await tab('Đóng góp').click();
+    await tab('Đợt góp').click();
     await page.getByText(/^(Khoản đóng của bạn|Bạn đồng hành)/).first().waitFor();
   };
   const confirmSheet = async () => {
-    await button('Tiếp tục').click();
-    await button('Xác nhận thực hiện').click();
+    const sheet = page.getByRole('dialog');
+    await sheet.waitFor();
+    assert.equal(await sheet.getByRole('button', { name: 'Tiếp tục', exact: true }).count(), 0);
+    await sheet.getByRole('button').last().click();
+    await sheet.waitFor({ state: 'hidden' });
   };
   const settle = async () => {
-    await button('Tải lại quỹ').click();
-    await button('Tải lại quỹ').waitFor({ state: 'hidden' });
+    await page.getByText('Đã cập nhật quỹ.', { exact: true }).waitFor();
+    assert.equal(await button('Tải lại quỹ').count(), 0);
   };
   await goto('fund');
   await page.getByText('Số dư đã ghi nhận', { exact: true }).waitFor();
-  await tab('Đóng góp').click();
+  await tab('Đợt góp').click();
   await page.getByText(/^Bạn đồng hành/).first().waitFor();
   assert.equal(await starts('Xác nhận đã nhận đủ').count(), 0, 'Owner does not gain Holder rights');
   actor = memberId;
@@ -421,10 +430,12 @@ try {
 
   // Side links live on the overview tab; record tabs show records only.
   await tab('Tổng quan').click();
+  assert.equal(await button('Công cụ quỹ mở rộng').count(), 0, 'Secondary tools stay collapsed by default.');
+  await button('Công cụ và hướng dẫn').click();
   await button('Công cụ quỹ mở rộng').click();
   await page.waitForURL(`**/trip/${tripId}/fund-tools`);
   await tab('Ngoài quỹ').waitFor();
-  for (const name of ['Đóng góp', 'Khoản chi', 'Hoàn tiền', 'Chốt quỹ'])
+  for (const name of ['Đợt góp', 'Khoản chi', 'Hoàn tiền', 'Chốt quỹ'])
     assert.equal(await tab(name).count(), 0, `${name} lives only on the main Fund screen`);
   await tab('Ngoài quỹ').click();
   await button('Thêm khoản ngoài quỹ').click();

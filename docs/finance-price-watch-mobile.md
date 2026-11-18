@@ -40,6 +40,19 @@ lịch sử kiểm toán (nhãn tiếng Việt, tên người thực hiện), Mo
 và lần thanh toán) và đối soát. Không còn hai nơi thao tác cùng một khoản tiền.
 Bản nháp riêng dùng `/trip/:id/fund-drafts`, không ghi vào sổ quỹ.
 
+Cập nhật 18/11/2026: màn quét QR có luồng nhập số tiền/nội dung rồi chọn ngân hàng
+hoặc ví. Ngân hàng hiển thị tên thương hiệu kèm mô tả ngắn; chọn ngân hàng trả tiền độc lập với ngân
+hàng nhận trong QR. MoMo tại màn quét là **lần thử sandbox riêng**, không phải
+thanh toán khoản góp và không trả vào tài khoản QR. API mới và cấu hình local xem
+[payment-qr.md](payment-qr.md). Các luồng MoMo cho khoản góp tại Công cụ quỹ mở rộng
+vẫn dùng cơ chế ghi sổ và đối soát hiện có.
+
+Quét QR chi tiền chỉ dành cho người giữ quỹ hiện tại khi quỹ đang mở/chuyến đi
+chưa lưu trữ. Chủ nhóm không giữ quỹ và thành viên thường không thấy scanner;
+người giữ quỹ có role MEMBER vẫn thấy. Scanner không xuất hiện ở bản nháp hoặc
+khi chưa mở quỹ. QR góp quỹ và thanh toán khoản góp của chính thành viên giữ
+nguyên quyền hiện có. API QR cũng kiểm tra lại quyền giữ quỹ và trạng thái.
+
 Tài khoản nhận VietQR được kiểm tra theo đúng danh mục ngân hàng của backend
 (`src/features/finance/vietqr-banks.ts`, nhận mã như `VCB` hoặc BIN `970436`) và
 số tài khoản 1–19 chữ/số — giới hạn để backend phát hành được QR (sai sẽ là 409).

@@ -19,7 +19,7 @@ export function requiredText(value: string, label: string, max = 1024): string {
   return text;
 }
 export function eligibleDestinations(rows: Destination[]) {
-  return rows.filter(row => row.active && !!row.confirmed_by_holder_at && row.destination_type === "VIETQR");
+  return rows.filter(row => row.active && !!row.confirmed_by_holder_at && ["VIETQR", "MOMO_SANDBOX"].includes(row.destination_type));
 }
 export type FinanceActor = { userId: string; owner: boolean; writable: boolean; holder: boolean };
 export function financeActor(fund: Fund, userId: string, owner: boolean, archived: boolean): FinanceActor {
@@ -87,7 +87,7 @@ export function refundActions(row: Refund, actor: FinanceActor, ctx?: RefundCont
   return actions;
 }
 export const statusLabels: Record<string, string> = {
-  OPEN: "Đang mở", CLOSING: "Đang đóng", CLOSED: "Đã đóng", PENDING: "Đang chờ",
+  OPEN: "Đang mở", CLOSING: "Đang chốt", CLOSED: "Đã đóng", PENDING: "Đang chờ",
   TRANSFER_REPORTED: "Đã báo chuyển · chờ người giữ quỹ", CONFIRMED: "Đã xác nhận",
   WAIVED: "Được miễn", CANCELLED: "Đã hủy", REVERSED: "Đã đảo sổ", DRAFT: "Nháp trên máy chủ",
   SUBMITTED: "Chờ duyệt", REJECTED: "Bị từ chối", HOLDER_REPORTED: "Đã báo hoàn · chờ người nhận",

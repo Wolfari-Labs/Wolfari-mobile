@@ -1,8 +1,8 @@
-import { useFocusEffect, useIsFocused } from "expo-router";
+import { useFocusEffect, useIsFocused, useLocalSearchParams } from "expo-router";
 import { useCallback, useState } from "react";
-import { Keyboard, Text, View } from "react-native";
+import { Keyboard, View } from "react-native";
 
-import { colors, typography } from "@/shared/theme/tokens";
+import { colors } from "@/shared/theme/tokens";
 import { Button } from "@/shared/ui/button";
 import { Feedback } from "@/shared/ui/feedback";
 import { Hint } from "@/shared/ui/hint";
@@ -13,7 +13,7 @@ import { MAX_PAYMENT_QR_LENGTH, parsePaymentQr, type PaymentQrResult } from "../
 import { PaymentQrCamera } from "./payment-qr-camera";
 import { PaymentQrReview } from "./payment-qr-review";
 
-function PaymentQrSession({ onClose }: { onClose: () => void }) {
+function PaymentQrSession({ onClose, tripId }: { onClose: () => void; tripId?: string }) {
   const [manual, setManual] = useState(false);
   const [raw, setRaw] = useState("");
   const [result, setResult] = useState<PaymentQrResult>();
@@ -22,9 +22,9 @@ function PaymentQrSession({ onClose }: { onClose: () => void }) {
     setResult(parsePaymentQr(value));
     setRaw("");
   }, []);
-  return <Sheet visible title="Quét QR chuyển khoản" onClose={onClose}>
+  return <Sheet visible title={result?.ok ? "Chuyển khoản" : "Quét QR chuyển khoản"} onClose={onClose}>
     {result ? <>
-      {result.ok ? <PaymentQrReview payment={result.payment} /> : <Feedback message={result.message} />}
+      {result.ok ? <PaymentQrReview payment={result.payment} tripId={tripId} /> : <Feedback message={result.message} />}
       <Button label="Quét mã khác" variant="soft" onPress={() => { setResult(undefined); setManual(false); }} />
       {!result.ok && <Button label="Dán nội dung QR" variant="soft" onPress={() => { setResult(undefined); setManual(true); }} />}
     </> : <>
@@ -40,14 +40,14 @@ function PaymentQrSession({ onClose }: { onClose: () => void }) {
 }
 
 export function PaymentQrEntry() {
+  const { id } = useLocalSearchParams<{ id?: string }>();
   const [open, setOpen] = useState(false);
   const focused = useIsFocused();
   useFocusEffect(useCallback(() => () => setOpen(false), []));
   return <>
     <View style={[ui.card, { backgroundColor: colors.mint }]}>
-      <Text accessibilityRole="header" style={typography.headline}>Quét QR chuyển khoản</Text>
       <Button label="Quét QR thanh toán" icon="wallet" onPress={() => setOpen(true)} />
     </View>
-    {open && focused && <PaymentQrSession onClose={() => setOpen(false)} />}
+    {open && focused && <PaymentQrSession tripId={id} onClose={() => setOpen(false)} />}
   </>;
 }

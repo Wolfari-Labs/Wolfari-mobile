@@ -4,7 +4,7 @@ import { createApiClient, ApiError } from "../src/shared/api/api-client.ts";
 import { createFinanceApi, financeCommands as commands } from "../src/features/finance/api.ts";
 import { parseMoney, money, financeActor, contributionActions, expenseActions, refundActions, eligibleDestinations, requiredText } from "../src/features/finance/model.ts";
 import { createOperationController, operationCommitted, operationTerminal, operationMessage, receiptForStorage } from "../src/shared/operations/controller.ts";
-import { enableForm, contributionRequestForm, expenseActionForm } from "../src/features/finance/forms.ts";
+import { enableForm, contributionRequestForm, expenseActionForm, momoDestinationForm } from "../src/features/finance/forms.ts";
 
 const tripId = "20000000-0000-4000-8000-000000000001";
 const fundId = "50000000-0000-4000-8000-000000000001";
@@ -18,6 +18,16 @@ const owner = financeActor(fund, "owner", true, false);
 const holder = financeActor(fund, "holder", false, false);
 const member = financeActor(fund, "member", false, false);
 const write = commands.budget(fund, "9007199254740993");
+
+test('MoMo contribution uses the confirmed destination and exact backend versions', () => {
+  assert.throws(() => momoDestinationForm(fund).build({ phone: '123' }));
+  const momo = momoDestinationForm(fund).build({ phone: '0900000000' });
+  assert.deepEqual(momo.body, { destination_type: 'MOMO_SANDBOX', momo_phone: '0900000000', active: true, is_default: false, expected_finance_version: 17 });
+  const form = contributionRequestForm(fund, [{ user_id: 'member', left_at: null }], [{ ...destination, destination_type: 'MOMO_SANDBOX', momo_phone: '0900000000', id: 'momo', confirmed_by_holder_at: 'now' }], 'member');
+  for (const amount of ['999', '50000001']) assert.throws(() => form.build({ title: 'Test', amount, members: 'member', destination: 'momo' }));
+  assert.deepEqual(form.build({ title: 'Test', amount: '1000', members: 'member', destination: 'momo' }).body.contributions, [{ member_user_id: 'member', destination_id: 'momo', amount: '1000' }]);
+  assert.deepEqual(commands.paymentAttempt(fund, { id: 'allocation', version: 3 }).body, { provider: 'MOMO_SANDBOX', expected_finance_version: 17, expected_version: 3 });
+});
 
 test("Finance preserves the full PostgreSQL int64 range without Number conversion", () => {
   assert.equal(parseMoney("09223372036854775807"), "9223372036854775807");
@@ -90,7 +100,7 @@ test("Archived/closing/closed funds expose no mutation actions", () => {
     assert.deepEqual(expenseActions({ status: "CONFIRMED" }, state), []);
     assert.deepEqual(refundActions({ status: "PENDING" }, state), []);
   }
-  assert.deepEqual(eligibleDestinations([{ ...destination, id: "1", confirmed_by_holder_at: "now" }, { ...destination, id: "2" }, { ...destination, id: "3", active: false, confirmed_by_holder_at: "now" }, { ...destination, id: "4", destination_type: "MOMO_SANDBOX", confirmed_by_holder_at: "now" }]).map(x => x.id), ["1"]);
+  assert.deepEqual(eligibleDestinations([{ ...destination, id: "1", confirmed_by_holder_at: "now" }, { ...destination, id: "2" }, { ...destination, id: "3", active: false, confirmed_by_holder_at: "now" }, { ...destination, id: "4", destination_type: "MOMO_SANDBOX", confirmed_by_holder_at: "now" }]).map(x => x.id), ["1", "4"]);
 });
 test("Fund/destination commands send exact strict bodies and both versions where required", () => {
   assert.deepEqual(commands.enable(tripId, "holder", destination).body, { holder_user_id: "holder", currency: "VND", destination });
