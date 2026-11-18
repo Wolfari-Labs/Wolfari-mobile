@@ -142,6 +142,12 @@ export function createTripsApi(client: ApiClient) {
         `/trips/${id(tripId)}/dress-codes${dressCodeId ? `/${id(dressCodeId)}` : ""}`,
         write(dressCodeId ? "PATCH" : "POST", input, key),
       ),
+    uploadDressCodeImage: async (tripId: string, body: FormData) => {
+      const row = await client.request<{ image_id: string; mime_type: string; size_bytes: number }>(`/trips/${id(tripId)}/dress-code-images`, { method: 'POST', body });
+      if (!row || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(row.image_id) || row.mime_type !== 'image/jpeg' || !Number.isInteger(row.size_bytes) || row.size_bytes < 1 || row.size_bytes > 2 * 1024 * 1024) throw Error('Phản hồi tải ảnh không hợp lệ.');
+      return row;
+    },
+    dressCodeImage: (tripId: string, dressCodeId: string, signal?: AbortSignal) => client.request<Blob>(`/trips/${id(tripId)}/dress-codes/${id(dressCodeId)}/reference-image`, { responseType: 'blob', signal }),
     removeDressCode: (
       tripId: string,
       dressCodeId: string,
