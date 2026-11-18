@@ -69,8 +69,7 @@ export default function SignUpScreen() {
   if (status === "authenticated") return <Redirect href={pendingInvitation.get() ? "/invitation" : "/(tabs)"} />;
   if (accepted) return <Screen title="Kiểm tra email" onBack={() => router.replace("/sign-in")}>
     <Text accessibilityRole="header" style={typography.section}>Kiểm tra email của bạn</Text>
-    <Text style={typography.body}>Yêu cầu đăng ký đã được tiếp nhận. Kiểm tra hộp thư và thư mục thư rác để lấy liên kết xác minh.</Text>
-    <Text style={typography.footnote}>Xác minh email không tự đăng nhập. Sau khi xác minh, hãy dùng email và mật khẩu để vào Wolfari.</Text>
+    <Text style={typography.body}>Mở email Wolfari trên điện thoại và bấm liên kết xác minh để hoàn tất đăng ký.</Text>
     <Button label="Xác minh email" onPress={() => router.replace("/verify-email")} />
     <Pressable accessibilityRole="link" onPress={() => router.replace("/sign-in")} style={styles.linkAction}>
       <Text style={[typography.body, styles.link]}>Đã có tài khoản? Đăng nhập</Text>

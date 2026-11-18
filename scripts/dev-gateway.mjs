@@ -16,12 +16,16 @@ export function createDevGateway({ target = "http://127.0.0.1:3000", webOrigin =
     // Keep the bridge scoped to this app; it is never an arbitrary forward proxy.
     if (!/^\/(?:api\/v1(?:\/|\?|$)|health\/ready(?:\?|$)|invitations\/local(?:\?|$))/.test(path) || path.startsWith("//") || path.includes("\\")) return reject(404, "RESOURCE_NOT_FOUND");
     const origin = request.headers.origin;
-    if (origin && !origins.has(origin)) return reject(403, "PERMISSION_DENIED");
+    // Email verification/reset pages are served by this bridge itself. Match
+    // known hosts and the actual listening port rather than trusting Host.
+    const bridgeOrigin = origin && hosts.some(host => origin === `http://${host}:${request.socket.localPort}`);
+    if (origin && !origins.has(origin) && !bridgeOrigin) return reject(403, "PERMISSION_DENIED");
     const cors = origin ? { "Access-Control-Allow-Origin": origin, "Access-Control-Allow-Credentials": "true", "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Type, X-CSRF-Token, Idempotency-Key", "Access-Control-Allow-Methods": "GET, POST, PATCH, PUT, DELETE, OPTIONS", Vary: "Origin" } : {};
     if (request.method === "OPTIONS") { response.writeHead(204, cors); response.end(); return; }
     const headers = { ...request.headers, host: upstream.host, ...(origin ? { origin: webOrigin } : {}) };
     delete headers["x-forwarded-host"]; delete headers["x-forwarded-for"];
-    const outgoing = http.request({ hostname: upstream.hostname, port: upstream.port || 80, path, method: request.method, headers, timeout: 30_000 }, incoming => {
+    const timeout = /^\/api\/v1\/trips\/[^/]+\/qr-payments\/momo-sandbox$/.test(path) ? 40_000 : 30_000;
+    const outgoing = http.request({ hostname: upstream.hostname, port: upstream.port || 80, path, method: request.method, headers, timeout }, incoming => {
       response.writeHead(incoming.statusCode ?? 502, { ...incoming.headers, ...cors });
       incoming.pipe(response);
       incoming.on("error", () => response.destroy());
