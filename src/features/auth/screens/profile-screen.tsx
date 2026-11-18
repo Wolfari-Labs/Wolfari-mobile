@@ -2,15 +2,14 @@ import { router } from "expo-router";
 import { useState } from "react";
 import { Text, View } from "react-native";
 
-import { colors, typography } from "@/shared/theme/tokens";
+import { typography } from "@/shared/theme/tokens";
 import { AppHeader } from "@/shared/ui/app-header";
 import { Button } from "@/shared/ui/button";
 import { ProfileAvatar } from "../components/profile-avatar";
 import { Feedback } from "@/shared/ui/feedback";
 import { IconButton, SectionLink, ui } from "@/shared/ui/journal";
-import { PageIntro, layered } from "@/shared/ui/page-intro";
+import { layered } from "@/shared/ui/page-intro";
 import { Screen } from "@/shared/ui/screen";
-import { Sheet } from "@/shared/ui/sheet";
 import { pendingInvitation } from "@/features/trips/pending-invitation";
 import { unregisterPushDevice } from "@/features/notifications/push";
 import { useApi } from "@/shared/api/use-api";
@@ -19,7 +18,6 @@ import { useSession } from "../session/session-provider";
 export default function ProfileScreen() {
   const { profile, signOut } = useSession();
   const api = useApi();
-  const [confirm, setConfirm] = useState(false);
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
   async function logout() {
@@ -38,13 +36,8 @@ export default function ProfileScreen() {
     }
   }
   return (
-    <Screen header={<AppHeader />} tab="account">
-      <PageIntro
-        eyebrow="KHÔNG GIAN CỦA BẠN"
-        icon="users"
-        title="Tài khoản"
-        subtitle="Những hành trình bắt đầu từ đây."
-        summary={<View style={ui.row}>
+    <Screen header={<AppHeader title="Tài khoản" showGreeting={false} showAvatar={false} />} tab="account">
+      <View style={layered.panel}><View style={ui.row}>
         <ProfileAvatar profile={profile} />
         <View style={ui.flex}>
           <Text style={typography.section}>{profile?.full_name}</Text>
@@ -57,29 +50,25 @@ export default function ProfileScreen() {
           label="Chỉnh sửa hồ sơ"
           onPress={() => router.push("/edit-profile")}
         />
-      </View>}
-      />
+      </View></View>
       <View style={[layered.tint, layered.rows]}>
-        <SectionLink grouped title="Đổi mật khẩu" subtitle="Bảo vệ tài khoản của bạn" icon="lock" onPress={() => router.push("/change-password")} />
-        <SectionLink grouped title="Xác minh email" subtitle={profile?.email_verified_at ? "Đã xác minh" : "Xác minh để nhận lời mời qua email"} icon="mail" onPress={() => router.push("/verify-email")} />
+        <SectionLink grouped title="Đổi mật khẩu" icon="lock" onPress={() => router.push("/change-password")} />
+        {!profile?.email_verified_at && <SectionLink grouped title="Xác minh email" subtitle="Email chưa xác minh" icon="mail" onPress={() => router.push("/verify-email")} />}
         <SectionLink
           grouped
           title="Chuyến đi của tôi"
-          subtitle="Hẹn những ngày thật đẹp"
           icon="trip"
           onPress={() => router.navigate("/(tabs)/trips")}
         />
         <SectionLink
           grouped
           title="Lời mời chuyến đi"
-          subtitle="Tham gia hành trình cùng bạn bè"
           icon="mail"
           onPress={() => router.push("/invitation")}
         />
         <SectionLink
           grouped
           title="Thông báo"
-          subtitle="Xem thông báo và chọn kênh nhận"
           icon="bell"
           onPress={() => router.push("/notifications")}
         />
@@ -87,47 +76,17 @@ export default function ProfileScreen() {
           grouped
           last
           title="Phiên đang đăng nhập"
-          subtitle="Xem và thu hồi quyền truy cập tài khoản"
           icon="lock"
           onPress={() => router.push("/sessions")}
         />
       </View>
-      <Text
-        style={[
-          typography.footnote,
-          { color: colors.muted, paddingHorizontal: 4 },
-        ]}
-      >
-        Cùng Wolfari lưu giữ những hành trình đáng nhớ.
-      </Text>
+      {error && <Feedback message={error} />}
       <Button
         label="Đăng xuất"
-        variant="destructive"
-        onPress={() => {
-          setError(undefined);
-          setConfirm(true);
-        }}
+        variant="text"
+        loading={busy}
+        onPress={() => { void logout(); }}
       />
-      <Sheet
-        visible={confirm}
-        dismissible={!busy}
-        title="Đăng xuất khỏi Wolfari?"
-        onClose={() => setConfirm(false)}
-      >
-        <Text style={typography.body}>
-          Phiên đăng nhập này sẽ được thu hồi trên máy chủ và xóa khỏi thiết bị.
-          Các thiết bị khác vẫn đăng nhập. Cần kết nối mạng để hoàn tất.
-        </Text>
-        {error && <Feedback message={error} />}
-        <Button
-          label="Đăng xuất tài khoản"
-          variant="destructive"
-          loading={busy}
-          onPress={() => {
-            void logout();
-          }}
-        />
-      </Sheet>
     </Screen>
   );
 }

@@ -2,6 +2,7 @@ import { router } from "expo-router";
 import { Text, View } from "react-native";
 
 import { typography } from "@/shared/theme/tokens";
+import { layered } from "@/shared/ui/page-intro";
 import { Heading, Progress, ResourceFeedback, SectionLink, ui } from "@/shared/ui/journal";
 import { Screen } from "@/shared/ui/screen";
 import { TripNavigation } from "../components/trip-navigation";
@@ -10,16 +11,18 @@ import { useTrip } from "../hooks/use-trip";
 export default function TripToolsScreen() {
   const resource = useTrip(); const { data, id } = resource;
   const done = data?.plan.packing_items.filter(item => item.status === "COMPLETED").length ?? 0;
-  return <Screen title={data?.trip.name ?? "Tiện ích chuyến đi"} tab="trips" onRefresh={() => { void resource.reload(); }} refreshing={resource.loading && !!data}><ResourceFeedback {...resource} hasData={!!data} onRetry={() => { void resource.reload(); }} />{data && <><TripNavigation id={id} active="tools" /><Heading title="Chuẩn bị cùng nhau" subtitle="Một nhóm, một chuyến đi đáng nhớ." />
+  return <Screen title={data?.trip.name ?? "Tiện ích chuyến đi"} tab="trips" onRefresh={() => { void resource.reload(); }} refreshing={resource.loading && !!data}><ResourceFeedback {...resource} hasData={!!data} onRetry={() => { void resource.reload(); }} />{data && <><TripNavigation id={id} active="tools" /><Heading title="Tiện ích chuyến đi" />
     <View style={ui.section}><Text style={typography.footnote}>HÀNH LÝ CỦA NHÓM</Text><Text style={typography.largeTitle}>{done} / {data.plan.packing_items.length} món</Text><Progress done={done} total={data.plan.packing_items.length} /></View>
-    <SectionLink title="Hành lý" subtitle="Danh sách chuẩn bị của cả nhóm" icon="bag" onPress={() => router.push({ pathname: "/trip/[id]/packing", params: { id } })} />
-    <SectionLink title="Dress code" subtitle="Tông màu cho những bức ảnh đẹp" icon="shirt" onPress={() => router.push({ pathname: "/trip/[id]/dress-code", params: { id } })} />
-    <SectionLink title="Thành viên" subtitle="Những người bạn đồng hành" icon="users" onPress={() => router.push({ pathname: "/trip/[id]/members", params: { id } })} />
-    <SectionLink title="Cài đặt chuyến đi" subtitle="Thông tin và quyền trong nhóm" icon="gear" onPress={() => router.push({ pathname: "/trip/[id]/settings", params: { id } })} />
-    <SectionLink title="Quỹ nhóm" subtitle="Đóng góp, khoản chi, hoàn tiền và chốt quỹ" icon="wallet" onPress={() => router.push({ pathname: "/trip/[id]/fund", params: { id } })} />
-    <SectionLink title="Theo dõi giá vé" subtitle="Theo dõi giá mô phỏng và đặt ngưỡng riêng" icon="plane" onPress={() => router.push({ pathname: "/trip/[id]/price-watch", params: { id } })} />
-    <SectionLink title="Lịch nhắc của tôi" subtitle="Nhắc hoạt động và hạn chuẩn bị hành lý" icon="calendar" onPress={() => router.push({ pathname: "/trip/[id]/reminders", params: { id } })} />
-    <SectionLink title="Xuất kế hoạch PDF" subtitle="Tải hoặc chia sẻ lịch trình, hành lý và dress code" icon="calendar" onPress={() => router.push({ pathname: "/trip/[id]/export", params: { id } })} />
-    <SectionLink title="Bản nháp lịch trình" subtitle="Thử xếp ngày riêng, không đổi kế hoạch chung" icon="calendar" onPress={() => router.push({ pathname: "/trip/[id]/plan-draft", params: { id } })} />
+    <View style={[layered.panel, layered.rows]}>
+    <SectionLink grouped title="Hành lý" icon="bag" onPress={() => router.push({ pathname: "/trip/[id]/packing", params: { id } })} />
+    <SectionLink grouped title="Dress code" icon="shirt" onPress={() => router.push({ pathname: "/trip/[id]/dress-code", params: { id } })} />
+    <SectionLink grouped title="Quỹ nhóm" icon="wallet" onPress={() => router.push({ pathname: "/trip/[id]/fund", params: { id } })} />
+    <SectionLink grouped title="Thành viên" icon="users" onPress={() => router.push({ pathname: "/trip/[id]/members", params: { id } })} />
+    <SectionLink grouped title="Theo dõi giá vé" subtitle="Giá mô phỏng" icon="plane" onPress={() => router.push({ pathname: "/trip/[id]/price-watch", params: { id } })} />
+    <SectionLink grouped title="Lịch nhắc của tôi" icon="calendar" onPress={() => router.push({ pathname: "/trip/[id]/reminders", params: { id } })} />
+    <SectionLink grouped title="Xuất kế hoạch PDF" icon="calendar" onPress={() => router.push({ pathname: "/trip/[id]/export", params: { id } })} />
+    <SectionLink grouped title="Bản nháp lịch trình" subtitle="Riêng trên thiết bị" icon="calendar" onPress={() => router.push({ pathname: "/trip/[id]/plan-draft", params: { id } })} />
+    <SectionLink grouped last title="Cài đặt chuyến đi" icon="gear" onPress={() => router.push({ pathname: "/trip/[id]/settings", params: { id } })} />
+    </View>
   </>}</Screen>;
 }

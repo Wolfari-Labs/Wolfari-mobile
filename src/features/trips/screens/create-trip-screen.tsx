@@ -8,6 +8,7 @@ import { useCreateTripRequest } from "../hooks/use-create-trip-request";
 import { useLocalDraft } from "@/shared/storage/use-local-draft";
 import { typography } from "@/shared/theme/tokens";
 import { Button } from "@/shared/ui/button";
+import { Details } from "@/shared/ui/details";
 import { designAssets } from "@/shared/ui/design-assets";
 import { Feedback } from "@/shared/ui/feedback";
 import { FormField } from "@/shared/ui/form-field";
@@ -105,7 +106,6 @@ function CreateTripForm({ initial, draft }: { initial: CreateDraft; draft: Retur
   }} footer={<Button label={step === "info" ? "Tiếp tục" : "Tạo chuyến đi"} disabled={busy || picking} loading={command.busy} onPress={() => { void submit(); }} />}>
     <Segments items={[{ value: "info", label: "1  Thông tin" }, { value: "details", label: "2  Cá nhân hóa" }]} value={step} onChange={value => goTo(value as "info" | "details")} />
     <Heading title={step === "info" ? "Hành trình bắt đầu từ một ý tưởng" : "Theo cách của bạn"} />
-    {draft.value && <Notice>Có bản nháp trên thiết bị cho tài khoản này. Bấm Lưu bản nháp chuyến đi để giữ các thay đổi mới.</Notice>}
     {saved && !draft.error && <Feedback success message="Đã lưu bản nháp chuyến đi trên thiết bị." />}
     {validation && <Feedback message={validation} />}{command.error && <Feedback message={command.error} />}{draft.error && <Feedback message={draft.error} />}
     {step === "info" ? <>
@@ -120,10 +120,9 @@ function CreateTripForm({ initial, draft }: { initial: CreateDraft; draft: Retur
         { value: "Asia/Singapore", label: "Singapore" }, { value: "Asia/Tokyo", label: "Nhật Bản" },
         { value: "Asia/Seoul", label: "Hàn Quốc" }, { value: "UTC", label: "Giờ quốc tế" },
       ]} />
-      <Text style={typography.footnote}>Ngày đi, ngày về và lịch trình dùng múi giờ đã chọn. Bạn sẽ mời bạn đồng hành sau khi tạo chuyến đi.</Text>
     </> : <>
       <FormField label="Lời nhắn cho nhóm" icon="edit" value={form.description} onChangeText={value => update("description", value)} multiline maxLength={5000} editable={!busy} />
-      <Notice>Điểm đến, số người, ngân sách, phong cách, mẫu và ảnh dưới đây chỉ dùng để phác thảo. Khi tạo chuyến đi, máy chủ chỉ nhận tên, ngày và lời nhắn.</Notice>
+      <Details title="Về thông tin dự kiến"><Text style={typography.footnote}>Số người, ngân sách, phong cách và ảnh dùng để phác thảo. Bạn sẽ mời thành viên sau khi tạo chuyến đi.</Text></Details>
       <FormField label="Số người dự kiến" icon="users" value={form.members} onChangeText={value => update("members", value.replace(/\D/g, ""))} keyboardType="number-pad" maxLength={6} editable={!busy} />
       <FormField label="Ngân sách dự kiến (VND)" icon="wallet" value={form.budget} onChangeText={value => update("budget", value)} keyboardType="number-pad" maxLength={12} editable={!busy} />
       {money(form.budget) && validMembers(form.members) ? <Text style={typography.headline}>Khoảng {moneyLabel(Number(form.budget) / Number(form.members))} / người</Text> : null}
@@ -134,7 +133,6 @@ function CreateTripForm({ initial, draft }: { initial: CreateDraft; draft: Retur
       <Text style={typography.headline}>Ảnh bìa xem trước</Text>
       <Segments scroll value={form.cover} onChange={value => { if (!busy) { setCoverUri(undefined); update("cover", value); } }} items={[{ value: "tripCover", label: "Đà Nẵng" }, { value: "dalat", label: "Đà Lạt" }, { value: "coast", label: "Biển" }]} />
       <Button label="Chọn ảnh bìa (tối đa 5 MB)" variant="soft" loading={picking} disabled={busy} onPress={() => { void chooseCover(); }} />
-      <Text style={typography.footnote}>Ảnh chọn từ máy chỉ xem trước trong phiên này, không tải lên và không lưu cùng bản nháp.</Text>
       <View style={ui.card}><Text style={typography.headline}>{form.name}</Text><Text style={typography.body}>{form.start} – {form.end}</Text></View>
     </>}
     <Image source={coverUri ? { uri: coverUri } : form.cover === "dalat" ? designAssets.dalat : form.cover === "coast" ? designAssets.coast : designAssets.tripCover} style={{ width: "100%", height: 180, borderRadius: 24 }} contentFit="cover" />
