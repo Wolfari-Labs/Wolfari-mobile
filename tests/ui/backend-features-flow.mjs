@@ -80,7 +80,7 @@ await context.route("**/api/v1/**", async route => {
     if (method === "GET") return respond(200, { items: trip.lifecycle === "ARCHIVED" ? [{ id: "pending-email", trip_id: tripId, invitation_type: "EMAIL", email: "invitee@example.test", status: "PENDING", version: 1, expires_at: "2099-11-01T00:00:00Z", resolved_at: null }] : [], next_cursor: null });
     assert.equal(body.invitation_type, "LINK");
     assert.equal(body.email, undefined);
-    return respond(201, { invitation: { id: "invitation", trip_id: tripId, invitation_type: "LINK", email: null, status: "PENDING", version: 1, expires_at: "2026-11-01T00:00:00Z", resolved_at: null }, one_time_link: `https://gateway.test/invitations/local#token=inv1_${"x".repeat(43)}` });
+    return respond(201, { invitation: { id: "invitation", trip_id: tripId, invitation_type: "LINK", email: null, status: "PENDING", version: 1, expires_at: "2026-11-01T00:00:00Z", resolved_at: null }, one_time_link: `https://gateway.test/invitations/local#token=inv1_${"x".repeat(43)}`, join_code: "K7PQ-4M2X" });
   }
   if (pathname.endsWith(`/members/${memberId}`) || pathname.endsWith("/leave")) {
     if (rejectFinance) return fail(409, "FINANCE_OBLIGATION_BLOCKED");
@@ -120,26 +120,33 @@ async function screenshot(name) {
 try {
   await goto("/forgot-password");
   await field("Email").fill("DEMO@EXAMPLE.TEST");
-  await button("Gửi email khôi phục").click();
-  await page.getByText(/Nếu email thuộc tài khoản hợp lệ/).waitFor();
+  await button("Gửi mã khôi phục").click();
+  // Every email gets the same answer, so the app always continues to the code step.
+  await page.waitForURL("**/reset-password?email=demo%40example.test&sent=1");
   assert.equal(calls.find(call => call.pathname === "/auth/password-reset-requests").body.email, "demo@example.test");
-  assert.equal(await button("Gửi email khôi phục").isDisabled(), true);
-  await field("Email").fill("corrected@example.test");
-  await button("Gửi email khôi phục").click();
-  await page.getByText(/Nếu email thuộc tài khoản hợp lệ/).waitFor();
-  assert.equal(calls.filter(call => call.pathname === "/auth/password-reset-requests").length, 2);
-  assert.equal(calls.filter(call => call.pathname === "/auth/password-reset-requests").at(-1).body.email, "corrected@example.test");
+  assert.equal(await button(/Gửi lại mã sau \d+ giây/).isDisabled(), true);
+  await field("Mã khôi phục 6 số").fill("123456");
+  await field("Mật khẩu mới").fill("Code1234");
+  await field("Nhập lại mật khẩu mới").fill("Code1234");
+  await button("Lưu mật khẩu mới").click();
+  await page.waitForURL("**/sign-in?notice=password-updated");
+  assert.deepEqual(calls.filter(call => call.pathname === "/auth/password-resets").at(-1).body, { email: "demo@example.test", code: "123456", new_password: "Code1234" });
+  await goto("/forgot-password");
   await button("Tôi đã có mã khôi phục").click();
+  await page.waitForURL("**/reset-password");
+  // The forgot-password screen stays mounted underneath; check the screen on top.
+  await field("Email").last().waitFor();
+  const resetsBeforeLink = calls.filter(call => call.pathname === "/auth/password-resets").length;
   await goto(`/reset-password?token=${"a".repeat(43)}`);
   await page.waitForFunction(() => !new URL(location.href).searchParams.get("token"));
   assert.equal(await field("Mã hoặc liên kết đặt lại mật khẩu").inputValue(), "a".repeat(43));
-  assert.equal(calls.filter(call => call.pathname === "/auth/password-resets").length, 0, "Opening a link never consumes it.");
+  assert.equal(calls.filter(call => call.pathname === "/auth/password-resets").length, resetsBeforeLink, "Opening a link never consumes it.");
   await field("Mã hoặc liên kết đặt lại mật khẩu").fill(`https://gateway.test/api/v1/auth/local/reset?token=${"a".repeat(43)}`);
   await field("Mật khẩu mới").fill("Reset123");
   await field("Nhập lại mật khẩu mới").fill("different password");
   await button("Lưu mật khẩu mới").click();
   await page.getByText("Mật khẩu xác nhận chưa khớp.").waitFor();
-  assert.equal(calls.filter(call => call.pathname === "/auth/password-resets").length, 0);
+  assert.equal(calls.filter(call => call.pathname === "/auth/password-resets").length, resetsBeforeLink);
   await field("Nhập lại mật khẩu mới").fill("Reset123");
   await screenshot("reset-password.png");
   await button("Lưu mật khẩu mới").click();
@@ -148,11 +155,14 @@ try {
   await button('Tôi đã xác minh').click();
   await page.getByText(/Email chưa được xác minh/).waitFor();
   assert.equal(calls.filter(call => call.pathname === '/auth/email-verifications/confirm').length, 0, 'Checking verification never marks the account verified.');
+  await button("Gửi lại mã").click();
+  await page.getByText(/Đã gửi lại mã/).waitFor();
+  assert.equal(calls.filter(call => call.pathname === "/auth/email-verifications").length, 1);
+  assert.equal(await button(/Gửi lại mã sau \d+ giây/).isDisabled(), true);
   await goto(`/verify-email?token=${"b".repeat(43)}`);
   await page.waitForFunction(() => !new URL(location.href).searchParams.get("token"));
   assert.equal(await field("Mã hoặc liên kết xác minh").inputValue(), "b".repeat(43));
   assert.equal(calls.filter(call => call.pathname === "/auth/email-verifications/confirm").length, 0);
-  await button("Gửi lại email xác minh").click();
   await field("Mã hoặc liên kết xác minh").fill("b".repeat(43));
   await button("Xác nhận email").click();
   await page.getByText("Email của tài khoản đã được xác minh.").waitFor();
@@ -172,7 +182,10 @@ try {
   for (const mode of ["change", "reset"]) {
     await goto(`/${mode}-password`);
     if (mode === "change") await field("Mật khẩu hiện tại").fill("Change12");
-    else await field("Mã hoặc liên kết đặt lại mật khẩu").fill("a".repeat(43));
+    else {
+      await field("Email").fill("demo@example.test");
+      await field("Mã khôi phục 6 số").fill("123456");
+    }
     await field("Mật khẩu mới").fill("Next1234");
     await field("Nhập lại mật khẩu mới").fill("Next1234");
     const endpoint = mode === "change" ? "/me/password-change" : "/auth/password-resets";
@@ -203,12 +216,14 @@ try {
   await page.waitForURL("**/profile");
   assert.equal(profile.avatar, null);
   await goto(`/trip/${tripId}/invite`);
-  await page.getByRole("tab", { name: "Bằng liên kết", exact: true }).click();
-  await button("Tạo liên kết mời").click();
-  // The one-time link is shown as its pasteable code; the full secret URL is not rendered.
-  await page.getByText(`inv1_${"x".repeat(43)}`, { exact: true }).waitFor();
+  await page.getByRole("tab", { name: "Bằng mã mời", exact: true }).click();
+  await button("Tạo mã mời").click();
+  // The short join code and its QR are shown; neither the secret link nor the long token is rendered.
+  await page.getByText("K7PQ-4M2X", { exact: true }).waitFor();
+  await page.getByRole("img", { name: "Mã QR lời mời K7PQ-4M2X", exact: true }).waitFor();
   await page.getByRole("button", { name: "Sao chép mã", exact: true }).waitFor();
   assert.equal(await page.getByText("gateway.test/invitations", { exact: false }).count(), 0);
+  assert.equal(await page.getByText("inv1_", { exact: false }).count(), 0);
   await goto(`/trip/${tripId}/settings`);
   await page.getByRole("tab", { name: "Chọn thành viên", exact: true }).click();
   await page.getByRole("checkbox").click();
@@ -264,7 +279,7 @@ try {
   await goto(`/trip/${tripId}/invite`);
   await page.getByText("Chuyến đi đã lưu trữ", { exact: true }).waitFor();
   assert.equal(await button("Gửi lời mời").count(), 0);
-  assert.equal(await button("Tạo liên kết mời").count(), 0);
+  assert.equal(await button("Tạo mã mời").count(), 0);
   await goto(`/trip/${tripId}/members`);
   await page.getByText("invitee@example.test", { exact: true }).waitFor();
   for (const name of ["Mời thành viên", "Gửi lại", "Thu hồi", "Xóa Bạn đồng hành"]) assert.equal(await button(name).count(), 0);

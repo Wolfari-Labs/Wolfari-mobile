@@ -53,7 +53,7 @@ try {
   await field('Nội dung QR').fill(makeQr({ bin: '970436', account: '0012345678', amount: '150000', note: 'Bua toi nhom' }));
   await button('Đọc thông tin QR').click();
   await field('Số tiền chuyển (VND)').waitFor();
-  assert.equal(await field('Số tiền chuyển (VND)').inputValue(), '150000');
+  assert.equal(await field('Số tiền chuyển (VND)').inputValue(), '150.000');
   assert.equal(await field('Nội dung chuyển khoản').inputValue(), 'Bua toi nhom');
   await button('Chọn ứng dụng thanh toán').click();
   assert.equal(await page.getByRole('radio', { name: 'MoMo Test', exact: true }).count(), 0);

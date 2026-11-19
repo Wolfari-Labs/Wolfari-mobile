@@ -269,3 +269,26 @@ export function dressSuggestions(
 export function dressSuggestionText(suggestion: DressSuggestion): string {
   return `Tông màu: ${suggestion.colors.map((item) => item.name).join(', ')}. ${suggestion.advice}`;
 }
+
+const knownColors = new Map(
+  [white, beige, sky, sea, navy, grey, brown, moss, wine, cream, yellow, purple, orange, red, black, pastel, denim].map(
+    (item) => [plainText(item.name), item] as const,
+  ),
+);
+
+/**
+ * Reads back the palette written by dressSuggestionText ("Tông màu: a, b. …").
+ * Unknown colour names are dropped; `rest` is the description without that line.
+ */
+export function dressPalette(description: string | null | undefined): { colors: DressColor[]; rest: string } {
+  const text = description ?? '';
+  const match = /^\s*Tông màu:\s*([^.\n]+)[.\n]?\s*/i.exec(text);
+  if (!match) return { colors: [], rest: text };
+  const colors = match[1]
+    .split(/[,·/]/)
+    .flatMap((name) => {
+      const found = knownColors.get(plainText(name));
+      return found ? [found] : [];
+    });
+  return colors.length ? { colors, rest: text.slice(match[0].length).trim() } : { colors: [], rest: text };
+}

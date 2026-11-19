@@ -65,3 +65,15 @@ export function packingInput(
     expected_plan_version: context.planVersion,
   };
 }
+
+export const PACKING_CATEGORIES = ["Quần áo", "Vệ sinh", "Giấy tờ", "Điện tử", "Y tế", "Ăn uống", "Khác"];
+export const PACKING_UNITS = ["cái", "món", "bộ", "đôi", "chai", "hộp", "gói"];
+
+/** "1.50" + "chai" → "1,5 chai"; whole numbers drop the decimals. */
+export function quantityLabel(quantity: string, unit: string | null): string {
+  const value = Number(quantity);
+  const amount = Number.isFinite(value)
+    ? value.toLocaleString("vi-VN", { maximumFractionDigits: 2 })
+    : quantity;
+  return unit?.trim() ? `${amount} ${unit.trim()}` : amount;
+}

@@ -97,7 +97,6 @@ const field = name => page.getByLabel(name, { exact: true });
 const tab = name => page.getByRole("tab", { name, exact: true });
 const goto = async route => { await page.goto(appUrl + route, { waitUntil: "networkidle" }); };
 const tripRoute = suffix => "/trip/" + tripId + "/" + suffix;
-const saveDraft = async () => { await button("Lưu bản nháp").click(); await page.getByText("Đã lưu bản nháp trên thiết bị này.", { exact: true }).waitFor(); };
 const output = path.resolve(".cache/visual/mobile-parity");
 await mkdir(output, { recursive: true });
 async function screenshot(name) {
@@ -106,53 +105,25 @@ async function screenshot(name) {
 }
 try {
   await goto("/trips");
-  await field("Tìm chuyến đi đã tải").fill("da nang");
+  await field("Tìm chuyến đi").fill("da nang");
   await button("Mở chuyến đi Đà Nẵng cùng nhau").waitFor();
-  await field("Tìm chuyến đi đã tải").fill("da lat");
-  await button("Xem thêm chuyến đi").click();
+  await field("Tìm chuyến đi").fill("da lat");
+  // The second page is fetched automatically; there is no "load more" step while searching.
   await button("Mở chuyến đi Đà Lạt mùa đông").waitFor();
+  assert.ok(calls.some(call => call.pathname === "/trips" && call.method === "GET"), "Trip list loaded");
   await screenshot("trip-search");
 
   await goto(tripRoute("packing"));
-  await button("Thêm vật dụng").click();
-  await field("Tên vật dụng").fill("Áo khoác riêng");
-  await field("Số lượng").fill("0");
-  await button("Lưu bản nháp").click();
-  await page.getByText(/Số lượng phải lớn hơn 0/).waitFor();
-  await field("Số lượng").fill("2");
-  await tab("Tôi chuẩn bị").click();
-  await saveDraft();
-  await page.reload({ waitUntil: "networkidle" });
-  await page.getByText("Áo khoác riêng", { exact: true }).waitFor();
-  await tab("Của tôi").click();
-  assert.equal(await page.getByText("Giấy tờ chung", { exact: true }).count(), 0);
-  await button("Đã chuẩn bị (nháp)").click();
+  await page.getByText("Giấy tờ chung", { exact: true }).waitFor();
+  assert.equal(await page.getByText(/Bản nháp riêng/).count(), 0, "Packing has no device-only draft mode");
   await screenshot("packing");
-  await button("Sửa bản nháp").click();
-  await field("Ghi chú").fill("Mang thêm cho bạn");
-  await saveDraft();
-  // A different account or trip cannot see this private draft.
-  activeUser = "10000000-0000-4000-8000-000000000002";
-  await goto(tripRoute("packing"));
-  await page.getByText("Giấy tờ chung", { exact: true }).waitFor();
-  assert.equal(await page.getByText("Áo khoác riêng", { exact: true }).count(), 0);
-  activeUser = userId;
-  await goto("/trip/" + secondId + "/packing");
-  await page.getByText("Giấy tờ chung", { exact: true }).waitFor();
-  assert.equal(await page.getByText("Áo khoác riêng", { exact: true }).count(), 0);
 
+  // The shared list is covered by dress-code-flow; a server without the capability only explains why.
   await goto(tripRoute("dress-code"));
-  await button("Thêm dress code").click();
-  await field("Tên dress code").fill("Trắng bên biển");
-  await tab("Theo ngày").last().click();
-  await button("Trắng · Be").click();
-  await saveDraft();
-  await tab("Theo ngày").click();
-  await page.getByText("Trắng bên biển", { exact: true }).waitFor();
+  await page.getByText(/chưa hỗ trợ dress code dùng chung/).waitFor();
+  assert.equal(await button("Thêm dress code").count(), 0, "No device-only dress code drafts");
   await screenshot("dress-code");
 
-  await goto(tripRoute("fund-drafts"));
-  assert.equal(await button('Quét QR thanh toán').count(), 0, 'Private estimates never offer fund payments.');
   fundPresent = false;
   await goto(tripRoute('fund'));
   await page.getByText('Chuyến đi chưa có quỹ nhóm.', { exact: true }).waitFor();
@@ -267,99 +238,18 @@ try {
   await button("Đóng").click();
   await page.waitForFunction(() => qrFixture.streams.every(stream => stream.getTracks().every(track => track.readyState === "ended")));
   await page.setViewportSize({ width: 402, height: 874 });
-  await goto(tripRoute('fund-drafts'));
-  await button("Thêm khoản dự kiến").click();
-  await field("Nội dung khoản dự kiến").fill("Bữa tối dự kiến");
-  await field("Số tiền dự kiến (VND)").fill("250000");
-  await saveDraft();
-  await page.getByText("Bữa tối dự kiến", { exact: true }).waitFor();
-  await tab("Lịch sử nháp").click();
-  await page.getByText(/Lưu Bữa tối dự kiến/).waitFor();
-  await screenshot("fund");
-
-  await goto(tripRoute("price-watch-drafts"));
-  await button("Thêm yêu cầu giá vé").click();
-  await field("Điểm đi").fill("Hà Nội");
-  await field("Điểm đến").fill("Đà Nẵng");
-  await tab("Khứ hồi").click();
-  await field("Ngày quay về").fill("2026-11-01");
-  await field("Ngưỡng giá (VND)").fill("2000000");
-  await button("Lưu bản nháp").click();
-  await page.getByText(/Ngày về phải hợp lệ/).waitFor();
-  await field("Ngày quay về").fill("2026-11-14");
-  await saveDraft();
-  await button("Tạm dừng yêu cầu nháp").click();
-  await tab("Tạm dừng").click();
-  await button("Tiếp tục yêu cầu nháp").waitFor();
-  await screenshot("price-watch");
-
   await goto(tripRoute("places"));
-  await button("Thêm địa điểm thủ công (nháp)").click();
-  await field("Tên địa điểm").fill("Quán riêng trên máy");
-  await field("Vĩ độ").fill("100");
-  await field("Kinh độ").fill("108.2");
-  await button("Lưu địa điểm trên thiết bị").click();
-  await page.getByText(/Nhập đủ vĩ độ/).waitFor();
-  await field("Vĩ độ").fill("16.05");
-  await button("Lưu địa điểm trên thiết bị").click();
-  await page.getByText("Quán riêng trên máy", { exact: true }).waitFor();
-  await button("Thêm hoạt động tại đây").click();
-  assert.equal(new URL(page.url()).searchParams.has("locationId"), false, "Local IDs never become backend location IDs");
-  await goto(tripRoute("places"));
-  await button("Lên bản nháp từ địa điểm đã chọn").click();
-  await button("Thêm hoạt động nháp").click();
-  await button("Quán riêng trên máy").click();
-  await tab("Ngày 2 · 2026-11-13").last().click();
-  await field("Giờ dự kiến").fill("25:00");
-  await button("Lưu bản nháp").click();
-  await page.getByText(/Giờ cần đúng định dạng/).waitFor();
-  await field("Giờ dự kiến").fill("09:00");
-  await saveDraft();
-  await screenshot("plan-draft");
-  version++;
-  await page.reload({ waitUntil: "networkidle" });
-  await page.getByText(/Dữ liệu nhóm đã thay đổi/).waitFor();
-  assert.equal(await button("Thêm hoạt động nháp").isDisabled(), true);
+  await page.getByText("Bãi biển", { exact: true }).waitFor();
+  // Without the shared-location capability nothing is offered as a device-only substitute.
+  await page.getByText(/Máy chủ chưa hỗ trợ lưu địa điểm/).waitFor();
+  assert.equal(await page.getByText(/trên thiết bị/).count(), 0, "No device-only place controls");
+  assert.equal(await button("Thêm địa điểm cho nhóm").count(), 0);
+  await screenshot("places");
   editable = false;
   await goto(tripRoute("packing"));
-  await page.getByText(/Bạn có quyền xem/).waitFor();
-  assert.equal(await button("Thêm vật dụng").count(), 0);
-  assert.equal(await button("Sửa bản nháp").count(), 0);
-  editable = true;
-
-  await goto(tripRoute("packing"));
-  await tab("Của tôi").click();
-  await button("Sửa bản nháp").click();
-  await field("Ghi chú").fill("Kiểm tra lưu thất bại");
-  await page.evaluate(() => {
-    const original = Storage.prototype.setItem;
-    globalThis.restoreTestStorage = () => { Storage.prototype.setItem = original; };
-    Storage.prototype.setItem = function (key, value) {
-      if (key.startsWith("wolfari:draft:")) throw new Error("Fixture disk full");
-      return original.call(this, key, value);
-    };
-  });
-  await button("Lưu bản nháp").click();
-  await page.getByText(/Chưa lưu được trên thiết bị/).last().waitFor();
-  await page.evaluate(() => globalThis.restoreTestStorage());
-  await saveDraft();
-  await button("Xóa khỏi bản nháp").click();
-  await button("Xác nhận bỏ bản nháp").click();
-  await page.getByText("Chưa có mục phù hợp", { exact: true }).waitFor();
-  assert.equal(await page.getByText("Áo khoác riêng", { exact: true }).count(), 0);
-  await button("Bỏ bản nháp trên thiết bị").click();
-  await button("Xác nhận bỏ bản nháp").click();
-  await tab("Tất cả").click();
   await page.getByText("Giấy tờ chung", { exact: true }).waitFor();
-  await page.evaluate(({ userId, tripId }) => {
-    localStorage.setItem("wolfari:draft:v1:" + userId + ":" + tripId + ":packing", "{broken");
-  }, { userId, tripId });
-  await page.reload({ waitUntil: "networkidle" });
-  await page.getByText(/Không thể đọc bản nháp/).waitFor();
-  assert.equal(await button("Thêm vật dụng").isDisabled(), true);
-  await button("Bỏ bản nháp trên thiết bị").click();
-  await button("Xác nhận bỏ bản nháp").click();
-  assert.equal(await button("Thêm vật dụng").isEnabled(), true);
+  assert.equal(await button("Thêm vật dụng").count(), 0);
+  editable = true;
 
   await goto("/create-trip");
   await field("Tên chuyến đi").fill("Khám phá mùa đông");
@@ -372,17 +262,18 @@ try {
   await page.reload({ waitUntil: "networkidle" });
   assert.equal(await field("Tên chuyến đi").inputValue(), "Khám phá mùa đông");
   await button("Tiếp tục").click();
-  assert.equal(await field("Ngân sách dự kiến (VND)").inputValue(), "3000000");
+  assert.equal(await field("Ngân sách dự kiến (VND)").inputValue(), "3.000.000");
   await page.setViewportSize({ width: 360, height: 740 });
   await screenshot("create-small-phone");
   await button("Tạo chuyến đi").click();
   await page.waitForURL("**/trip/" + tripId);
   const create = calls.find(call => call.pathname === "/trips" && call.method === "POST");
-  assert.deepEqual(Object.keys(create.body).sort(), ["client_request_id", "end_at", "name", "start_at", "timezone"]);
+  for (const key of ["client_request_id", "end_at", "name", "start_at", "timezone"]) assert.ok(key in create.body, key);
+  for (const key of ["members", "style", "template", "destination"]) assert.equal(key in create.body, false, key + " is not a Trip field");
   assert.match(create.body.client_request_id, /^[0-9a-f-]{36}$/i);
   assert.equal(await page.evaluate(() => Object.keys(localStorage).some(key => key.includes(":new-trip:create"))), false);
   const writes = calls.filter(call => call.pathname.startsWith("/trips") && call.method !== "GET" && !call.pathname.endsWith('/qr-payments/momo-sandbox'));
   assert.equal(writes.length, 1, "All parity edits except explicit Create Trip stay local");
   assert.deepEqual(errors, []);
-  console.log("Mobile parity UI passed: eight feature groups, persistence, account/trip isolation, validation, permissions, stale plan guard, no unsupported writes, 360px layout.");
+  console.log("Mobile parity UI passed: trip search across pages, shared packing and places without device drafts, dress-code drafts, fund QR handoff, viewer permissions, create-trip request, 360px layout.");
 } finally { await browser.close(); }

@@ -7,6 +7,7 @@ import type {
   PaymentAttempt,
   PaymentInstruction,
   Closure, Contribution, DestinationInput, ExpenseInput, HolderHandover, Receipt, WriteResult,
+  BankTransfer, ClosureReadiness,
 } from './types';
 import type { OperationCommand } from '../../shared/operations/controller';
 
@@ -249,6 +250,34 @@ export function createFinanceApi(client: ApiClient) {
       return result;
     },
     closure: (closureId: string, signal?: AbortSignal) => client.request<Closure>(`/closures/${id(closureId)}`, { signal }),
+    /** API133: the same counts the server checks before it accepts a closure request. */
+    async closureReadiness(fundId: string, signal?: AbortSignal): Promise<ClosureReadiness> {
+      const row = object(await client.request(`/funds/${enc(fundId)}/closure-readiness`, { signal }));
+      const blockers = row.blockers;
+      if (
+        typeof row.ready !== 'boolean' ||
+        typeof row.current_balance !== 'string' ||
+        !Array.isArray(blockers) ||
+        blockers.some((item) => {
+          const blocker = object(item);
+          return typeof blocker.kind !== 'string' || !Number.isInteger(blocker.count) || Number(blocker.count) < 1;
+        })
+      )
+        throw new ApiError('INVALID_RESPONSE', 'Không đọc được tình trạng chốt quỹ.');
+      return row as unknown as ClosureReadiness;
+    },
+    /** Incoming bank transfers (SePay); Owner or current Holder only. */
+    async bankTransfers(fundId: string, signal?: AbortSignal): Promise<BankTransfer[]> {
+      const page = object(await client.request(`/funds/${enc(fundId)}/bank-transfers`, { signal }));
+      const items = page.items ?? [];
+      if (!Array.isArray(items)) throw new ApiError('INVALID_RESPONSE', 'Danh sách giao dịch ngân hàng không hợp lệ.');
+      return items.map((item) => {
+        const row = object(item);
+        if (typeof row.id !== 'string' || typeof row.amount !== 'string' || typeof row.processing_status !== 'string')
+          throw new ApiError('INVALID_RESPONSE', 'Giao dịch ngân hàng không hợp lệ.');
+        return row as unknown as BankTransfer;
+      });
+    },
     uploadReceipt: (fundId: string, body: FormData) => client.request<Receipt>(`/funds/${id(fundId)}/receipts`, { method: "POST", body }),
     /** Current receipt of an expense by its ID; works after reload and for other members. */
     expenseReceipt: (expenseId: string, signal?: AbortSignal) =>

@@ -50,7 +50,7 @@ const tabs: { value: Tab; label: string }[] = [
 ];
 const collectionFor = (tab: Tab): keyof FinanceCollections =>
   tab === 'momo' ? 'contributions' : tab;
-const amountField: Field = { key: 'amount', label: 'Số tiền (VND)', numeric: true };
+const amountField: Field = { key: 'amount', label: 'Số tiền (VND)', numeric: true, money: true };
 const reasonField: Field = { key: 'reason', label: 'Lý do', multiline: true };
 
 export default function FundToolsScreen() {

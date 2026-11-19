@@ -66,3 +66,13 @@ test('suggestions follow the usual weather of the place and month, then matching
   assert.deepEqual(dressSuggestions('HOT', ['Dạo phố', 'Nộp thuế']).map(item => item.id), ['weather-hot', 'place-city']);
   assert.match(dressSuggestionText(dressSuggestions('HOT', [])[0]), /^Tông màu: trắng, be, xanh nhạt. /);
 });
+
+test('palette written by a suggestion is read back as swatches; other text stays as-is', async () => {
+  const { dressPalette } = await import('../src/features/trips/model/dress-suggestions.ts');
+  const parsed = dressPalette('Tông màu: trắng, be, xanh nhạt. Vải mỏng, thoáng.');
+  assert.deepEqual(parsed.colors.map(item => item.name), ['trắng', 'be', 'xanh nhạt']);
+  assert.equal(parsed.rest, 'Vải mỏng, thoáng.');
+  assert.deepEqual(dressPalette('Áo trắng, quần be'), { colors: [], rest: 'Áo trắng, quần be' });
+  assert.deepEqual(dressPalette('Tông màu: cầu vồng. Vui vẻ'), { colors: [], rest: 'Tông màu: cầu vồng. Vui vẻ' });
+  assert.deepEqual(dressPalette(null), { colors: [], rest: '' });
+});

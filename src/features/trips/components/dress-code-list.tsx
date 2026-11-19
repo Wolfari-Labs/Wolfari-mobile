@@ -1,22 +1,31 @@
 import { useEffect, useRef, useState } from "react";
-import { Platform, Text, View } from "react-native";
+import { Platform, StyleSheet, Text, View } from "react-native";
 import * as ImagePicker from 'expo-image-picker';
 import { Image } from 'expo-image';
 import { errorMessage } from '@/shared/api/errors';
 import { DressReferenceImage } from './dress-reference-image';
 
 import { useCommand } from "@/shared/hooks/use-command";
-import { colors, typography } from "@/shared/theme/tokens";
+import { colors, fonts, pastelTones, radii, shadows, typography } from "@/shared/theme/tokens";
 import { Button } from "@/shared/ui/button";
 import { Feedback } from "@/shared/ui/feedback";
 import { FormField } from "@/shared/ui/form-field";
-import { EmptyState, Notice, Segments, ui } from "@/shared/ui/journal";
+import type { DesignIconName } from "@/shared/ui/design-assets";
+import { DesignIcon } from "@/shared/ui/design-icon";
+import { EmptyState, IconButton, Notice, Segments, ui } from "@/shared/ui/journal";
+import { PastelIcon, type PastelTone } from "@/shared/ui/pastel";
 import { Sheet } from "@/shared/ui/sheet";
 import type { useTrip } from "../hooks/use-trip";
 import { dressCodeForm, dressCodeInput, dressDayLabel, dressScopeLabel, dressScopes, DRESS_LABEL_MAX, type DressCodeForm } from "../model/dress-code";
-import { dressRegion, dressSuggestionText, dressSuggestions, dressWeather, dressWeatherOptions, type DressWeather } from "../model/dress-suggestions";
+import { dressPalette, dressRegion, dressSuggestionText, dressSuggestions, dressWeather, dressWeatherOptions, type DressWeather } from "../model/dress-suggestions";
 import type { DressCode, Plan, Trip } from "../types";
 import { dateKey } from "../utils";
+
+const sectionMeta: { scope: DressCode["scope_type"]; title: string; icon: DesignIconName; tone: PastelTone }[] = [
+  { scope: "TRIP", title: "Cho cả chuyến", icon: "trip", tone: "mint" },
+  { scope: "DAY", title: "Theo từng ngày", icon: "calendar", tone: "blue" },
+  { scope: "ACTIVITY", title: "Theo hoạt động", icon: "pin", tone: "peach" },
+];
 
 type TripApi = ReturnType<typeof useTrip>["api"];
 type Props = { api: TripApi; trip: Pick<Trip, "id" | "name" | "start_at" | "timezone">; plan: Plan; days: string[]; scope: string; reload: () => Promise<unknown> | void };
@@ -58,13 +67,21 @@ export function DressCodeList({ api, trip, plan, days, scope, reload }: Props) {
   const editable = plan.permissions.can_edit;
   const visible = plan.dress_codes.filter(code => scope === "ALL" || code.scope_type === scope);
 
-  function open(code?: DressCode) {
+  function open(code?: DressCode, prefill?: Pick<DressCodeForm, "label" | "description">) {
     releasePhoto(); setPhoto(undefined); setRemovePhoto(false);
     command.clearError();
     setFormError(undefined);
     setSaved(undefined);
-    setForm(dressCodeForm(code, days, plan.activities));
+    setForm({ ...dressCodeForm(code, days, plan.activities), ...prefill });
   }
+  const position = new Map(plan.activities.map(item => [item.id, item.position]));
+  const sections = sectionMeta.filter(meta => scope === "ALL" || meta.scope === scope).flatMap(meta => {
+    const rows = visible.filter(code => code.scope_type === meta.scope).sort((a, b) =>
+      meta.scope === "DAY" ? (a.plan_date ?? "").localeCompare(b.plan_date ?? "")
+        : meta.scope === "ACTIVITY" ? (position.get(a.activity_id ?? "") ?? Infinity) - (position.get(b.activity_id ?? "") ?? Infinity)
+          : 0);
+    return rows.length ? [{ ...meta, rows }] : [];
+  });
   /** Editing a field clears the previous validation message. */
   function change(next: DressCodeForm) {
     setFormError(undefined);
@@ -125,19 +142,44 @@ export function DressCodeList({ api, trip, plan, days, scope, reload }: Props) {
     {editable
       ? <Button label="Thêm dress code" icon="plus" disabled={busy} onPress={() => open()} />
       : <Notice>Bạn có quyền xem. Quyền chỉnh sửa do người tổ chức quản lý.</Notice>}
-    {visible.map(code => <View key={code.id} style={ui.record}>
-      <Text style={[typography.footnote, { color: colors.tealPressed }]}>{dressScopeLabel(code, plan.activities)}</Text>
-      <Text accessibilityRole="header" style={typography.section}>{code.label}</Text>
-      {!!code.description && <Text style={typography.body}>{code.description}</Text>}
-      {code.reference_image_available && <DressReferenceImage key={`${code.id}:${plan.plan_version}`} api={api} tripId={tripId} dressCodeId={code.id} label={code.label} />}
-      {editable && <View style={[ui.row, { flexWrap: "wrap" }]}>
-        <Button compact variant="soft" label="Sửa" accessibilityLabel={`Sửa ${code.label}`} disabled={busy} onPress={() => open(code)} />
-        <Button compact variant="destructive" label="Xóa" accessibilityLabel={`Xóa ${code.label}`} disabled={busy} onPress={() => { command.clearError(); setSaved(undefined); setDeleting(code); }} />
+    {sections.map(section => <View key={section.scope} style={styles.section}>
+      {scope === "ALL" && <View style={styles.sectionHeader}>
+        <PastelIcon small icon={section.icon} tone={section.tone} />
+        <Text accessibilityRole="header" style={[typography.headline, ui.flex]}>{section.title}</Text>
+        <Text style={styles.count}>{section.rows.length}</Text>
       </View>}
+      {section.rows.map(code => {
+        const palette = dressPalette(code.description);
+        return <View key={code.id} style={[styles.card, { borderColor: pastelTones[section.tone].surface }]}>
+          <View style={styles.cardTop}>
+            <View style={[styles.scopeChip, { backgroundColor: pastelTones[section.tone].surface }]}>
+              <DesignIcon name={section.icon} size={14} tintColor={colors.ink} />
+              <Text numberOfLines={1} style={styles.scopeText}>{dressScopeLabel(code, plan.activities)}</Text>
+            </View>
+            {editable && <View style={styles.actions}>
+              <IconButton icon="edit" label={`Sửa ${code.label}`} disabled={busy} onPress={() => open(code)} />
+              <Button compact variant="text" label="Xóa" accessibilityLabel={`Xóa ${code.label}`} disabled={busy} onPress={() => { command.clearError(); setSaved(undefined); setDeleting(code); }} />
+            </View>}
+          </View>
+          <Text accessibilityRole="header" style={typography.section}>{code.label}</Text>
+          {!!palette.colors.length && <View style={styles.swatches} accessibilityLabel={`Tông màu: ${palette.colors.map(item => item.name).join(", ")}`}>
+            {palette.colors.map(item => <View key={item.hex} style={styles.swatch}>
+              <View style={[styles.dot, { backgroundColor: item.hex }]} />
+              <Text style={styles.swatchText}>{item.name}</Text>
+            </View>)}
+          </View>}
+          {!!palette.rest && <Text style={[typography.body, { color: colors.muted }]}>{palette.rest}</Text>}
+          {code.reference_image_available && <DressReferenceImage key={`${code.id}:${plan.plan_version}`} api={api} tripId={tripId} dressCodeId={code.id} label={code.label} />}
+        </View>;
+      })}
     </View>)}
     {!visible.length && <EmptyState icon="shirt"
       title={plan.dress_codes.length ? "Chưa có dress code ở phạm vi này" : "Chưa có dress code"}
-      message={plan.dress_codes.length ? "Chọn phạm vi khác để xem các hướng dẫn đã lưu." : editable ? "Thêm một gợi ý trang phục để cả nhóm cùng chuẩn bị." : "Hướng dẫn trang phục của nhóm sẽ xuất hiện tại đây."} />}
+      message={plan.dress_codes.length ? "Chọn phạm vi khác để xem các hướng dẫn đã lưu." : editable ? "Chọn nhanh một gợi ý bên dưới hoặc tự thêm để cả nhóm cùng chuẩn bị." : "Hướng dẫn trang phục của nhóm sẽ xuất hiện tại đây."}
+      action={editable && !plan.dress_codes.length ? <View style={styles.quick}>
+        {suggestions.map(suggestion => <Button key={suggestion.id} compact variant="soft" label={suggestion.label} accessibilityLabel={`Bắt đầu từ gợi ý ${suggestion.label}`} disabled={busy}
+          onPress={() => open(undefined, { label: suggestion.label, description: dressSuggestionText(suggestion) })} />)}
+      </View> : undefined} />}
 
     <Sheet visible={!!form} title={form?.id ? "Sửa dress code" : "Thêm dress code"} dismissible={!busy} onClose={closeForm}>
       {form && <>
@@ -187,3 +229,19 @@ export function DressCodeList({ api, trip, plan, days, scope, reload }: Props) {
     </Sheet>
   </>;
 }
+
+const styles = StyleSheet.create({
+  section: { gap: 12 },
+  sectionHeader: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 4 },
+  count: { minWidth: 26, paddingHorizontal: 8, paddingVertical: 2, borderRadius: radii.pill, overflow: "hidden", textAlign: "center", backgroundColor: colors.fill, color: colors.muted, fontFamily: fonts.bold, fontSize: 13 },
+  card: { gap: 10, padding: 16, borderRadius: radii.card, borderWidth: 1.5, backgroundColor: colors.surface, ...shadows.glass },
+  cardTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
+  scopeChip: { flexShrink: 1, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 10, paddingVertical: 5, borderRadius: radii.pill },
+  scopeText: { flexShrink: 1, color: colors.ink, fontFamily: fonts.bold, fontSize: 13 },
+  actions: { flexDirection: "row", alignItems: "center", gap: 4 },
+  swatches: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  swatch: { flexDirection: "row", alignItems: "center", gap: 6, paddingLeft: 4, paddingRight: 10, paddingVertical: 4, borderRadius: radii.pill, backgroundColor: colors.fill },
+  dot: { width: 18, height: 18, borderRadius: 9, borderWidth: 1, borderColor: colors.line },
+  swatchText: { color: colors.ink, fontSize: 13, fontFamily: fonts.bold },
+  quick: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 8 },
+});

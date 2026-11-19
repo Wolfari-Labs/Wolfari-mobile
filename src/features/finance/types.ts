@@ -90,6 +90,21 @@ export type Closure = {
   requested_by_user_id: string; requested_at: string; cancelled_at: string | null;
   cancelled_reason: string | null; closed_at: string | null; finance_version: number;
 };
+export type ClosureBlockerKind =
+  | "BALANCE_NOT_ZERO" | "CONTRIBUTIONS_OPEN" | "EXPENSES_OPEN" | "REFUNDS_OPEN"
+  | "PAYMENTS_OPEN" | "PAYMENT_WEBHOOKS_OPEN" | "HOLDER_HANDOVER_OPEN";
+export type ClosureReadiness = {
+  ready: boolean; fund_status: Fund["status"]; current_balance: Money;
+  blockers: { kind: ClosureBlockerKind; count: number }[];
+  bank_transfers_needing_review: number;
+};
+export type BankTransfer = {
+  id: string; provider: string; transfer_type: "IN" | "OUT"; amount: Money; content: string;
+  account_number_masked: string; bank_gateway: string;
+  processing_status: "MATCHED" | "UNMATCHED" | "NEEDS_REVIEW" | "IGNORED";
+  contribution_id: string | null; review_reason: string | null;
+  transaction_at: string | null; received_at: string; processed_at: string | null;
+};
 export type PaymentInstruction = {
   contribution_id: string; amount: Money; currency: "VND"; reference: string;
   recipient_name: string; bank_code: string; bank_bin: string; account_number: string;

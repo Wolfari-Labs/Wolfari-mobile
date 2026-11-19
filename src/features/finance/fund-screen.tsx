@@ -10,6 +10,7 @@ import type { Membership, Trip } from "@/features/trips/types";
 import { ApiError } from "@/shared/api/api-client";
 import { useApi } from "@/shared/api/use-api";
 import { useResource } from "@/shared/hooks/use-resource";
+import { useLiveVersion } from "@/shared/hooks/use-live-version";
 import { OperationFeedback } from "@/shared/operations/operation-feedback";
 import { operationCommitted } from "@/shared/operations/controller";
 import { useTripOperation } from "@/shared/operations/use-trip-operation";
@@ -25,6 +26,9 @@ import { PastelIcon } from "@/shared/ui/pastel";
 import { Screen } from "@/shared/ui/screen";
 import { financeCommands } from "./api";
 import { ClosureSheet } from "./components/closure-sheet";
+import { ClosureChecklist } from "./components/closure-checklist";
+import { BankTransfers } from "./components/bank-transfers";
+import { MomoPendingGate } from "./components/momo-pending-gate";
 import { userNamer } from "../trips/model/member-name";
 import { FinanceForm, type FinanceFormSpec } from "./components/finance-form";
 import { InstructionSheet } from "./components/instruction-sheet";
@@ -48,11 +52,12 @@ function destinationQrUrl(row: Destination): string | undefined {
   return url.href;
 }
 
-type Tab = "overview" | "handovers" | Exclude<keyof FinanceCollections, "contributions">;
+type Tab = "overview" | "handovers" | "bank-transfers" | Exclude<keyof FinanceCollections, "contributions">;
 const tabs: { value: Tab; label: string }[] = [
   { value: "overview", label: "Tổng quan" },
   { value: "contribution-requests", label: "Đợt góp" }, { value: "expenses", label: "Khoản chi" },
-  { value: "refunds", label: "Hoàn tiền" }, { value: "transactions", label: "Lịch sử" },
+  { value: "refunds", label: "Hoàn tiền" }, { value: "bank-transfers", label: "Tiền về" },
+  { value: "transactions", label: "Lịch sử" },
   { value: "handovers", label: "Bàn giao" }, { value: "closures", label: "Chốt quỹ" },
 ];
 const confirmationModes: Record<string, string> = {
@@ -140,7 +145,15 @@ function FundWorkspace({ tripId, userId }: { tripId: string; userId: string }) {
   const canScanPayment = !!actor?.holder && actor.writable && !!trip && !trip.current_membership.left_at && !locked;
   const who = userNamer(members.data, userId);
   const reloadFund = resource.reload, reloadMembers = members.reload;
+  const refreshFund = resource.refresh, refreshMembers = members.refresh;
   const reload = useCallback(async () => { await Promise.all([reloadFund(), reloadMembers()]); }, [reloadFund, reloadMembers]);
+  useLiveVersion({
+    known: fund?.finance_version,
+    probe: async signal => (await api.finance.fund(tripId, signal))?.finance_version,
+    onChange: () => { void Promise.all([refreshFund(), refreshMembers()]).then(() => setSaved("Quỹ vừa được cập nhật theo thay đổi mới của nhóm.")); },
+    enabled: !!fund && !operation.pending && !form && !closureId && !instruction && !operation.locked && !operation.busy && !momoLoading && !resource.loading,
+    intervalMs: 5000,
+  });
   const completed = operation.pending?.kind === "finance" && operationCommitted(operation.pending) ? operation.pending : undefined;
   const acknowledge = operation.acknowledge, operationBusy = operation.busy;
   useEffect(() => {
@@ -234,20 +247,19 @@ function FundWorkspace({ tripId, userId }: { tripId: string; userId: string }) {
         </View>
         {(fund.status !== "OPEN" || archived) && <Notice>{fund.status === "CLOSING" ? "Đang chốt quỹ: các giao dịch khác và thay đổi thành viên bị khóa. Mở tab Chốt quỹ để xem/xác nhận hoặc hủy phiên." : fund.status === "CLOSED" ? "Quỹ đã chốt, không thể góp thêm. Bạn vẫn xem được các đợt góp và lịch sử giao dịch." : "Chuyến đi đã lưu trữ: chỉ xem lịch sử."}</Notice>}
         {tab === "overview" && actor?.writable && <Button label="Góp quỹ" icon="wallet" onPress={() => setTab("contribution-requests")} />}
-        <Segments scroll items={tabs} value={tab} onChange={setTab} />
-        {tab === "overview" ? <FundOverview key={`${fund.id}:${fund.finance_version}`} fund={fund} trip={trip} userId={userId} locked={locked} open={open} who={who} /> : <FundRecords key={`${fund.id}:${fund.finance_version}:${tab}`} fund={fund} trip={trip} userId={userId} tab={tab} members={members.data ?? []} locked={locked} who={who} open={open} onInstruction={setInstruction} onMomo={item => { void payMomo(item); }} onClosure={setClosureId} />}
+        <Segments scroll items={tabs.filter(item => item.value !== "bank-transfers" || !!actor?.owner || !!actor?.holder)} value={tab} onChange={setTab} />
+        {tab === "overview" ? <FundOverview key={`${fund.id}:${fund.finance_version}`} fund={fund} trip={trip} userId={userId} locked={locked} open={open} who={who} /> : <FundRecords key={`${fund.id}:${fund.finance_version}:${tab}`} fund={fund} trip={trip} userId={userId} tab={tab} members={members.data ?? []} locked={locked} who={who} open={open} onInstruction={setInstruction} onMomo={item => { void payMomo(item); }} onClosure={setClosureId} onTab={setTab} />}
         {((tab === "contribution-requests" || tab === "refunds") && owner) && <ResourceFeedback {...members} hasData={!!members.data} onRetry={() => { void members.reload(); }} />}
       </> : <>
         <Text style={typography.body}>Chuyến đi chưa có quỹ nhóm.</Text>
         <ResourceFeedback {...members} hasData={!!members.data} onRetry={() => { void members.reload(); }} />
-        {owner && !archived && <Button label="Mở quỹ nhóm" disabled={locked || !members.data || members.loading || !!members.error} onPress={() => open(enableForm(tripId, members.data!, userId))} />}
+        {owner && !archived && <Button label="Mở quỹ nhóm" disabled={locked || !members.data || members.loading || !!members.error} onPress={() => open(enableForm(tripId, members.data!, userId, (trip as { budget_amount?: string | null } | undefined)?.budget_amount))} />}
       </>}
       {tab === "overview" && canScanPayment && fund && <FundPaymentTools key={fund.id} fund={fund} timezone={trip?.timezone ?? 'Asia/Ho_Chi_Minh'} />}
       {(!fund || tab === "overview") && <>
       <Details title="Công cụ và hướng dẫn">
       <SectionLink title="Thử thanh toán mô phỏng" subtitle="Góp quỹ, quét QR và xem sổ mẫu miễn phí" icon="wallet" onPress={() => router.push('/demo-trip/fund')} />
       <Hint title="Quỹ hoạt động thế nào?" points={["Tiền vào tài khoản người giữ quỹ; app ghi sổ sau xác nhận.", "Chủ nhóm tạo yêu cầu góp, người giữ quỹ đối chiếu tiền thực tế."]} />
-      <SectionLink title="Bản nháp dự trù riêng" subtitle="Khoản dự kiến, chưa ghi sổ" icon="edit" onPress={() => router.push({ pathname: "/trip/[id]/fund-drafts", params: { id: tripId } })} />
       <SectionLink title="Công cụ quỹ mở rộng" subtitle="Ghi chú, lịch sử, MoMo, đối soát" icon="wallet" onPress={() => router.push({ pathname: "/trip/[id]/fund-tools", params: { id: tripId } })} />
       </Details>
       </>}
@@ -255,7 +267,7 @@ function FundWorkspace({ tripId, userId }: { tripId: string; userId: string }) {
     {form && <FinanceForm spec={form} busy={operation.busy} onSubmit={operation.run} onClose={() => setForm(undefined)} />}
     {instruction && <InstructionSheet contributionId={instruction} onClose={() => setInstruction(undefined)} />}
     {momoAttempt && <MomoPaymentSheet key={momoAttempt.id} attempt={momoAttempt} onClose={() => setMomoAttempt(undefined)} onUpdate={reload} onRetry={momoContribution && !locked && actor?.writable ? () => { void payMomo(momoContribution, true); } : undefined} />}
-    {closureId && <ClosureSheet closureId={closureId} owner={!!owner} userId={userId} who={who} writable={!archived} busy={operation.busy} blockedReason={closureBlockedReason} onClose={() => setClosureId(undefined)} onAction={(row, action) => { void actOnClosure(row, action); }} />}
+    {closureId && <ClosureSheet closureId={closureId} owner={!!owner} userId={userId} who={who} writable={!archived && !trip?.current_membership.left_at} busy={operation.busy} blockedReason={closureBlockedReason} onClose={() => setClosureId(undefined)} onAction={(row, action) => { void actOnClosure(row, action); }} />}
   </Screen>;
 }
 
@@ -307,8 +319,9 @@ function FundOverview({ fund, trip, userId, locked, open }: Context) {
   </FadeInView>;
 }
 
-function FundRecords({ fund, trip, userId, locked, open, who, tab, members, onInstruction, onMomo, onClosure }: Context & {
+function FundRecords({ fund, trip, userId, locked, open, who, tab, members, onInstruction, onMomo, onClosure, onTab }: Context & {
   tab: Exclude<Tab, "overview">; members: Membership[]; onInstruction(id: string): void; onMomo(item: Contribution): void; onClosure(id: string): void;
+  onTab(tab: Tab): void;
 }) {
   const api = useApi();
   const actor = financeActor(fund, userId, trip.current_membership.role === "OWNER", trip.lifecycle === "ARCHIVED");
@@ -319,6 +332,12 @@ function FundRecords({ fund, trip, userId, locked, open, who, tab, members, onIn
     activeMemberCount: active.length,
   };
   const handovers = useResource(useCallback((signal: AbortSignal) => api.finance.handovers(fund.id, signal), [api, fund.id]), tab === "handovers");
+  const handoverVersion = useRef(fund.finance_version), reloadHandovers = handovers.reload;
+  useEffect(() => {
+    if (handoverVersion.current === fund.finance_version) return;
+    handoverVersion.current = fund.finance_version;
+    void reloadHandovers();
+  }, [fund.finance_version, reloadHandovers]);
   const openHandover = handovers.data?.find(row => row.status === "NOMINATED" || row.status === "ACCEPTED");
   const requests = useCallback((cursor: string | undefined, signal: AbortSignal) => api.finance.list(fund.id, "contribution-requests", cursor, signal), [api, fund.id]);
   const expenses = useCallback((cursor: string | undefined, signal: AbortSignal) => api.finance.list(fund.id, "expenses", cursor, signal), [api, fund.id]);
@@ -332,7 +351,7 @@ function FundRecords({ fund, trip, userId, locked, open, who, tab, members, onIn
     <Button label="Tạo đợt góp" disabled={locked || !members.length || !destinations.data || destinations.loading || !!destinations.error} onPress={() => open(contributionRequestForm(fund, members, destinations.data!, userId, trip.timezone))} />
   </>;
   return <View style={ui.stack}>
-    {tab === "contribution-requests" && <>{contribute}<PagedRecords title="đợt góp" load={requests} render={row => <>
+    {tab === "contribution-requests" && <>{contribute}<PagedRecords version={fund.finance_version} title="đợt góp" load={requests} render={row => <>
       <View style={ui.recordHeader}>
         <Text style={typography.headline}>{row.title}</Text>
         {(row.status !== "OPEN" || actor.writable) && status(row.status)}
@@ -360,10 +379,12 @@ function FundRecords({ fund, trip, userId, locked, open, who, tab, members, onIn
           {item.cancelled_reason && <Text style={typography.body}>Lý do hủy: {item.cancelled_reason}</Text>}
           {item.rejected_reason && <Text style={typography.body}>Lý do từ chối gần nhất: {item.rejected_reason}</Text>}
           <View style={ui.actionRow}>
-            {allocationActor.writable && item.member_user_id === userId && item.status === "PENDING" && (item.destination_type === 'MOMO_SANDBOX'
-              ? <Button label="Góp bằng MoMo Test" compact variant="soft" disabled={locked} onPress={() => onMomo(item)} />
-              : <Button label="Xem QR góp quỹ" compact variant="soft" disabled={locked} onPress={() => onInstruction(item.id)} />)}
-            {contributionActions(item, allocationActor).map(action => <Button key={action} label={actionLabels[action]} compact accessibilityLabel={`${actionLabels[action]} · ${who(item.member_user_id)} · ${money(item.amount)}`} variant="soft" disabled={locked} onPress={() => open(contributionForm(fund, item, action, who))} />)}
+            <MomoPendingGate item={item} locked={locked} onOpen={onMomo}>
+              {allocationActor.writable && item.member_user_id === userId && item.status === "PENDING" && (item.destination_type === 'MOMO_SANDBOX'
+                ? <Button label="Góp bằng MoMo Test" compact variant="soft" disabled={locked} onPress={() => onMomo(item)} />
+                : <Button label="Xem QR góp quỹ" compact variant="soft" disabled={locked} onPress={() => onInstruction(item.id)} />)}
+              {contributionActions(item, allocationActor).map(action => <Button key={action} label={actionLabels[action]} compact accessibilityLabel={`${actionLabels[action]} · ${who(item.member_user_id)} · ${money(item.amount)}`} variant="soft" disabled={locked} onPress={() => open(contributionForm(fund, item, action, who))} />)}
+            </MomoPendingGate>
           </View>
         </View>;
       })}
@@ -371,7 +392,7 @@ function FundRecords({ fund, trip, userId, locked, open, who, tab, members, onIn
     </>} /></>}
     {tab === "expenses" && <>
       {actor.writable && <Button label="Tạo khoản chi" disabled={locked} onPress={() => open(expenseForm(fund))} />}
-      <PagedRecords title="khoản chi" load={expenses} render={row => <>
+      <PagedRecords version={fund.finance_version} title="khoản chi" load={expenses} render={row => <>
         <View style={ui.recordHeader}>
           <Text style={typography.headline}>{row.title} · {money(row.amount)}</Text>
           {status(row.status)}
@@ -387,7 +408,7 @@ function FundRecords({ fund, trip, userId, locked, open, who, tab, members, onIn
     </>}
     {tab === "refunds" && <>
       {actor.owner && actor.writable && <Button label="Tạo hoàn tiền" disabled={locked || !members.length} onPress={() => open(refundForm(fund, members, userId))} />}
-      <PagedRecords title="hoàn tiền" load={refunds} render={row => <>
+      <PagedRecords version={fund.finance_version} title="hoàn tiền" load={refunds} render={row => <>
         <View style={ui.recordHeader}>
           <Text style={typography.headline}>{money(row.amount)} · {row.member_user_id === userId ? "Hoàn cho bạn" : who(row.member_user_id)}</Text>
           {status(row.status)}
@@ -405,7 +426,7 @@ function FundRecords({ fund, trip, userId, locked, open, who, tab, members, onIn
         </View>
       </>} />
     </>}
-    {tab === "transactions" && <PagedRecords title="giao dịch" load={transactions} render={row => <>
+    {tab === "transactions" && <PagedRecords version={fund.finance_version} title="giao dịch" load={transactions} render={row => <>
       <View style={ui.recordHeader}>
         <View style={ui.row}>
           <IconTile icon={row.direction === "IN" ? "plus" : "wallet"} tone={row.direction === "IN" ? colors.mint : colors.fill} />
@@ -447,9 +468,17 @@ function FundRecords({ fund, trip, userId, locked, open, who, tab, members, onIn
         </View>;
       })}
     </>}
+    {tab === "bank-transfers" && (actor.owner || actor.holder) && <BankTransfers fundId={fund.id} timezone={trip.timezone} />}
     {tab === "closures" && <>
-      {actor.owner && actor.writable && <Button label="Yêu cầu chốt quỹ" disabled={locked} onPress={() => open(closureForm(fund))} />}
-      <PagedRecords title="phiên chốt quỹ" load={closures} render={row => <>
+      {actor.writable && <ClosureChecklist
+        fund={fund}
+        canRequest={actor.owner}
+        locked={locked}
+        onRequest={() => open(closureForm(fund))}
+        onOpen={target => target === "fund-tools"
+          ? router.push({ pathname: "/trip/[id]/fund-tools", params: { id: trip.id } })
+          : onTab(target)} />}
+      <PagedRecords version={fund.finance_version} title="phiên chốt quỹ" load={closures} render={row => <>
         <View style={ui.recordHeader}>
           <Text style={typography.headline}>Bản chốt · {timeAt(row.requested_at, trip.timezone)}</Text>
           {status(row.status)}

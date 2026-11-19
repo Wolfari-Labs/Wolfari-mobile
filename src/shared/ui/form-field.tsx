@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type Ref } from "react";
+import { useEffect, useRef, useState, type ReactNode, type Ref } from "react";
 import {
   AppState,
   Pressable,
@@ -21,6 +21,7 @@ type Props = TextInputProps & {
   icon: DesignIconName;
   error?: string;
   ref?: Ref<TextInputInstance>;
+  accessory?: ReactNode;
 };
 
 export function FormField({
@@ -28,6 +29,7 @@ export function FormField({
   icon,
   error,
   ref,
+  accessory,
   onFocus,
   onBlur,
   style,
@@ -106,6 +108,7 @@ export function FormField({
             />
           </Pressable>
         )}
+        {accessory}
       </View>
       {error && (
         <Text

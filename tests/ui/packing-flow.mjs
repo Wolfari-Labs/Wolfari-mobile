@@ -171,6 +171,7 @@ try {
   await button("Bỏ hoàn thành Nước uống").waitFor();
   await page.reload({ waitUntil: "networkidle" });
   await button("Bỏ hoàn thành Nước uống").waitFor();
+  await page.screenshot({ path: ".cache/visual/packing-shared.png" });
   conflict = true;
   await button("Sửa Nước uống").click();
   await field("Tên vật dụng").fill("Nước mới");

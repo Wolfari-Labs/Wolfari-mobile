@@ -1,6 +1,6 @@
 import { errorMessage } from "@/shared/api/errors";
 import { useCallback, useRef, useState } from 'react';
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { useSession } from '@/features/auth/session/session-provider';
 import { useApi } from '@/shared/api/use-api';
 import { useResource } from '@/shared/hooks/use-resource';
@@ -22,8 +22,16 @@ import {
 } from '../../finance/components';
 import { moneyLabel, statusLabel } from '../../finance/extended-model';
 import { historyTimeLabel } from '../../finance/history-labels';
+import { calendarLabel } from '../utils';
 import { useFinanceCommand } from '../../finance/use-finance-command';
-import { watchInput, type Watch, type Observations } from '../../price-watch/api';
+import {
+  localWatchValues,
+  QUICK_AIRPORTS,
+  watchFormDates,
+  watchInput,
+  type Watch,
+  type Observations,
+} from '../../price-watch/api';
 import { priceProviderLabel, watchStatusReason } from '../../price-watch/labels';
 
 const cabins = [
@@ -35,25 +43,28 @@ const cabins = [
 ];
 function watchFields(w?: Watch): Field[] {
   const q = w?.normalized_query;
+  const dates = watchFormDates(w);
   return [
-    { key: 'origin', label: 'Mã sân bay đi', value: q?.origin ?? '', placeholder: 'SGN' },
+    {
+      key: 'origin',
+      label: 'Mã sân bay đi',
+      value: q?.origin ?? '',
+      placeholder: 'SGN',
+      suggestions: QUICK_AIRPORTS,
+    },
     {
       key: 'destination',
       label: 'Mã sân bay đến',
       value: q?.destination ?? '',
       placeholder: 'DAD',
+      suggestions: QUICK_AIRPORTS,
     },
-    {
-      key: 'departure_date',
-      label: 'Ngày đi (UTC)',
-      value: q?.departure_date,
-      placeholder: 'YYYY-MM-DD',
-    },
+    { key: 'departure_date', label: 'Ngày bay', value: dates.departure_date, mode: 'date' },
     {
       key: 'departure_time',
-      label: 'Giờ khởi hành (UTC)',
-      value: q ? new Date(q.departure_at).toISOString().slice(11, 16) : '12:00',
-      placeholder: 'HH:mm',
+      label: 'Giờ khởi hành (giờ Việt Nam)',
+      value: dates.departure_time,
+      mode: 'time',
     },
     {
       key: 'journey_type',
@@ -66,9 +77,10 @@ function watchFields(w?: Watch): Field[] {
     },
     {
       key: 'return_date',
-      label: 'Ngày về (chỉ khứ hồi, UTC)',
-      value: q?.return_date ?? '',
-      placeholder: 'YYYY-MM-DD',
+      label: 'Ngày về',
+      value: dates.return_date,
+      mode: 'date',
+      visible: (values) => values.journey_type === 'ROUND_TRIP',
     },
     { key: 'adults', label: 'Người lớn', value: String(q?.passengers.adults ?? 1), numeric: true },
     { key: 'children', label: 'Trẻ em', value: String(q?.passengers.children ?? 0), numeric: true },
@@ -84,6 +96,7 @@ function watchFields(w?: Watch): Field[] {
       label: 'Ngưỡng giá riêng (VND)',
       value: w?.threshold_price,
       numeric: true,
+      money: true,
     },
   ];
 }
@@ -124,10 +137,10 @@ function WatchWorkspace({ id, userId }: { id: string; userId: string }) {
     setForm({
       title: w ? 'Sửa theo dõi giá' : 'Tạo theo dõi giá',
       message:
-        'Nguồn hiện tại mô phỏng giá, không phải giá vé để đặt mua. Ngưỡng là riêng cho bạn. Ngày đi được lưu theo UTC; 12:00 UTC là 19:00 Việt Nam.',
+        'Nguồn hiện tại mô phỏng giá, không phải giá vé để đặt mua. Ngưỡng là riêng cho bạn. Ngày và giờ bay nhập theo giờ Việt Nam.',
       fields: watchFields(w),
       submit: async (values) => {
-        const input = watchInput(values);
+        const input = watchInput(localWatchValues(values));
         await command.send({
           label: w ? 'Sửa theo dõi giá' : 'Tạo theo dõi giá',
           method: w ? 'PATCH' : 'POST',
@@ -221,13 +234,6 @@ function WatchWorkspace({ id, userId }: { id: string; userId: string }) {
           }}
           disabled={list.loading}
         />
-        <Button
-          label="Bản nháp"
-          accessibilityLabel="Xem yêu cầu nháp trên thiết bị"
-          compact
-          variant="soft"
-          onPress={() => router.push(`/trip/${id}/price-watch-drafts`)}
-        />
       </View>
       <Hint
         title="Về giá hiển thị"
@@ -271,7 +277,7 @@ function WatchWorkspace({ id, userId }: { id: string; userId: string }) {
             <Line>
               Khởi hành {historyTimeLabel(w.normalized_query.departure_at)} ·{' '}
               {w.normalized_query.journey_type === 'ROUND_TRIP'
-                ? `khứ hồi, về ${w.normalized_query.return_date}`
+                ? `khứ hồi, về ${w.normalized_query.return_date ? calendarLabel(w.normalized_query.return_date) : ''}`
                 : 'một chiều'}{' '}
               · {passengerLabel(w.normalized_query.passengers)}
             </Line>

@@ -2,11 +2,13 @@ import { errorMessage } from "@/shared/api/errors";
 import { useState, type ReactNode } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { Button } from '../../shared/ui/button';
+import { DateTimeField } from '../../shared/ui/date-time-field';
 import { FormField } from '../../shared/ui/form-field';
+import { MoneyField } from '../../shared/ui/money-field';
+import { moneyWords } from '../../shared/ui/money-input';
 import { FadeInView, Notice, Segments, ui } from '../../shared/ui/journal';
 import { Sheet } from '../../shared/ui/sheet';
 import { colors, typography } from '../../shared/theme/tokens';
-import { moneyLabel } from './extended-model';
 import type { useFinanceCommand } from './use-finance-command';
 import { ReceiptField } from './receipt-field';
 
@@ -17,20 +19,23 @@ const QUICK_AMOUNTS = [
   { label: '1tr', value: '1000000' },
 ] as const;
 
-function previewVnd(raw?: string): string | undefined {
-  const clean = raw?.trim() ?? '';
-  if (!/^\d{1,19}$/.test(clean)) return undefined;
-  try { return moneyLabel(clean); } catch { return undefined; }
-}
 export type Field = {
   key: string;
   label: string;
   value?: string;
   placeholder?: string;
   numeric?: boolean;
+  /** VND amount: grouped display and quick amounts. */
+  money?: boolean;
   multiline?: boolean;
   receiptFundId?: string;
   options?: { value: string; label: string }[];
+  /** Picker instead of typing: DD/MM/YYYY or HH:mm. */
+  mode?: 'date' | 'time';
+  /** One-tap values shown as chips under a text field. */
+  suggestions?: readonly string[];
+  /** Hide the field (and keep its value) unless this returns true. */
+  visible?: (values: Record<string, string>) => boolean;
 };
 export type ActionForm = {
   title: string;
@@ -60,8 +65,17 @@ export function ActionSheet({ form, close }: { form: ActionForm; close: () => vo
     <Sheet visible title={form.title} onClose={close} dismissible={!busy}>
       <View style={ui.stack}>
         <Notice>{form.message}</Notice>
-        {form.fields.map((field) =>
-          field.receiptFundId ? (
+        {form.fields.filter((field) => !field.visible || field.visible(values)).map((field) =>
+          field.mode ? (
+            <DateTimeField
+              key={field.key}
+              mode={field.mode}
+              label={field.label}
+              value={values[field.key] ?? ''}
+              editable={!busy}
+              onChangeText={(v) => setValues((s) => ({ ...s, [field.key]: v }))}
+            />
+          ) : field.receiptFundId ? (
             <ReceiptField
               key={field.key}
               fundId={field.receiptFundId}
@@ -82,22 +96,47 @@ export function ActionSheet({ form, close }: { form: ActionForm; close: () => vo
             </View>
           ) : (
             <View key={field.key} style={{ gap: 8 }}>
-              <FormField
-                label={field.label}
-                icon={field.numeric ? 'wallet' : 'edit'}
-                value={values[field.key]}
-                placeholder={field.placeholder}
-                keyboardType={field.numeric ? 'number-pad' : 'default'}
-                autoCapitalize="none"
-                multiline={field.multiline}
-                editable={!busy}
-                onChangeText={(v) => setValues((s) => ({ ...s, [field.key]: v }))}
-              />
-              {field.numeric && (
+              {field.money ? (
+                <MoneyField
+                  label={field.label}
+                  value={values[field.key] ?? ''}
+                  placeholder={field.placeholder}
+                  editable={!busy}
+                  onChangeText={(v) => setValues((s) => ({ ...s, [field.key]: v }))}
+                />
+              ) : (
+                <FormField
+                  label={field.label}
+                  icon="edit"
+                  value={values[field.key]}
+                  placeholder={field.placeholder}
+                  keyboardType={field.numeric ? 'number-pad' : 'default'}
+                  autoCapitalize="none"
+                  multiline={field.multiline}
+                  editable={!busy}
+                  onChangeText={(v) => setValues((s) => ({ ...s, [field.key]: v }))}
+                />
+              )}
+              {!!field.suggestions?.length && (
+                <View style={ui.actionRow}>
+                  {field.suggestions.map((value) => (
+                    <Button
+                      key={value}
+                      label={value}
+                      compact
+                      variant={values[field.key]?.toUpperCase() === value ? 'primary' : 'soft'}
+                      accessibilityLabel={`${field.label}: ${value}`}
+                      disabled={busy}
+                      onPress={() => setValues((s) => ({ ...s, [field.key]: value }))}
+                    />
+                  ))}
+                </View>
+              )}
+              {field.money && (
                 <>
-                  {previewVnd(values[field.key]) && (
+                  {moneyWords(values[field.key] ?? '') && (
                     <Text style={[typography.footnote, { color: colors.teal }]}>
-                      Định dạng: {previewVnd(values[field.key])}
+                      ≈ {moneyWords(values[field.key] ?? '')} đồng
                     </Text>
                   )}
                   <View style={ui.actionRow}>

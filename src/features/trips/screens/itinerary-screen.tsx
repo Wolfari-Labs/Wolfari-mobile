@@ -30,14 +30,15 @@ import {
 } from "../utils";
 
 export default function ItineraryScreen() {
-  const resource = useTrip(),
+  const [reordering, setReordering] = useState(false);
+  // The inline editor polls its own plan session.
+  const resource = useTrip(reordering),
     command = useCommand();
   const { data, api, id } = resource;
   const [day, setDay] = useState<string>();
   const [selectedId, setSelectedId] = useState<string>();
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [reordering, setReordering] = useState(false);
-  const [orderSaved, setOrderSaved] = useState(false);
+  const [orderSaved, setOrderSaved] = useState<string>();
   const trip = data?.trip,
     plan = data?.plan;
   const days = trip ? tripDays(trip) : [];
@@ -56,9 +57,22 @@ export default function ItineraryScreen() {
   function openOrderEditor() {
     if (command.busy || !plan?.permissions.can_edit || activities.length < 2) return;
     setSelectedId(undefined);
-    setOrderSaved(false);
+    setOrderSaved(undefined);
     setReordering(true);
   }
+  if (reordering && trip)
+    return (
+      <ItineraryOrderEditor
+        trip={trip}
+        initialDay={activeDay ?? "unscheduled"}
+        onClose={() => setReordering(false)}
+        onSaved={(message) => {
+          setReordering(false);
+          setOrderSaved(message);
+          void resource.reload();
+        }}
+      />
+    );
   async function complete(activity: Activity) {
     if (!plan) return;
     const result = await command.run(
@@ -107,7 +121,6 @@ export default function ItineraryScreen() {
       {trip && plan && (
         <>
           <TripNavigation id={id} active="itinerary" />
-          <Button label="Thử lập bản nháp riêng" variant="soft" compact onPress={() => router.push({ pathname: "/trip/[id]/plan-draft", params: { id } })} />
           <Segments
             scroll
             items={[
@@ -147,27 +160,9 @@ export default function ItineraryScreen() {
             />
           )}
           {plan.permissions.can_edit && activities.length > 1 && (
-            <Text style={typography.footnote}>Nhấn giữ một hoạt động để mở sắp xếp kéo thả.</Text>
+            <Text style={typography.footnote}>Nhấn giữ một hoạt động để sắp xếp và đổi giờ ngay trên lịch trình.</Text>
           )}
-          {orderSaved && (
-            <Feedback
-              success
-              message="Đã lưu thứ tự cho cả nhóm. Các giờ bị lệch thứ tự đã được bỏ, vẫn giữ nguyên ngày."
-            />
-          )}
-          {reordering && (
-            <ItineraryOrderEditor
-              tripId={id}
-              day={activeDay ?? "unscheduled"}
-              timezone={trip.timezone}
-              onClose={() => setReordering(false)}
-              onSaved={() => {
-                setReordering(false);
-                setOrderSaved(true);
-                void resource.reload();
-              }}
-            />
-          )}
+          {orderSaved && <Feedback success={!orderSaved.includes("Chưa lưu được")} message={orderSaved} />}
           {activities.map((activity) => (
             <ActivityRow
               key={activity.id}

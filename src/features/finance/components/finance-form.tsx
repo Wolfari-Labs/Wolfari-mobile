@@ -10,6 +10,8 @@ import { Button } from "@/shared/ui/button";
 import { Details } from "@/shared/ui/details";
 import { Feedback } from "@/shared/ui/feedback";
 import { FormField } from "@/shared/ui/form-field";
+import { MoneyField } from "@/shared/ui/money-field";
+import { moneyWords } from "@/shared/ui/money-input";
 import { DateTimeField } from "@/shared/ui/date-time-field";
 import { FadeInView, Notice, ui } from "@/shared/ui/journal";
 import { Sheet } from "@/shared/ui/sheet";
@@ -38,7 +40,7 @@ export type FormValues = Record<string, string>;
 export type FinanceFormSpec = {
   title: string; description: string; initial?: FormValues; destructive?: boolean;
   review?: boolean; submitLabel?: string;
-  fields?: { key: string; label: string; numeric?: boolean; multiline?: boolean; max?: number;
+  fields?: { key: string; label: string; numeric?: boolean; money?: boolean; multiline?: boolean; max?: number;
     mode?: "date" | "time";
     options?: { value: string; label: string }[]; multiple?: boolean }[];
   receipt?: { fundId: string; field: "receipt_object_key" | "evidence_object_key" };
@@ -125,7 +127,7 @@ export function FinanceForm({ spec, busy, onSubmit, onClose }: {
     {filled && !prepared && <Feedback success message="Đã điền từ VietQR. Kiểm tra lại từng trường trước khi tiếp tục." />}
     {spec.fields?.map(field => prepared ? <FadeInView key={field.key}>
       <Text style={typography.footnote}>{field.label}</Text>
-      <Text selectable style={typography.body}>{field.key === "bank_code" ? bankDisplayName(values[field.key] ?? "") : field.options ? field.options.filter(option => (values[field.key] ?? "").split(",").includes(option.value)).map(option => option.label).join(" · ") || "Không chọn" : field.numeric && moneyPreview(values[field.key]) ? moneyPreview(values[field.key]) : values[field.key] || "Để trống"}</Text>
+      <Text selectable style={typography.body}>{field.key === "bank_code" ? bankDisplayName(values[field.key] ?? "") : field.options ? field.options.filter(option => (values[field.key] ?? "").split(",").includes(option.value)).map(option => option.label).join(" · ") || "Không chọn" : field.money && moneyPreview(values[field.key]) ? moneyPreview(values[field.key]) : values[field.key] || "Để trống"}</Text>
     </FadeInView> : field.options ? <View key={field.key} style={ui.stack}>
       <Text style={typography.headline}>{field.label}</Text>
       {!field.options.length && <Notice>Chưa có lựa chọn hợp lệ. Kiểm tra thành viên hoặc xác nhận tài khoản nhận trước.</Notice>}
@@ -139,9 +141,11 @@ export function FinanceForm({ spec, busy, onSubmit, onClose }: {
           }}><Text style={typography.body}>{selected ? "✓ " : "○ "}{option.label}</Text></Pressable>;
       })}
     </View> : field.key === "bank_code" ? <BankPicker key={field.key} value={values[field.key] ?? ""} onChange={value => set(field.key, value)} disabled={disabled} /> : field.mode ? <DateTimeField key={field.key} mode={field.mode} label={field.label} value={values[field.key] ?? ""} onChangeText={value => set(field.key, value)} editable={!disabled} /> : <View key={field.key} style={{ gap: 8 }}>
-      <FormField icon={field.numeric ? "wallet" : "edit"} label={field.label} value={values[field.key] ?? ""} onChangeText={value => set(field.key, value)} keyboardType={field.numeric ? "number-pad" : "default"} autoCapitalize="none" maxLength={field.max ?? 1024} multiline={field.multiline} editable={!disabled} />
-      {field.numeric && <>
-        {moneyPreview(values[field.key]) && <Text style={[typography.footnote, { color: colors.teal }]}>Định dạng: {moneyPreview(values[field.key])}</Text>}
+      {field.money
+        ? <MoneyField label={field.label} value={values[field.key] ?? ""} onChangeText={value => set(field.key, value)} maxDigits={field.max ?? 19} editable={!disabled} />
+        : <FormField icon="edit" label={field.label} value={values[field.key] ?? ""} onChangeText={value => set(field.key, field.numeric ? value.replace(/\D/g, "") : value)} keyboardType={field.numeric ? "phone-pad" : "default"} autoCapitalize="none" maxLength={field.max ?? 1024} multiline={field.multiline} editable={!disabled} />}
+      {field.money && <>
+        {moneyWords(values[field.key] ?? "") && <Text style={[typography.footnote, { color: colors.teal }]}>≈ {moneyWords(values[field.key] ?? "")} đồng</Text>}
         <View style={ui.actionRow}>
           {QUICK_AMOUNTS.map(preset => <Pressable cssInterop={false} key={preset.value} disabled={disabled} onPress={() => set(field.key, preset.value)}
             style={({ pressed }) => [{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, backgroundColor: values[field.key] === preset.value ? colors.mint : colors.fill, borderWidth: 1, borderColor: values[field.key] === preset.value ? colors.pinGreen : colors.line }, pressed && { opacity: 0.7 }]}>

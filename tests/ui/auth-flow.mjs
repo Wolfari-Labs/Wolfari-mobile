@@ -24,6 +24,7 @@ const browser = await chromium.launch({ executablePath, headless: true });
 const requests = [];
 const pageErrors = [];
 let authenticated = false;
+let codeRejected = false;
 const fixtureSession = { session_id: "10000000-0000-4000-8000-000000000001", access_token: "fixture-access", token_type: "Bearer", expires_in: 900, profile: {
   id: "fixture-user", email: "demo@example.test", full_name: "Minh Anh", avatar: null,
   system_role: "USER", status: "ACTIVE", email_verified_at: null, version: 1,
@@ -42,7 +43,7 @@ await context.route("**/api/v1/**", async (route) => {
   const error = (status, code) => respond(status, { error: { code, message: "Không thể hoàn tất yêu cầu", details: null, retryable: status === 503 }, meta: { correlation_id: "fixture-correlation" } });
   if (pathname.endsWith("/auth/csrf")) return authenticated ? respond(200, { data: { csrf_token: "fixture-csrf" } }) : error(401, "UNAUTHENTICATED");
   if (pathname.endsWith("/auth/refresh")) return authenticated ? respond(200, { data: fixtureSession }) : error(401, "UNAUTHENTICATED");
-  if (pathname.endsWith("/auth/email-verifications/confirm")) return respond(200, { data: { message_code: "REQUEST_ACCEPTED" } });
+  if (pathname.endsWith("/auth/email-verifications/confirm")) return codeRejected ? error(400, "VALIDATION_FAILED") : respond(200, { data: { message_code: "REQUEST_ACCEPTED" } });
   if (pathname.endsWith("/trips")) return respond(200, { data: { items: [], next_cursor: null }, meta: {} });
   if (pathname.endsWith("/auth/register")) return respond(202, { data: { message_code: "REQUEST_ACCEPTED" }, meta: {} });
   if (pathname.endsWith("/auth/login")) {
@@ -123,22 +124,28 @@ try {
   assert.equal(requests.filter((request) => request.pathname.endsWith("/auth/register")).length, 0);
   await page.getByRole("checkbox").click();
   await page.getByRole("button", { name: "Tạo tài khoản", exact: true }).click();
-  await page.getByRole("heading", { name: "Kiểm tra email của bạn" }).waitFor();
+  // Registration continues straight to the 6-digit code screen for the same email.
+  await page.waitForURL("**/verify-email**");
+  await page.getByRole("heading", { name: "Nhập mã xác minh" }).waitFor();
+  await page.getByText("Mã 6 số đã được gửi tới demo@example.test.", { exact: true }).waitFor();
   const registration = requests.find((request) => request.pathname.endsWith("/auth/register"));
   assert.deepEqual(Object.keys(registration.body).sort(), ["email", "full_name", "password"]);
   assert.equal(registration.body.email, "demo@example.test");
   assert.equal(registration.body.full_name, "Minh Anh");
   assert.equal(requests.filter((request) => request.pathname.endsWith("/auth/login")).length, 0, "Registration does not automatically log in.");
-  assert.equal(await page.getByRole("button", { name: "Đóng", exact: true }).count(), 0);
-  await page.getByRole("button", { name: "Xác minh email", exact: true }).click();
-  await page.waitForURL("**/verify-email");
-  assert.equal(await page.getByRole("heading", { name: "Kiểm tra email của bạn" }).count(), 0, "Registration must not remain above verification.");
-  assert.equal(await page.getByLabel("Mã hoặc liên kết xác minh", { exact: true }).count(), 0, "Manual token entry is secondary.");
+  assert.equal(await page.getByLabel("Mã hoặc liên kết xác minh", { exact: true }).count(), 0, "Link entry is secondary.");
+  assert.equal(await page.getByRole("button", { name: "Xác minh", exact: true }).isDisabled(), true);
   await page.screenshot({ path: path.join(output, 'verify-email-phone.png') });
-  await page.getByRole('button', { name: 'Nhập liên kết thủ công', exact: true }).click();
-  await page.getByLabel("Mã hoặc liên kết xác minh", { exact: true }).fill("a".repeat(43));
-  await page.getByRole("button", { name: "Xác nhận email", exact: true }).click();
-  await page.getByText("Liên kết xác minh đã được xác nhận.", { exact: true }).waitFor();
+  codeRejected = true;
+  await page.getByLabel("Mã xác minh 6 số", { exact: true }).fill("111 111");
+  await page.getByText(/Mã chưa đúng hoặc đã hết hạn/).waitFor();
+  codeRejected = false;
+  await page.getByLabel("Mã xác minh 6 số", { exact: true }).fill("");
+  await page.getByLabel("Mã xác minh 6 số", { exact: true }).fill("012345");
+  await page.getByText("Email đã được xác minh. Hãy đăng nhập để tiếp tục.", { exact: true }).waitFor();
+  const confirmations = requests.filter(request => request.pathname.endsWith("/auth/email-verifications/confirm"));
+  assert.equal(confirmations.length, 2, "Six digits submit once, without pressing the button.");
+  assert.deepEqual(confirmations.at(-1).body, { email: "demo@example.test", code: "012345" });
   assert.equal(requests.filter(request => request.pathname.endsWith("/auth/login")).length, 0);
   await page.getByRole("button", { name: "Đăng nhập", exact: true }).click();
   await page.waitForURL("**/sign-in");

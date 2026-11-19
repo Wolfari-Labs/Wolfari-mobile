@@ -48,6 +48,7 @@ type Props = PropsWithChildren<{
   onBack?: () => void;
   /** A full-width opening section supplies its own accessible navigation. */
   immersive?: boolean;
+  scrollEnabled?: boolean;
 }>;
 
 function ScreenBackButton({ onPress }: { onPress: () => void }) {
@@ -94,6 +95,7 @@ function ScreenInner({
   onRefresh,
   onBack,
   immersive = false,
+  scrollEnabled = true,
 }: Props) {
   const insets = useSafeAreaInsets();
   const [headerHeight, setHeaderHeight] = useState(56);
@@ -171,6 +173,7 @@ function ScreenInner({
               ref={keyboardScroll?.scrollRef}
               onScroll={keyboardScroll?.onScroll}
               scrollEventThrottle={16}
+              scrollEnabled={scrollEnabled}
               contentContainerStyle={[
                 styles.content,
                 immersive && styles.immersiveContent,

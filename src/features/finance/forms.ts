@@ -9,7 +9,7 @@ import type { PaymentQr } from "../payments/model/payment-qr";
 import { resolveVietQrBank, validVietQrAccount } from "./vietqr-banks.ts";
 import { bankDisplayName } from "./bank-names.ts";
 
-const amountField = { key: "amount", label: "Số tiền (VND, chỉ chữ số)", numeric: true, max: 19 };
+const amountField = { key: "amount", label: "Số tiền (VND)", numeric: true, money: true, max: 19 };
 const reasonField = { key: "reason", label: "Lý do", multiline: true, max: 1024 };
 const titleField = { key: "title", label: "Nội dung", max: 200 };
 const text = requiredText;
@@ -48,9 +48,11 @@ export const actionLabels: Record<string, string> = {
   "report-paid": "Báo đã hoàn tiền", "confirm-nonreceipt": "Báo chưa nhận tiền", "request-reversal": "Yêu cầu đảo hoàn tiền", "consent-reversal": "Đồng ý đảo hoàn tiền",
   "assign-verifier": "Chỉ định người kiểm chứng",
 };
-export function enableForm(tripId: string, members: Membership[], self: string): FinanceFormSpec {
-  return { title: "Mở quỹ nhóm", description: "Chọn người giữ quỹ và tài khoản nhận. Người giữ quỹ phải xác nhận tài khoản riêng sau khi mở; chưa có tiền được thu ở bước này.",
-    initial: { holder: self }, fields: [{ key: "holder", label: "Người giữ quỹ", options: memberOptions(members, self) }, { ...amountField, key: "budget", label: "Ngân sách dự kiến (VND, có thể để trống)" }, ...bankFields], scan: destinationScan,
+/** `tripBudget` is the trip's planned budget; it only pre-fills the field and stays editable. */
+export function enableForm(tripId: string, members: Membership[], self: string, tripBudget?: string | null): FinanceFormSpec {
+  const budget = typeof tripBudget === "string" && /^[1-9]\d{0,18}$/.test(tripBudget) ? tripBudget : "";
+  return { title: "Mở quỹ nhóm", description: `Chọn người giữ quỹ và tài khoản nhận. Người giữ quỹ phải xác nhận tài khoản riêng sau khi mở; chưa có tiền được thu ở bước này.${budget ? " Ngân sách được điền sẵn từ ngân sách dự kiến của chuyến đi." : ""}`,
+    initial: { holder: self, budget }, fields: [{ key: "holder", label: "Người giữ quỹ", options: memberOptions(members, self) }, { ...amountField, key: "budget", label: "Ngân sách dự kiến (VND, có thể để trống)" }, ...bankFields], scan: destinationScan,
     build: values => { if (!members.some(member => member.user_id === values.holder && !member.left_at)) throw new Error("Chọn người giữ quỹ đang tham gia."); return commands.enable(tripId, values.holder, bankInput(values), values.budget?.trim() ? parseMoney(values.budget, true) : undefined); } };
 }
 export function budgetForm(fund: Fund): FinanceFormSpec {
