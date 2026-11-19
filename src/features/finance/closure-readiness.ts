@@ -1,6 +1,6 @@
 import type { ClosureBlockerKind, ClosureReadiness } from "./types";
 
-export type ChecklistTarget = "contribution-requests" | "expenses" | "refunds" | "handovers" | "fund-tools";
+export type ChecklistTarget = "contribution-requests" | "expenses" | "refunds" | "handovers" | "bank-transfers" | "fund-tools";
 export type ChecklistItem = {
   kind: ClosureBlockerKind;
   title: string;
@@ -43,6 +43,16 @@ export function closureChecklist(readiness: ClosureReadiness): ChecklistItem[] {
           owner: "Người giữ quỹ",
           target: "fund-tools",
           targetLabel: "Mở công cụ đối soát",
+        };
+      case "BANK_TRANSFERS_REVIEW":
+        return {
+          kind,
+          title: `Còn ${count} giao dịch ngân hàng cần xem lại`,
+          action:
+            "Tiền về tài khoản nhận nhưng không tự khớp khoản góp. Người giữ quỹ hoàn lại hoặc xác nhận tay khoản góp tương ứng, rồi bấm “Đã xử lý” ở tab Tiền về.",
+          owner: "Người giữ quỹ",
+          target: "bank-transfers",
+          targetLabel: "Mở Tiền về",
         };
       case "EXPENSES_OPEN":
         return {

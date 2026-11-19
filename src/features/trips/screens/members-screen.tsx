@@ -38,6 +38,10 @@ export default function MembersScreen() {
   // Owner and plan editors may invite; only the Owner manages everyone's invitations here.
   const inviter = !!data && !archived && (data.trip.permissions.can_invite ?? owner);
   // An archived trip still shows its pending invitations, read-only.
+  // Owner manages every invitation; other inviters manage only the ones they created.
+  const canManageInvitation = (invitation: Invitation) =>
+    !archived && !resource.loading && !resource.error &&
+    (owner || (inviter && !!profile?.id && invitation.invited_by_user_id === profile.id));
   const seesInvitations = !!data && (owner || data.trip.permissions.can_invite === true);
   const [includeLeft, setIncludeLeft] = useState(false);
   const members = useResource(
@@ -63,7 +67,7 @@ export default function MembersScreen() {
   const pending =
     invitations.data?.filter((item) => item.status === "PENDING") ?? [];
   async function manage() {
-    if (!selected || !canManage || invitations.loading || invitations.error) return;
+    if (!selected || !canManageInvitation(selected) || invitations.loading || invitations.error) return;
     const result = await command.run(
       { id: selected.id, action, version: selected.version },
       (key) => api.trips.manageInvitation(id, selected, action, key),
@@ -177,7 +181,10 @@ export default function MembersScreen() {
               <Text style={typography.footnote}>
                 Hết hạn {dateLabel(invitation.expires_at)}
               </Text>
-              {canManage && <View style={ui.row}>
+              {!owner && invitation.invited_by_user_id === profile?.id && (
+                <Text style={typography.footnote}>Lời mời do bạn tạo</Text>
+              )}
+              {canManageInvitation(invitation) && <View style={ui.row}>
                 {invitation.invitation_type === "EMAIL" && (
                   <Button
                     label="Gửi lại"
@@ -253,7 +260,7 @@ export default function MembersScreen() {
           label={action === "resend" ? "Gửi lại lời mời" : "Xác nhận thu hồi"}
           variant={action === "revoke" ? "destructive" : "primary"}
           loading={command.busy}
-          disabled={!canManage || invitations.loading || !!invitations.error}
+          disabled={!selected || !canManageInvitation(selected) || invitations.loading || !!invitations.error}
           onPress={() => {
             void manage();
           }}

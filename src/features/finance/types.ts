@@ -92,7 +92,7 @@ export type Closure = {
 };
 export type ClosureBlockerKind =
   | "BALANCE_NOT_ZERO" | "CONTRIBUTIONS_OPEN" | "EXPENSES_OPEN" | "REFUNDS_OPEN"
-  | "PAYMENTS_OPEN" | "PAYMENT_WEBHOOKS_OPEN" | "HOLDER_HANDOVER_OPEN";
+  | "PAYMENTS_OPEN" | "PAYMENT_WEBHOOKS_OPEN" | "BANK_TRANSFERS_REVIEW" | "HOLDER_HANDOVER_OPEN";
 export type ClosureReadiness = {
   ready: boolean; fund_status: Fund["status"]; current_balance: Money;
   blockers: { kind: ClosureBlockerKind; count: number }[];
@@ -101,10 +101,14 @@ export type ClosureReadiness = {
 export type BankTransfer = {
   id: string; provider: string; transfer_type: "IN" | "OUT"; amount: Money; content: string;
   account_number_masked: string; bank_gateway: string;
-  processing_status: "MATCHED" | "UNMATCHED" | "NEEDS_REVIEW" | "IGNORED";
+  processing_status: "MATCHED" | "UNMATCHED" | "NEEDS_REVIEW" | "IGNORED" | "RESOLVED";
   contribution_id: string | null; review_reason: string | null;
   transaction_at: string | null; received_at: string; processed_at: string | null;
+  /** All set on RESOLVED rows, all null otherwise; absent on older servers. */
+  resolution?: BankTransferResolution | null; resolution_note?: string | null;
+  resolved_by_user_id?: string | null; resolved_at?: string | null;
 };
+export type BankTransferResolution = "RETURNED_TO_SENDER" | "HANDLED_IN_APP" | "NOT_OURS";
 export type PaymentInstruction = {
   contribution_id: string; amount: Money; currency: "VND"; reference: string;
   recipient_name: string; bank_code: string; bank_bin: string; account_number: string;

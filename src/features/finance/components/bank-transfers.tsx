@@ -4,22 +4,27 @@ import { Text, View } from "react-native";
 import { useApi } from "@/shared/api/use-api";
 import { useResource } from "@/shared/hooks/use-resource";
 import { typography } from "@/shared/theme/tokens";
+import { Button } from "@/shared/ui/button";
 import { EmptyState, Notice, ResourceFeedback, StatusBadge, ui } from "@/shared/ui/journal";
+import { bankTransferResolutionLabels, bankTransferResolveForm } from "../forms";
 import { historyTimeLabel } from "../history-labels";
 import { money } from "../model";
-import type { BankTransfer } from "../types";
+import type { FinanceFormSpec } from "./finance-form";
+import type { BankTransfer, Fund } from "../types";
 
 const statusLabel: Record<BankTransfer["processing_status"], string> = {
   MATCHED: "Đã ghi vào quỹ",
   NEEDS_REVIEW: "Cần xem lại",
   UNMATCHED: "Chưa khớp",
   IGNORED: "Bỏ qua",
+  RESOLVED: "Đã xử lý",
 };
 const statusTone: Record<BankTransfer["processing_status"], string> = {
   MATCHED: "CONFIRMED",
   NEEDS_REVIEW: "REJECTED",
   UNMATCHED: "PENDING",
   IGNORED: "CANCELLED",
+  RESOLVED: "CONFIRMED",
 };
 const reviewText: Record<string, string> = {
   NO_REFERENCE: "Nội dung chuyển khoản không có mã tham chiếu của khoản góp.",
@@ -35,13 +40,23 @@ const reviewText: Record<string, string> = {
 };
 
 /** Owner/Holder view of money that reached the fund's bank account through SePay. */
-export function BankTransfers({ fundId, timezone }: { fundId: string; timezone: string }) {
+export function BankTransfers({ fund, timezone, holder, writable, locked, open, who }: {
+  fund: Fund;
+  timezone: string;
+  holder: boolean;
+  writable: boolean;
+  locked: boolean;
+  open(spec: FinanceFormSpec): void;
+  who(userId: string): string;
+}) {
   const api = useApi();
-  const rows = useResource(useCallback((signal: AbortSignal) => api.finance.bankTransfers(fundId, signal), [api, fundId]));
+  const rows = useResource(useCallback((signal: AbortSignal) => api.finance.bankTransfers(fund.id, signal), [api, fund.id]));
   const review = rows.data?.filter(row => row.processing_status === "NEEDS_REVIEW").length ?? 0;
   return <View style={ui.stack}>
-    <Notice>Tiền chuyển vào tài khoản nhận của quỹ (qua SePay) được tự ghi khi nội dung có đúng mã khoản góp và đủ số tiền. Giao dịch không khớp không được tự ghi; người giữ quỹ đối chiếu rồi xác nhận khoản góp bằng tay.</Notice>
-    {review > 0 && <Notice>{review} giao dịch cần xem lại. Kiểm tra người chuyển và số tiền, rồi xác nhận hoặc từ chối khoản góp tương ứng ở tab Đợt góp.</Notice>}
+    <Notice>Tiền chuyển vào tài khoản nhận của quỹ (qua SePay) được tự ghi khi nội dung có đúng mã khoản góp và đủ số tiền. Giao dịch không khớp không được tự ghi; người giữ quỹ đối chiếu rồi xử lý.</Notice>
+    {review > 0 && <Notice>
+      {review} giao dịch cần xem lại. Quỹ chỉ chốt được khi đã xử lý hết. Người giữ quỹ hoàn lại tiền hoặc xác nhận tay khoản góp tương ứng ở tab Đợt góp, rồi bấm “Đã xử lý” trên từng giao dịch.
+    </Notice>}
     <ResourceFeedback {...rows} hasData={!!rows.data} onRetry={() => { void rows.reload(); }} />
     {rows.data && !rows.data.length && <EmptyState title="Chưa có tiền về" message="Khi thành viên chuyển khoản với đúng nội dung, giao dịch sẽ hiện ở đây." icon="wallet" />}
     {rows.data?.map(row => <View key={row.id} style={ui.record}>
@@ -55,6 +70,25 @@ export function BankTransfers({ fundId, timezone }: { fundId: string; timezone: 
       </Text>
       {row.review_reason && <Text style={typography.footnote}>{reviewText[row.review_reason] ?? row.review_reason}</Text>}
       {row.processing_status === "MATCHED" && <Text style={typography.footnote}>Đã tự xác nhận khoản góp tương ứng.</Text>}
+      {row.processing_status === "RESOLVED" && row.resolution && <>
+        <Text style={typography.body}>{bankTransferResolutionLabels[row.resolution]}</Text>
+        {row.resolution_note && <Text selectable style={typography.footnote}>Ghi chú: {row.resolution_note}</Text>}
+        <Text style={typography.footnote}>
+          {row.resolved_by_user_id ? who(row.resolved_by_user_id) : "Người giữ quỹ"}
+          {row.resolved_at ? ` · ${historyTimeLabel(row.resolved_at, timezone)}` : ""}
+        </Text>
+      </>}
+      {row.processing_status === "NEEDS_REVIEW" && holder && writable && <View style={ui.actionRow}>
+        <Button
+          label="Đã xử lý"
+          compact
+          variant="soft"
+          accessibilityLabel={`Đã xử lý · ${money(row.amount)} · ${row.content || "không có nội dung"}`}
+          disabled={locked}
+          onPress={() => open(bankTransferResolveForm(fund, row))}
+        />
+      </View>}
+      {row.processing_status === "NEEDS_REVIEW" && !holder && <Text style={typography.footnote}>Người giữ quỹ sẽ xử lý giao dịch này.</Text>}
     </View>)}
   </View>;
 }

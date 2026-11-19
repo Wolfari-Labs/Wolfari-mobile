@@ -468,7 +468,7 @@ function FundRecords({ fund, trip, userId, locked, open, who, tab, members, onIn
         </View>;
       })}
     </>}
-    {tab === "bank-transfers" && (actor.owner || actor.holder) && <BankTransfers fundId={fund.id} timezone={trip.timezone} />}
+    {tab === "bank-transfers" && (actor.owner || actor.holder) && <BankTransfers fund={fund} timezone={trip.timezone} holder={actor.holder} writable={actor.writable && !trip.current_membership.left_at} locked={locked} open={open} who={who} />}
     {tab === "closures" && <>
       {actor.writable && <ClosureChecklist
         fund={fund}

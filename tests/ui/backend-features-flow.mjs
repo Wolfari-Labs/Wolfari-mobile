@@ -26,7 +26,8 @@ const member = { ...owner, id: memberId, user_id: memberUserId, role: "MEMBER" }
 let trip = { id: tripId, name: "Kiểm thử chức năng backend", description: null, public_description: null, start_at: "2026-11-11T17:00:00Z", end_at: "2026-11-14T16:59:00Z", timezone: "Asia/Ho_Chi_Minh", lifecycle: "UPCOMING", archived_at: null, plan_edit_policy: "OWNER_ONLY", plan_version: 1, membership_revision: 1, export_revision: 1, current_membership: owner, permissions: { can_read: true, can_update: true } };
 const calls = [], errors = [];
 let wrongPassword = true, lostPasswordReply = false, operation, lostReply = true, completeOperation = false, removed = false, rejectFinance = false;
-let loggedOut = false, logoutOffline = true;
+let loggedOut = false, logoutOffline = true, editorInvites = false;
+const pendingEmail = (id, email, by) => ({ id, trip_id: tripId, invitation_type: "EMAIL", email, status: "PENDING", version: 1, expires_at: "2099-11-01T00:00:00Z", resolved_at: null, code_hint: null, invited_by_user_id: by });
 const sessionId = "50000000-0000-4000-8000-000000000001";
 await context.route("**/api/v1/**", async route => {
   const request = route.request(), url = new URL(request.url()), pathname = url.pathname.replace("/api/v1", ""), method = request.method();
@@ -77,7 +78,7 @@ await context.route("**/api/v1/**", async route => {
     return respond(200, { policy: body.policy, editor_member_ids: body.editor_member_ids, membership_revision: trip.membership_revision });
   }
   if (pathname.endsWith("/invitations")) {
-    if (method === "GET") return respond(200, { items: trip.lifecycle === "ARCHIVED" ? [{ id: "pending-email", trip_id: tripId, invitation_type: "EMAIL", email: "invitee@example.test", status: "PENDING", version: 1, expires_at: "2099-11-01T00:00:00Z", resolved_at: null }] : [], next_cursor: null });
+    if (method === "GET") return respond(200, { items: editorInvites ? [pendingEmail("mine", "mine@example.test", userId), pendingEmail("theirs", "theirs@example.test", memberUserId)] : trip.lifecycle === "ARCHIVED" ? [{ id: "pending-email", trip_id: tripId, invitation_type: "EMAIL", email: "invitee@example.test", status: "PENDING", version: 1, expires_at: "2099-11-01T00:00:00Z", resolved_at: null }] : [], next_cursor: null });
     assert.equal(body.invitation_type, "LINK");
     assert.equal(body.email, undefined);
     return respond(201, { invitation: { id: "invitation", trip_id: tripId, invitation_type: "LINK", email: null, status: "PENDING", version: 1, expires_at: "2026-11-01T00:00:00Z", resolved_at: null }, one_time_link: `https://gateway.test/invitations/local#token=inv1_${"x".repeat(43)}`, join_code: "K7PQ-4M2X" });
@@ -270,6 +271,15 @@ try {
   await button("Xác nhận thực hiện").click();
   await page.getByText("Chưa thể rời hoặc xóa thành viên vì còn nghĩa vụ tài chính cần giải quyết.").waitFor();
   assert.equal(await button("Hoàn tất").count(), 0);
+  // A plan editor who may invite manages only the invitations they created; the Owner manages all.
+  editorInvites = true;
+  trip = { ...trip, permissions: { can_read: true, can_update: false, can_invite: true } };
+  await goto(`/trip/${tripId}/members`);
+  await page.getByText("theirs@example.test", { exact: true }).waitFor();
+  await page.getByText("Lời mời do bạn tạo", { exact: true }).waitFor();
+  assert.equal(await button("Thu hồi").count(), 1, "Only the editor's own invitation can be revoked");
+  assert.equal(await button("Gửi lại").count(), 1);
+  editorInvites = false;
   trip = { ...trip, lifecycle: "ARCHIVED", archived_at: "2026-11-05T00:00:00Z", current_membership: owner };
   const writesBeforeArchive = calls.filter(call => ["POST", "PATCH", "PUT", "DELETE"].includes(call.method) && call.pathname.startsWith("/trips/")).length;
   await goto(`/trip/${tripId}/settings`);

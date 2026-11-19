@@ -5,7 +5,7 @@ import { useApi } from "@/shared/api/use-api";
 import { useResource } from "@/shared/hooks/use-resource";
 import { colors, radii, typography } from "@/shared/theme/tokens";
 import { Button } from "@/shared/ui/button";
-import { Notice, ResourceFeedback, ui } from "@/shared/ui/journal";
+import { ResourceFeedback, ui } from "@/shared/ui/journal";
 import { closureChecklist, type ChecklistTarget } from "../closure-readiness";
 import type { Fund } from "../types";
 
@@ -45,9 +45,6 @@ export function ClosureChecklist({ fund, canRequest, locked, onRequest, onOpen }
         </View>
       </View>
     </View>)}
-    {!!readiness.data?.bank_transfers_needing_review && <Notice>
-      {readiness.data.bank_transfers_needing_review} giao dịch ngân hàng chưa tự khớp với khoản góp nào. Người giữ quỹ kiểm tra ở mục Tiền về trước khi chốt để không bỏ sót tiền đã nhận.
-    </Notice>}
     {canRequest && <Button label="Yêu cầu chốt quỹ" disabled={locked || !ready || readiness.loading} onPress={onRequest} />}
   </View>;
 }

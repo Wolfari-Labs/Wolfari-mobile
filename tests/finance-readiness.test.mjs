@@ -59,3 +59,26 @@ test("editing a watch shows its stored instant back in Vietnam time", () => {
   assert.deepEqual(dates, { departure_date: "02/01/2030", departure_time: "06:30", return_date: "05/01/2030" });
   assert.deepEqual(watchFormDates(undefined), { departure_date: "", departure_time: "12:00", return_date: "" });
 });
+
+test("bank transfers needing review block closure and point the Holder to Tiền về", async () => {
+  const [item] = closureChecklist({
+    ready: false,
+    fund_status: "OPEN",
+    current_balance: "0",
+    bank_transfers_needing_review: 3,
+    blockers: [{ kind: "BANK_TRANSFERS_REVIEW", count: 3 }],
+  });
+  assert.equal(item.title, "Còn 3 giao dịch ngân hàng cần xem lại");
+  assert.equal(item.target, "bank-transfers");
+  assert.equal(item.owner, "Người giữ quỹ");
+  assert.match(item.action, /Đã xử lý/);
+  const { bankTransferResolveForm } = await import("../src/features/finance/forms.ts");
+  const fund = { id: "10000000-0000-4000-8000-000000000001", finance_version: 7 };
+  const row = { id: "60000000-0000-4000-8000-000000000001", amount: "50000", content: "CK quy" };
+  const spec = bankTransferResolveForm(fund, row);
+  const command = spec.build({ resolution: "NOT_OURS", note: "  Chuyển nhầm  " });
+  assert.equal(command.path, `/funds/${fund.id}/bank-transfers/${row.id}/resolve`);
+  assert.deepEqual(command.body, { resolution: "NOT_OURS", note: "Chuyển nhầm", expected_finance_version: 7 });
+  assert.throws(() => spec.build({ resolution: "NOT_OURS", note: "   " }));
+  assert.throws(() => spec.build({ resolution: "MATCHED", note: "x" }));
+});

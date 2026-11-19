@@ -7,7 +7,7 @@ import type {
   PaymentAttempt,
   PaymentInstruction,
   Closure, Contribution, DestinationInput, ExpenseInput, HolderHandover, Receipt, WriteResult,
-  BankTransfer, ClosureReadiness,
+  BankTransfer, BankTransferResolution, ClosureReadiness,
 } from './types';
 import type { OperationCommand } from '../../shared/operations/controller';
 
@@ -159,6 +159,8 @@ export const financeCommands = {
       ...(action === "cancel" ? { reason } : {}),
     }),
   closure: (fund: Fund) => command("Yêu cầu chốt quỹ", `/funds/${id(fund.id)}/closures`, versions(fund)),
+  resolveBankTransfer: (fund: Fund, transferId: string, resolution: BankTransferResolution, note: string) =>
+    command("Xử lý giao dịch ngân hàng", `/funds/${id(fund.id)}/bank-transfers/${id(transferId)}/resolve`, { resolution, note, expected_finance_version: fund.finance_version }),
   closureAction: (row: Closure, action: "confirm" | "cancel" | "remind", reason?: string) => command("Cập nhật chốt quỹ", `/closures/${id(row.id)}/${action}`, action === "confirm" ? { snapshot_hash: row.snapshot_hash } : action === "cancel" ? { reason } : {}),
 };
 

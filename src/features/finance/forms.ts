@@ -4,7 +4,7 @@ import { financeCommands as commands } from "./api.ts";
 import type { FinanceFormSpec } from "./components/finance-form";
 import { eligibleDestinations, money, parseMoney, requiredText } from "./model.ts";
 import { dateLabel, timeLabel, parseDate, localTimestamp } from "../trips/utils.ts";
-import type { Closure, Contribution, ContributionRequest, Destination, Expense, Fund, HolderHandover, Refund } from "./types";
+import type { BankTransfer, BankTransferResolution, Closure, Contribution, ContributionRequest, Destination, Expense, Fund, HolderHandover, Refund } from "./types";
 import type { PaymentQr } from "../payments/model/payment-qr";
 import { resolveVietQrBank, validVietQrAccount } from "./vietqr-banks.ts";
 import { bankDisplayName } from "./bank-names.ts";
@@ -170,6 +170,30 @@ export function handoverActionForm(fund: Fund, row: HolderHandover, action: "acc
     : self === row.old_holder_user_id ? `Xác nhận bạn đã giao ${amount} cho ${who(row.new_holder_user_id)}.` : `Xác nhận bạn đã nhận ${amount} từ ${who(row.old_holder_user_id)}. Khi cả hai bên xác nhận, bạn trở thành người giữ quỹ.`;
   return { title, description, review: false, fields: action === "cancel" ? [reasonField] : [], destructive: action === "cancel",
     build: values => commands.handoverAction(fund, row, action, action === "cancel" ? text(values.reason ?? "", "Lý do") : undefined) };
+}
+export const bankTransferResolutionLabels: Record<BankTransferResolution, string> = {
+  RETURNED_TO_SENDER: "Đã hoàn lại cho người chuyển",
+  HANDLED_IN_APP: "Đã xử lý bằng khoản góp/thao tác trong app",
+  NOT_OURS: "Không thuộc quỹ này",
+};
+/** Holder records how a transfer needing review was handled; it never moves money by itself. */
+export function bankTransferResolveForm(fund: Fund, row: BankTransfer): FinanceFormSpec {
+  return {
+    title: "Đã xử lý giao dịch ngân hàng",
+    review: false,
+    submitLabel: "Lưu cách xử lý",
+    description: `${money(row.amount)} · ${row.content || "không có nội dung"}. Chỉ đánh dấu sau khi đã xử lý xong: hoàn tiền lại cho người chuyển, hoặc xác nhận tay khoản góp tương ứng ở tab Đợt góp. Thao tác này không cộng hay trừ tiền trong quỹ.`,
+    initial: { resolution: "RETURNED_TO_SENDER", note: "" },
+    fields: [
+      { key: "resolution", label: "Cách đã xử lý", options: (Object.keys(bankTransferResolutionLabels) as BankTransferResolution[]).map(value => ({ value, label: bankTransferResolutionLabels[value] })) },
+      { key: "note", label: "Ghi chú (bắt buộc, ví dụ: đã chuyển trả 50.000 đ cho An lúc 20:15)", multiline: true, max: 500 },
+    ],
+    build: values => {
+      const resolution = values.resolution as BankTransferResolution;
+      if (!(resolution in bankTransferResolutionLabels)) throw new Error("Chọn cách đã xử lý giao dịch.");
+      return commands.resolveBankTransfer(fund, row.id, resolution, text(values.note ?? "", "Ghi chú", 500));
+    },
+  };
 }
 export function closureForm(fund: Fund): FinanceFormSpec {
   return { title: "Yêu cầu chốt quỹ", description: "Kết thúc thu/chi của quỹ. Cần số dư bằng 0 và xử lý xong các khoản đang chờ. Khi mọi người xác nhận bản chốt, quỹ chỉ còn xem lịch sử và không thể góp thêm.", build: () => commands.closure(fund) };
