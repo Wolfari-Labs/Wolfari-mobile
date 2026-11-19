@@ -68,6 +68,8 @@ export function ActivityDragHandle({
         accessible
         accessibilityLabel={`Kéo để di chuyển ${label}`}
         accessibilityState={{ disabled, selected: active }}
+        aria-disabled={disabled}
+        aria-selected={active}
         accessibilityHint="Nhấn giữ tay nắm rồi kéo lên hoặc xuống. Có thể dùng các nút lên và xuống thay thế."
         style={[styles.handle, active && styles.active, disabled && styles.disabled]}
       >
