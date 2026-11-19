@@ -22,6 +22,23 @@ export function pickerValue(
   );
 }
 
+/** Monday-first month grid; null cells pad the first week. */
+export function monthCells(year: number, month: number): (number | null)[] {
+  const lead = (new Date(Date.UTC(year, month, 1)).getUTCDay() + 6) % 7;
+  const count = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+  return [
+    ...Array<null>(lead).fill(null),
+    ...Array.from({ length: count }, (_, index) => index + 1),
+  ];
+}
+
+/** Lower bound for a date picker from DD/MM/YYYY; undefined when absent or invalid. */
+export function minimumPickerDate(value?: string): Date | undefined {
+  if (!value || !/^\d{2}\/\d{2}\/\d{4}$/.test(value)) return;
+  const date = pickerValue(value, "date");
+  return pickerText(date, "date") === value ? date : undefined;
+}
+
 export function pickerText(date: Date, mode: "date" | "time"): string {
   const pad = (value: number) => String(value).padStart(2, "0");
   return mode === "date"

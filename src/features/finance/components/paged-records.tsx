@@ -1,4 +1,4 @@
-import { useCallback, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Text, View } from "react-native";
 import type { Page } from "@/features/trips/types";
 import { useResource } from "@/shared/hooks/use-resource";
@@ -6,12 +6,21 @@ import { typography } from "@/shared/theme/tokens";
 import { Button } from "@/shared/ui/button";
 import { EmptyState, FadeInView, ResourceFeedback, ui } from "@/shared/ui/journal";
 
-export function PagedRecords<T extends { id: string }>({ load, render, title }: {
+export function PagedRecords<T extends { id: string }>({ load, render, title, version }: {
+  /** Reloads the current page when the fund version changes. */
+  version?: number;
   title: string; load: (cursor: string | undefined, signal: AbortSignal) => Promise<Page<T>>; render: (row: T) => ReactNode;
 }) {
   const [cursors, setCursors] = useState<(string | undefined)[]>([undefined]);
   const cursor = cursors[cursors.length - 1];
   const resource = useResource(useCallback((signal: AbortSignal) => load(cursor, signal), [load, cursor]));
+  const seen = useRef(version);
+  const reload = resource.reload;
+  useEffect(() => {
+    if (seen.current === version) return;
+    seen.current = version;
+    void reload();
+  }, [version, reload]);
   return <FadeInView>
     <ResourceFeedback {...resource} hasData={!!resource.data} onRetry={() => { void resource.reload(); }} />
     {!resource.loading && resource.data && !resource.data.items.length && <EmptyState title={`Chưa có ${title}`} message="Khi có, mục này sẽ hiện ở đây." icon="wallet" />}

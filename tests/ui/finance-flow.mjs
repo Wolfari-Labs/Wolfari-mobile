@@ -24,6 +24,8 @@ let profile = { id: userId, full_name: "Người kiểm thử", email: "finance@
 const now = "2026-10-28T03:00:00.000Z";
 const calls = [], errors = [], unexpected = [], receipts = new Map();
 let fund, destinations = [], contributions = [], requests = [], expenses = [], refunds = [], ledger = [], closures = [];
+const readinessChecks = [];
+let bankTransfers = [];
 let sequence = 0, rowNumber = 10, conflictBudget = false, loseSubmit = true, settle = false, uncertainKey;
 let savedClosureReceipt;
 let momoAttempt;
@@ -72,6 +74,20 @@ await context.route("**/api/v1/**", async route => {
   if (method === "GET") {
     if (p.endsWith("/fund")) return fund ? respond(200, fund) : fail(404, "RESOURCE_NOT_FOUND");
     if (p.endsWith("/destinations")) return respond(200, destinations);
+    if (p.endsWith("/closure-readiness")) {
+      // Mirrors the server rule: each open item is listed; nothing is waived in bulk.
+      const open = (rows, statuses) => rows.filter(row => statuses.includes(row.status)).length;
+      const blockers = [
+        ["CONTRIBUTIONS_OPEN", open(requests.flatMap(row => row.contributions), ["PENDING", "TRANSFER_REPORTED"])],
+        ["EXPENSES_OPEN", open(expenses, ["DRAFT", "SUBMITTED"])],
+        ["REFUNDS_OPEN", open(refunds, ["PENDING", "HOLDER_REPORTED"])],
+        ["BANK_TRANSFERS_REVIEW", bankTransfers.filter(row => row.processing_status === "NEEDS_REVIEW").length],
+        ["BALANCE_NOT_ZERO", fund.current_balance === "0" ? 0 : 1],
+      ].filter(([, count]) => count > 0).map(([kind, count]) => ({ kind, count }));
+      readinessChecks.push(blockers.map(row => row.kind));
+      return respond(200, { ready: fund.status === "OPEN" && !blockers.length, fund_status: fund.status, current_balance: fund.current_balance, blockers, bank_transfers_needing_review: bankTransfers.filter(row => row.processing_status === "NEEDS_REVIEW").length });
+    }
+    if (p.endsWith("/bank-transfers")) return respond(200, { items: bankTransfers });
     const collections = { contributions, "contribution-requests": requests, expenses, refunds, transactions: ledger, closures };
     const collection = p.split("/").at(-1);
     if (collections[collection]) {
@@ -161,6 +177,13 @@ await context.route("**/api/v1/**", async route => {
     result.confirmations.find(row => row.user_id === profile.id).confirmed_at = now;
     if (result.confirmations.every(row => row.confirmed_at)) { result.status = "COMPLETED"; fund.status = "CLOSED"; fund.closed_at = now; }
     update();
+  } else if (p.includes("/bank-transfers/") && p.endsWith("/resolve")) {
+    result = bankTransfers.find(row => p.includes(row.id));
+    assert.equal(result.processing_status, "NEEDS_REVIEW");
+    assert.ok(["RETURNED_TO_SENDER", "HANDLED_IN_APP", "NOT_OURS"].includes(body.resolution));
+    assert.ok(body.note.trim());
+    Object.assign(result, { processing_status: "RESOLVED", resolution: body.resolution, resolution_note: body.note, resolved_by_user_id: profile.id, resolved_at: now });
+    update();
   } else { unexpected.push({ p, method }); return fail(404, "RESOURCE_NOT_FOUND"); }
   receipts.set(key, { intent: { p, method, body }, data: structuredClone(result) });
   if (p.startsWith("/expenses/") && p.endsWith("/submit") && loseSubmit) { loseSubmit = false; uncertainKey = key; return route.abort("failed"); }
@@ -240,14 +263,14 @@ try {
   assert.equal(await button("Quét QR thanh toán").count(), 1, "The current Holder can scan while the fund is open.");
   // Keep the fixture within the app's 12-digit trip-budget input range while
   // still asserting that money stays a decimal string and is grouped exactly.
-  await action("Cập nhật ngân sách", { "Số tiền (VND, chỉ chữ số)": "900719925474" });
+  await action("Cập nhật ngân sách", { "Số tiền (VND)": "900719925474" });
   await page.getByText("Ngân sách dự kiến: 900.719.925.474 ₫", { exact: true }).waitFor();
   await page.setViewportSize({ width: 320, height: 720 }); await shot("01-summary-320.png"); await page.setViewportSize({ width: 402, height: 874 });
-  conflictBudget = true; await action("Cập nhật ngân sách", { "Số tiền (VND, chỉ chữ số)": "1000000" }, false);
+  conflictBudget = true; await action("Cập nhật ngân sách", { "Số tiền (VND)": "1000000" }, false);
   await page.getByText(/Dữ liệu vừa được cập nhật/).waitFor(); assert.equal(await button("Gửi lại cùng yêu cầu").count(), 0);
   conflictBudget = false; await button("Tải lại quỹ").click();
   await button("Góp quỹ").click(); await button("Tạo đợt góp").click();
-  await field("Nội dung").fill("Đợt góp đầu tiên"); await field("Số tiền (VND, chỉ chữ số)").fill("500000");
+  await field("Nội dung").fill("Đợt góp đầu tiên"); await field("Số tiền (VND)").fill("500000");
   await page.getByRole("checkbox", { name: "Người đóng góp: Bạn · Chủ nhóm" }).click(); await confirm();
   assert.equal(contributions.length, 1); assert.equal(fund.current_balance, "0");
   await page.getByText("Đợt góp đầu tiên", { exact: true }).waitFor();
@@ -305,8 +328,8 @@ try {
   await button('Đặt lại sổ mô phỏng').click();
   await page.getByText('Sổ quỹ mô phỏng', { exact: true }).waitFor({ state: 'hidden' });
   await tab("Khoản chi"); await button("Tạo khoản chi").click();
-  await field("Nội dung").fill("Bữa tối"); await field("Số tiền (VND, chỉ chữ số)").fill("200000"); await confirm();
-  await action("Sửa khoản chi", { "Số tiền (VND, chỉ chữ số)": "150000" });
+  await field("Nội dung").fill("Bữa tối"); await field("Số tiền (VND)").fill("200000"); await confirm();
+  await action("Sửa khoản chi", { "Số tiền (VND)": "150000" });
   await action("Gửi duyệt khoản chi", {}, false);
   await button("Gửi lại cùng yêu cầu").click(); await page.getByText(/Máy chủ đang xử lý/).waitFor();
   const submitCalls = calls.filter(call => call.p.endsWith("/submit")); assert.equal(submitCalls.length, 2); assert.equal(submitCalls[0].key, submitCalls[1].key); assert.deepEqual(submitCalls[0].body, submitCalls[1].body);
@@ -314,14 +337,14 @@ try {
   settle = true; await goto(); await settled(); await tab("Khoản chi");
   await action("Rút đề nghị chi"); await action("Gửi duyệt khoản chi"); await action("Xác nhận đã chi"); assert.equal(fund.current_balance, "350000");
   await action("Đảo giao dịch", { "Lý do": "Đối chiếu chi nhầm" }); assert.equal(fund.current_balance, "500000");
-  await button("Tạo khoản chi").click(); await field("Nội dung").fill("Nháp cần xóa"); await field("Số tiền (VND, chỉ chữ số)").fill("1"); await confirm();
+  await button("Tạo khoản chi").click(); await field("Nội dung").fill("Nháp cần xóa"); await field("Số tiền (VND)").fill("1"); await confirm();
   await action("Xóa khoản chi nháp"); assert.equal(expenses.length, 1);
   await tab("Hoàn tiền"); await button("Tạo hoàn tiền").click();
   await page.getByRole("radio", { name: "Người nhận hoàn: Bạn · Chủ nhóm" }).click();
-  await field("Số tiền (VND, chỉ chữ số)").fill("500000"); await field("Lý do").fill("Hoàn quỹ dư"); await confirm();
+  await field("Số tiền (VND)").fill("500000"); await field("Lý do").fill("Hoàn quỹ dư"); await confirm();
   assert.equal(fund.current_balance, "500000"); assert.equal(fund.available_balance, "0");
   await tab("Khoản chi"); await button("Tạo khoản chi").click();
-  await field("Nội dung").fill("Không được chi phần đã giữ chỗ"); await field("Số tiền (VND, chỉ chữ số)").fill("1"); await confirm();
+  await field("Nội dung").fill("Không được chi phần đã giữ chỗ"); await field("Số tiền (VND)").fill("1"); await confirm();
   await action("Gửi duyệt khoản chi"); await action("Xác nhận đã chi", {}, false);
   await page.getByText(/Trạng thái hiện tại chưa cho phép thao tác/).waitFor();
   assert.equal(fund.current_balance, "500000"); assert.equal(fund.available_balance, "0");
@@ -331,16 +354,36 @@ try {
   await page.getByText(/Thành viên được chỉ định kiểm chứng độc lập/).first().waitFor();
   await action("Yêu cầu đảo hoàn tiền", { "Lý do": "Nhận nhầm" }); await action("Đồng ý đảo hoàn tiền"); await action("Đảo giao dịch", { "Lý do": "Nhận nhầm" }); assert.equal(fund.current_balance, "500000");
   await button("Tạo hoàn tiền").click(); await page.getByRole("radio", { name: "Người nhận hoàn: Bạn · Chủ nhóm" }).click();
-  await field("Số tiền (VND, chỉ chữ số)").fill("100000"); await field("Lý do").fill("Kiểm tra báo chưa nhận"); await confirm();
+  await field("Số tiền (VND)").fill("100000"); await field("Lý do").fill("Kiểm tra báo chưa nhận"); await confirm();
   await action("Báo đã hoàn tiền");
   await page.getByRole("button", { name: /^Hủy ·/ }).waitFor({ state: "hidden" });
   await action("Báo chưa nhận tiền", { "Lý do": "Chưa nhận tiền thực tế" }); await action("Hủy", { "Lý do": "Hủy sau khi người nhận đối chiếu" });
   assert.equal(fund.current_balance, "500000"); assert.equal(fund.available_balance, "500000");
+  // The checklist mirrors the server: money still held blocks the closure and points to Hoàn tiền.
+  await tab("Chốt quỹ"); await page.getByText("Quỹ còn 500.000 ₫", { exact: true }).waitFor();
+  assert.equal(await button("Yêu cầu chốt quỹ").isDisabled(), true);
+  await button("Mở Hoàn tiền · Quỹ còn 500.000 ₫").click();
   await button("Tạo hoàn tiền").click(); await page.getByRole("radio", { name: "Người nhận hoàn: Bạn · Chủ nhóm" }).click();
-  await field("Số tiền (VND, chỉ chữ số)").fill("500000"); await field("Lý do").fill("Hoàn lại chính xác"); await confirm();
+  await field("Số tiền (VND)").fill("500000"); await field("Lý do").fill("Hoàn lại chính xác"); await confirm();
   await action("Báo đã hoàn tiền"); await verifyRefund(); assert.equal(fund.current_balance, "0");
   await tab("Lịch sử"); await shot("04-ledger.png"); assert.equal(ledger.length, 6);
-  await tab("Chốt quỹ"); await button("Yêu cầu chốt quỹ").click();
+  // Money that reached the bank without a usable reference blocks the closure until the Holder handles it.
+  bankTransfers.push({ id: uid(77), provider: "SEPAY", transfer_type: "IN", amount: "50000", content: "CK nham", account_number_masked: "******5678", bank_gateway: "Vietcombank", processing_status: "NEEDS_REVIEW", contribution_id: null, review_reason: "NO_REFERENCE", transaction_at: now, received_at: now, processed_at: now, resolution: null, resolution_note: null, resolved_by_user_id: null, resolved_at: null });
+  await tab("Chốt quỹ"); await page.getByText("Còn 1 giao dịch ngân hàng cần xem lại", { exact: true }).waitFor();
+  assert.equal(await button("Yêu cầu chốt quỹ").isDisabled(), true);
+  await button("Mở Tiền về · Còn 1 giao dịch ngân hàng cần xem lại").click();
+  await page.getByText(/1 giao dịch cần xem lại/).waitFor();
+  await page.getByRole("button", { name: /^Đã xử lý ·/ }).click();
+  await page.getByRole("radio", { name: "Cách đã xử lý: Đã hoàn lại cho người chuyển" }).click();
+  await field("Ghi chú (bắt buộc, ví dụ: đã chuyển trả 50.000 đ cho An lúc 20:15)").fill("Đã chuyển trả 50.000 đ");
+  await confirm();
+  assert.equal(bankTransfers[0].processing_status, "RESOLVED");
+  assert.equal(bankTransfers[0].resolution, "RETURNED_TO_SENDER");
+  await page.getByText("Ghi chú: Đã chuyển trả 50.000 đ", { exact: true }).waitFor();
+  assert.equal(fund.current_balance, "0", "Resolving never moves money");
+  await tab("Chốt quỹ"); await page.getByText(/Mọi khoản đã xử lý xong/).waitFor();
+  assert.deepEqual(readinessChecks.at(-1), []);
+  await button("Yêu cầu chốt quỹ").click();
   assert.equal(await button("Tiếp tục").count(), 0, "Creating a closure has one confirmation screen.");
   await confirm(); assert.equal(fund.status, "CLOSING");
   // Another account confirms first; only their own confirmation is recorded.
@@ -425,7 +468,10 @@ try {
   const balanceBeforeMomo = fund.current_balance;
   await button('Đóng').click();
   await goto(); await tab('Đợt góp');
-  await button('Góp bằng MoMo Test').click();
+  // While MoMo has not answered, manual actions are hidden behind the pending attempt.
+  await page.getByText(/Đang chờ kết quả MoMo/).waitFor();
+  assert.equal(await page.getByRole("button", { name: /^Báo đã chuyển tiền/ }).count(), 0);
+  await button('Xem thanh toán MoMo').click();
   await button('Mở MoMo Test').waitFor();
   assert.equal(momoCreates().length, 1, 'Resume does not create another payment');
   assert.equal(fund.current_balance, balanceBeforeMomo, 'Opening checkout does not post money');

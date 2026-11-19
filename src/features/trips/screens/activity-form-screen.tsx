@@ -133,6 +133,7 @@ function ActivityForm({
     dateLabel(activity?.ends_at ?? initialDay, trip.timezone),
   );
   const [validation, setValidation] = useState<string>();
+  const tripFirstDay = calendarLabel(dateKey(trip.start_at, trip.timezone));
   async function submit() {
     if (stale || resource.loading || resource.error || command.busy) return;
     if (!title.trim() || title.trim().length > 255) {
@@ -265,6 +266,7 @@ function ActivityForm({
           <DateTimeField
             label="Ngày"
             value={date}
+            minimum={tripFirstDay}
             onChangeText={setDate}
             editable={!command.busy}
           />
@@ -279,6 +281,7 @@ function ActivityForm({
           <DateTimeField
             label="Ngày bắt đầu"
             value={date}
+            minimum={tripFirstDay}
             onChangeText={setDate}
             editable={!command.busy}
           />
@@ -305,6 +308,7 @@ function ActivityForm({
           <DateTimeField
             label="Ngày kết thúc"
             value={endDate}
+            minimum={parseDate(date) ? date : tripFirstDay}
             onChangeText={setEndDate}
             editable={!command.busy}
           />

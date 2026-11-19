@@ -13,6 +13,7 @@ import { Button } from '@/shared/ui/button';
 import { Details } from '@/shared/ui/details';
 import { Feedback } from '@/shared/ui/feedback';
 import { FormField } from '@/shared/ui/form-field';
+import { MoneyField } from '@/shared/ui/money-field';
 import { Notice, ui } from '@/shared/ui/journal';
 import { useKeyboardScroll } from '@/shared/ui/keyboard-scroll';
 import type { QrSandboxCheckout, QrSandboxInput } from '../api';
@@ -86,7 +87,7 @@ export function PaymentQrTransfer({ payment, tripId, simulationOnly = false, onS
   return <View style={ui.stack}>
     {!prepared ? <>
       {!payment.amount && <Text style={typography.footnote}>QR chưa có số tiền. Nhập số tiền bạn muốn chuyển.</Text>}
-      <FormField icon="wallet" label="Số tiền chuyển (VND)" value={amount} onChangeText={value => { setAmount(value); setMessage(undefined); }} keyboardType="number-pad" maxLength={13} placeholder="Ví dụ: 150000" />
+      <MoneyField label="Số tiền chuyển (VND)" value={amount} onChangeText={value => { setAmount(value); setMessage(undefined); }} maxDigits={13} placeholder="Ví dụ: 150.000" />
       {/^[1-9]\d{0,12}$/.test(amount) && <Text style={typography.headline}>{money(amount)}</Text>}
       <FormField icon="edit" label="Nội dung chuyển khoản" value={note} onChangeText={value => { setNote(value); setMessage(undefined); }} maxLength={150} placeholder="Ví dụ: Thanh toan bua toi" />
       <Button label="Chọn ứng dụng thanh toán" onPress={() => {

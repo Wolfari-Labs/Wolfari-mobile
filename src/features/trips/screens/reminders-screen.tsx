@@ -1,9 +1,9 @@
 import { errorMessage } from "@/shared/api/errors";
 import { useCallback, useState } from "react";
-import { Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useCommand } from "@/shared/hooks/use-command";
 import { useResource } from "@/shared/hooks/use-resource";
-import { typography } from "@/shared/theme/tokens";
+import { colors, fonts, radii, typography } from "@/shared/theme/tokens";
 import { Button } from "@/shared/ui/button";
 import { Details } from "@/shared/ui/details";
 import { DateTimeField } from "@/shared/ui/date-time-field";
@@ -15,6 +15,7 @@ import { useTrip } from "../hooks/use-trip";
 import { defaultReminderTime, reminderInput, reminderSources } from "../model/reminders";
 import { dateLabel, timeLabel } from "../utils";
 
+const PAGE = 8;
 const statuses = { PENDING: "Chờ đến giờ", PROCESSING: "Đang xử lý", SENT: "Đã tạo thông báo", CANCELLED: "Đã hủy", FAILED: "Chưa gửi được" };
 export default function RemindersScreen() {
   const trip = useTrip(), { api, id, data } = trip;
@@ -23,9 +24,19 @@ export default function RemindersScreen() {
   const [type, setType] = useState<"ACTIVITY" | "PACKING">("ACTIVITY"), [selected, setSelected] = useState("");
   const [query, setQuery] = useState(""), [date, setDate] = useState(""), [time, setTime] = useState("");
   const [error, setError] = useState<string>(), [success, setSuccess] = useState<string>();
+  const [shown, setShown] = useState(PAGE);
   const sources = data ? reminderSources(data.plan) : [];
   const visible = sources.filter(item => item.type === type && item.label.toLocaleLowerCase("vi").includes(query.trim().toLocaleLowerCase("vi")));
   const source = sources.find(item => item.id === selected && item.type === type);
+  const tz = data?.trip.timezone ?? "Asia/Ho_Chi_Minh";
+  // Grouped by day in time order, so a long plan reads like a calendar instead of a button wall.
+  const page = [...visible].sort((a, b) => Date.parse(a.at) - Date.parse(b.at)).slice(0, shown);
+  const groups = [...new Set(page.map(item => dateLabel(item.at, tz)))];
+  function choose(item: (typeof sources)[number]) {
+    setSelected(item.id);
+    const value = defaultReminderTime(item, tz);
+    setDate(value.date); setTime(value.time); setError(undefined); setSuccess(undefined);
+  }
   const enabled = !!data && data.trip.lifecycle !== "ARCHIVED" && !trip.loading && !trip.error;
   async function create() {
     if (!enabled || !data || command.busy) return;
@@ -42,13 +53,29 @@ export default function RemindersScreen() {
     <Text style={typography.footnote}>Lịch nhắc riêng · Múi giờ {data?.trip.timezone ?? "của chuyến đi"}</Text>
     <Details title="Khi kế hoạch thay đổi"><Text style={typography.footnote}>Lịch nhắc cũ được hủy khi mục đã hoàn thành, đổi giờ, chuyến đi lưu trữ hoặc bạn không còn tham gia. Đặt lại lịch nếu cần.</Text></Details>
     {enabled && <>
-      <Segments value={type} items={[{ value: "ACTIVITY", label: "Hoạt động" }, { value: "PACKING", label: "Hành lý" }]} onChange={value => { if (!command.busy) { setType(value); setSelected(""); setError(undefined); } }} />
-      <FormField label="Tìm hoạt động hoặc vật dụng" icon="search" value={query} onChangeText={setQuery} maxLength={200} />
-      {!visible.length && <Notice>Chưa có mục phù hợp có giờ bắt đầu/hạn chuẩn bị trong tương lai. Hãy cập nhật lịch trình hoặc hành lý trước.</Notice>}
-      {visible.slice(0, 50).map(item => <Button key={item.id} label={`${selected === item.id ? "✓ " : ""}${item.label}`} variant={selected === item.id ? "primary" : "soft"} disabled={command.busy} onPress={() => { setSelected(item.id); const value = defaultReminderTime(item, data!.trip.timezone); setDate(value.date); setTime(value.time); setError(undefined); setSuccess(undefined); }} />)}
-      {visible.length > 50 && <Notice>Nhập tên để thu hẹp danh sách; đang hiển thị 50 mục đầu.</Notice>}
+      <Segments value={type} items={[{ value: "ACTIVITY", label: "Hoạt động" }, { value: "PACKING", label: "Hành lý" }]} onChange={value => { if (!command.busy) { setType(value); setSelected(""); setShown(PAGE); setError(undefined); } }} />
+      {source ? <View style={styles.chosen}>
+        <View style={{ flex: 1 }}>
+          <Text style={typography.headline}>{source.label}</Text>
+          <Text style={typography.footnote}>{source.type === "PACKING" ? "Hạn chuẩn bị" : "Bắt đầu"} {dateLabel(source.at, tz)} · {timeLabel(source.at, tz)}</Text>
+        </View>
+        <Button label="Đổi mục" compact variant="soft" disabled={command.busy} onPress={() => setSelected("")} />
+      </View> : <>
+        <FormField label="Tìm hoạt động hoặc vật dụng" icon="search" value={query} onChangeText={value => { setQuery(value); setShown(PAGE); }} maxLength={200} />
+        {!visible.length && <Notice>Chưa có mục phù hợp có giờ bắt đầu/hạn chuẩn bị trong tương lai. Hãy cập nhật lịch trình hoặc hành lý trước.</Notice>}
+        {groups.map(group => <View key={group} style={styles.group}>
+          <Text style={styles.groupTitle}>{group}</Text>
+          {page.filter(item => dateLabel(item.at, tz) === group).map(item => <Pressable key={item.id} cssInterop={false}
+            accessibilityRole="button" accessibilityLabel={item.label} accessibilityHint={`${timeLabel(item.at, tz)}. Chọn để đặt giờ nhắc`}
+            disabled={command.busy} onPress={() => choose(item)}
+            style={({ pressed }) => [styles.option, pressed && { opacity: 0.7 }]}>
+            <Text style={styles.optionTime}>{timeLabel(item.at, tz)}</Text>
+            <Text numberOfLines={2} style={[typography.body, { flex: 1 }]}>{item.label}</Text>
+          </Pressable>)}
+        </View>)}
+        {visible.length > shown && <Button label={`Xem thêm ${Math.min(PAGE, visible.length - shown)} mục`} compact variant="soft" onPress={() => setShown(value => value + PAGE)} />}
+      </>}
       {source && <>
-        <Text style={typography.footnote}>Mốc cần chuẩn bị: {dateLabel(source.at, data!.trip.timezone)} {timeLabel(source.at, data!.trip.timezone)}</Text>
         <DateTimeField label="Ngày nhắc" mode="date" value={date} onChangeText={setDate} editable={!command.busy} />
         <DateTimeField label="Giờ nhắc" mode="time" value={time} onChangeText={setTime} editable={!command.busy} />
         <Button label="Lưu lịch nhắc" loading={command.busy} onPress={() => { void create(); }} />
@@ -71,3 +98,20 @@ export default function RemindersScreen() {
     </View>; })}
   </Screen>;
 }
+
+const styles = StyleSheet.create({
+  group: { gap: 6 },
+  groupTitle: { color: colors.muted, fontSize: 13, fontFamily: fonts.bold },
+  option: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    minHeight: 48,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: radii.control,
+    backgroundColor: colors.surface,
+  },
+  optionTime: { minWidth: 48, color: colors.teal, fontFamily: fonts.bold, fontVariant: ["tabular-nums"] },
+  chosen: { flexDirection: "row", alignItems: "center", gap: 12, padding: 14, borderRadius: radii.card, backgroundColor: colors.tealSoft },
+});

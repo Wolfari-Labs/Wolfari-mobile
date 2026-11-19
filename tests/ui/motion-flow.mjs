@@ -82,12 +82,12 @@ async function run({ reduced = false, blockCanvas = false } = {}) {
     assert.ok(pixelDelta.max <= 8 && pixelDelta.mean <= 0.5, `Decorative drawing must settle: ${JSON.stringify(pixelDelta)}`);
     await page.screenshot({ path: path.join(output, `home-${suffix}.png`) });
     await page.getByRole("tab", { name: "Chuyến đi", exact: true }).click();
-    await page.getByLabel("Tìm chuyến đi đã tải", { exact: true }).waitFor();
+    await page.getByLabel("Tìm chuyến đi", { exact: true }).waitFor();
     await page.getByRole("button", { name: "Mở chuyến đi Đà Nẵng cùng nhau" }).waitFor();
     await page.getByRole("tab", { name: "Chuyến đi", exact: true, selected: true }).waitFor();
-    await page.getByLabel("Tìm chuyến đi đã tải", { exact: true }).fill("không tồn tại");
+    await page.getByLabel("Tìm chuyến đi", { exact: true }).fill("không tồn tại");
     await page.getByText("Trang hành trình còn trống", { exact: true }).waitFor();
-    await page.getByLabel("Tìm chuyến đi đã tải", { exact: true }).fill("");
+    await page.getByLabel("Tìm chuyến đi", { exact: true }).fill("");
     await page.setViewportSize({ width: 320, height: 720 });
     await page.waitForTimeout(600);
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));

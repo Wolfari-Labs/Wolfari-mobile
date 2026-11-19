@@ -71,7 +71,7 @@ function Inbox({ filter, setFilter }: { filter: "all" | "unread"; setFilter(valu
         <View style={{ width: 10, height: 10, borderRadius: 5, marginTop: 6, backgroundColor: item.read_at ? "transparent" : colors.teal }} />
         <View style={ui.flex}>
           <Text style={typography.headline}>{item.title}</Text>
-          <Text style={[typography.body, { color: colors.muted }]}>{item.type === "TRIP_INVITATION" ? "Bạn được mời tham gia một chuyến đi. Mở email lời mời để lấy mã, rồi dán vào màn Lời mời chuyến đi." : item.body}</Text>
+          <Text style={[typography.body, { color: colors.muted }]}>{item.type === "TRIP_INVITATION" ? "Bạn được mời tham gia một chuyến đi. Mở liên kết hoặc mã mời bạn nhận được (email, tin nhắn) rồi dán vào màn Lời mời chuyến đi." : item.body}</Text>
           <Text style={[typography.footnote, { marginTop: 4 }]}>{timeLabel(item.created_at)}</Text>
         </View>
       </Pressable>)}

@@ -58,3 +58,11 @@ test("editing packing details preserves an existing deadline until its date chan
   );
   assert.equal(packingInput({ ...form, due: "" }, context).due_at, null);
 });
+
+test("packing quantities read naturally in Vietnamese", async () => {
+  const { quantityLabel } = await import("../src/features/trips/model/packing.ts");
+  assert.equal(quantityLabel("1.50", "chai"), "1,5 chai");
+  assert.equal(quantityLabel("2", "cái"), "2 cái");
+  assert.equal(quantityLabel("3.00", null), "3");
+  assert.equal(quantityLabel("1.25", "  "), "1,25");
+});

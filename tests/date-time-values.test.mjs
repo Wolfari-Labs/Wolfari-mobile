@@ -27,3 +27,31 @@ test("native time selection preserves midnight, late hours and leading zeros", (
   for (const invalid of ["24:00", "12:60", ""])
     assert.equal(pickerText(pickerValue(invalid, "time"), "time"), "08:00");
 });
+
+test("month grid starts on Monday and covers leap Februaries", async () => {
+  const { monthCells } = await import("../src/shared/ui/date-time-values.ts");
+  const november = monthCells(2026, 10);
+  assert.equal(november.indexOf(1), 6, "1/11/2026 is a Sunday");
+  assert.equal(november.at(-1), 30);
+  assert.equal(monthCells(2028, 1).at(-1), 29);
+  assert.equal(monthCells(2027, 1).at(-1), 28);
+});
+
+test("minimum picker date accepts only real DD/MM/YYYY days", async () => {
+  const { minimumPickerDate } = await import("../src/shared/ui/date-time-values.ts");
+  assert.equal(minimumPickerDate("12/11/2026")?.toISOString(), "2026-11-12T12:00:00.000Z");
+  for (const invalid of [undefined, "", "31/02/2026", "2026-11-12", "1/1/2026"])
+    assert.equal(minimumPickerDate(invalid), undefined);
+});
+
+test("money input keeps raw digits and groups thousands for display", async () => {
+  const { groupMoney, moneyDigits, moneyWords } = await import("../src/shared/ui/money-input.ts");
+  assert.equal(moneyDigits("1.500.000 ₫"), "1500000");
+  assert.equal(moneyDigits("12345", 3), "123");
+  assert.equal(groupMoney("1500000"), "1.500.000");
+  assert.equal(groupMoney("0"), "0");
+  assert.equal(groupMoney(""), "");
+  assert.equal(moneyWords("1500000"), "1,5 triệu");
+  assert.equal(moneyWords("250000"), "250 nghìn");
+  assert.equal(moneyWords("999"), undefined);
+});

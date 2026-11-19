@@ -1,4 +1,3 @@
-import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import Animated from "react-native-reanimated";
@@ -9,6 +8,7 @@ import { DesignIcon } from "@/shared/ui/design-icon";
 import { GlassSurface } from "@/shared/ui/glass-surface";
 import type { Trip } from "../types";
 import { lifecycleLabels, tripDates } from "../utils";
+import { TripCoverImage } from "./trip-cover";
 import { openTrip } from "./trip-navigation";
 
 export function coverFor(trip: Pick<Trip, "name">) {
@@ -21,7 +21,7 @@ export function TripCard({ trip, ticket = false, interactive = true, compact = f
 }) {
   const press = usePressMotion(!interactive);
   const content = compact ? <>
-    <Image source={coverFor(trip)} style={styles.thumb} contentFit="cover" accessible={false} />
+    <TripCoverImage trip={trip} fallback={coverFor(trip)} style={styles.thumb} label={trip.name} />
     <View style={styles.copy}>
       <Text style={typography.headline} numberOfLines={2}>{trip.name}</Text>
       <Text style={typography.footnote}>{tripDates(trip)}</Text>
@@ -31,7 +31,7 @@ export function TripCard({ trip, ticket = false, interactive = true, compact = f
   </> : <>
     <LinearGradient pointerEvents="none" colors={gradients.card} style={[StyleSheet.absoluteFill, styles.background]} />
     <View style={[styles.cover, !interactive && styles.overviewCover]}>
-      <Image source={coverFor(trip)} style={StyleSheet.absoluteFill} contentFit="cover" accessibilityLabel={trip.name} />
+      <TripCoverImage trip={trip} fallback={coverFor(trip)} style={StyleSheet.absoluteFill} label={trip.name} />
       <GlassSurface variant="subtle" style={styles.badge}>
         <View style={[styles.dot, { backgroundColor: trip.lifecycle === "ONGOING" ? colors.pinGreen : colors.blue }]} />
         <Text style={styles.badgeText}>{lifecycleLabels[trip.lifecycle]}</Text>

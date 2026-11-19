@@ -35,6 +35,14 @@ export default function MembersScreen() {
   const owner = data?.trip.current_membership.role === "OWNER";
   const archived = data?.trip.lifecycle === "ARCHIVED";
   const canManage = owner && !archived && !resource.loading && !resource.error;
+  // Owner and plan editors may invite; only the Owner manages everyone's invitations here.
+  const inviter = !!data && !archived && (data.trip.permissions.can_invite ?? owner);
+  // An archived trip still shows its pending invitations, read-only.
+  // Owner manages every invitation; other inviters manage only the ones they created.
+  const canManageInvitation = (invitation: Invitation) =>
+    !archived && !resource.loading && !resource.error &&
+    (owner || (inviter && !!profile?.id && invitation.invited_by_user_id === profile.id));
+  const seesInvitations = !!data && (owner || data.trip.permissions.can_invite === true);
   const [includeLeft, setIncludeLeft] = useState(false);
   const members = useResource(
     useCallback(
@@ -52,14 +60,14 @@ export default function MembersScreen() {
         ),
       [api, id],
     ),
-    owner,
+    seesInvitations,
   );
   const [selected, setSelected] = useState<Invitation>();
   const [action, setAction] = useState<"resend" | "revoke">("resend");
   const pending =
     invitations.data?.filter((item) => item.status === "PENDING") ?? [];
   async function manage() {
-    if (!selected || !canManage || invitations.loading || invitations.error) return;
+    if (!selected || !canManageInvitation(selected) || invitations.loading || invitations.error) return;
     const result = await command.run(
       { id: selected.id, action, version: selected.version },
       (key) => api.trips.manageInvitation(id, selected, action, key),
@@ -84,7 +92,7 @@ export default function MembersScreen() {
         title="Bạn đồng hành"
         subtitle={`${members.data ? `${members.data.length} thành viên · ` : ""}${data?.trip.name ?? "Hành trình của nhóm"}`}
         aside={
-          canManage ? (
+          inviter && !resource.loading && !resource.error ? (
             <IconButton
               icon="plus"
               label="Mời thành viên"
@@ -150,7 +158,7 @@ export default function MembersScreen() {
           icon="users"
         />
       )}
-      {owner && (
+      {seesInvitations && (
         <>
           <Text
             accessibilityRole="header"
@@ -168,12 +176,15 @@ export default function MembersScreen() {
           {pending.map((invitation) => (
             <View key={invitation.id} style={ui.card}>
               <Text style={typography.headline}>
-                {invitation.email ?? "Lời mời bằng liên kết"}
+                {invitation.email ?? (invitation.code_hint ? `Mã mời ••••-${invitation.code_hint}` : "Lời mời bằng mã")}
               </Text>
               <Text style={typography.footnote}>
                 Hết hạn {dateLabel(invitation.expires_at)}
               </Text>
-              {canManage && <View style={ui.row}>
+              {!owner && invitation.invited_by_user_id === profile?.id && (
+                <Text style={typography.footnote}>Lời mời do bạn tạo</Text>
+              )}
+              {canManageInvitation(invitation) && <View style={ui.row}>
                 {invitation.invitation_type === "EMAIL" && (
                   <Button
                     label="Gửi lại"
@@ -206,14 +217,14 @@ export default function MembersScreen() {
               Các lời mời đang chờ sẽ xuất hiện ở đây.
             </Text>
           )}
-          <SectionLink
+          {owner && <SectionLink
             title="Quyền của nhóm"
             subtitle="Ai có thể chỉnh sửa kế hoạch"
             icon="gear"
             onPress={() =>
               router.push({ pathname: "/trip/[id]/settings", params: { id } })
             }
-          />
+          />}
         </>
       )}
       <Sheet
@@ -225,11 +236,11 @@ export default function MembersScreen() {
         }}
       >
         <Text style={typography.body}>
-          {selected?.email ?? "Lời mời bằng liên kết"}
+          {selected?.email ?? (selected?.code_hint ? `Mã mời ••••-${selected.code_hint}` : "Lời mời bằng mã")}
         </Text>
         <Text style={typography.footnote}>
           {action === "revoke"
-            ? "Liên kết mời này sẽ không còn dùng để tham gia chuyến đi."
+            ? "Mã mời này sẽ không còn dùng để tham gia chuyến đi."
             : "Một lời mời mới sẽ được gửi tới địa chỉ email này."}
         </Text>
         {command.error && (
@@ -249,7 +260,7 @@ export default function MembersScreen() {
           label={action === "resend" ? "Gửi lại lời mời" : "Xác nhận thu hồi"}
           variant={action === "revoke" ? "destructive" : "primary"}
           loading={command.busy}
-          disabled={!canManage || invitations.loading || !!invitations.error}
+          disabled={!selected || !canManageInvitation(selected) || invitations.loading || !!invitations.error}
           onPress={() => {
             void manage();
           }}

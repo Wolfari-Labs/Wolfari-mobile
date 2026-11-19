@@ -75,6 +75,8 @@ let activities = ["Ăn sáng", "Tham quan", "Ăn trưa", "Ngày khác"].map(
     plan_version: 1,
   }),
 );
+const initialActivities = activities.map((activity) => ({ ...activity }));
+const patches = [];
 const writes = [],
   receipts = new Map(),
   errors = [];
@@ -97,7 +99,7 @@ await context.route("**/api/v1/**", async (route) => {
     "Access-Control-Allow-Credentials": "true",
     "Access-Control-Allow-Headers":
       "Content-Type,Authorization,X-Client-Type,X-CSRF-Token,Idempotency-Key",
-    "Access-Control-Allow-Methods": "GET,POST,PUT,OPTIONS",
+    "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,OPTIONS",
   };
   const respond = (data, status = 200) =>
     route.fulfill({
@@ -129,6 +131,20 @@ await context.route("**/api/v1/**", async (route) => {
     return respond({ items: [trip], next_cursor: null });
   if (endpoint === `/trips/${tripId}`) return respond(trip);
   if (endpoint === `/trips/${tripId}/plan`) return respond(currentPlan());
+  const patched = /^\/trips\/[^/]+\/activities\/([^/]+)$/.exec(endpoint);
+  if (patched && method === "PATCH") {
+    const body = req.postDataJSON();
+    if (body.expected_plan_version !== trip.plan_version)
+      return fail(409, "VERSION_CONFLICT");
+    patches.push({ id: patched[1], ...body });
+    activities = activities.map((activity) =>
+      activity.id === patched[1]
+        ? { ...activity, starts_at: body.starts_at, ends_at: body.ends_at, scheduled_date: body.scheduled_date ?? null }
+        : activity,
+    );
+    trip.plan_version++;
+    return respond({ ...activities.find((activity) => activity.id === patched[1]), plan_version: trip.plan_version });
+  }
   if (endpoint === `/trips/${tripId}/activities/order`) {
     assert.equal(method, "PUT");
     const body = req.postDataJSON(),
@@ -480,6 +496,57 @@ try {
     .waitFor();
   assert.ok(activities.findIndex((a) => a.title === firstTitle) > 3);
   assert.equal(activities[3].title, "Ngày khác");
+  // Picking a time moves the activity to its chronological slot and saves both.
+  activities = initialActivities.map((activity) => ({ ...activity }));
+  trip.plan_version++;
+  await page.reload({ waitUntil: "networkidle" });
+  await openEditor();
+  await button("Đổi lịch Ăn trưa, 10:00").click();
+  await page.getByLabel("Bắt đầu", { exact: true }).fill("07:00");
+  // The end follows the start and keeps the 30-minute length.
+  assert.equal(await page.getByLabel("Kết thúc", { exact: true }).inputValue(), "07:30");
+  await button("Áp dụng").click();
+  await button("Đổi lịch Ăn trưa, 07:00").waitFor();
+  const shownOrder = await page
+    .locator('[data-testid^="order-row-"]')
+    .evaluateAll((rows) => rows.map((row) => row.getAttribute("data-testid")));
+  assert.deepEqual(shownOrder.slice(0, 3), [
+    `order-row-${initialActivities[2].id}`,
+    `order-row-${initialActivities[0].id}`,
+    `order-row-${initialActivities[1].id}`,
+  ]);
+  let patchesBefore = patches.length;
+  await button("Lưu thứ tự cho nhóm").click();
+  await page.getByText("Đã lưu thứ tự và lịch mới cho cả nhóm.").waitFor();
+  assert.deepEqual(
+    activities.filter((a) => a.title !== "Ngày khác").map((a) => a.title),
+    ["Ăn trưa", "Ăn sáng", "Tham quan"],
+  );
+  assert.equal(patches.length, patchesBefore + 1);
+  assert.equal(patches.at(-1).starts_at, "2026-11-12T00:00:00.000Z");
+  assert.equal(patches.at(-1).ends_at, "2026-11-12T00:30:00.000Z");
+  assert.equal(activities.find((a) => a.title === "Ăn sáng").starts_at, "2026-11-12T01:00:00Z");
+  // Moving to another day as an all-day activity lands at the end of that day.
+  await openEditor();
+  await button("Đổi lịch Tham quan, 09:00").click();
+  await button("Chuyển sang Ngày 2, 13/11").click();
+  await page.getByText("Cả ngày", { exact: true }).last().click();
+  await button("Áp dụng").click();
+  await page.getByText("Đang sắp xếp ngày 13/11").waitFor();
+  await button("Đổi lịch Tham quan, Cả ngày").waitFor();
+  patchesBefore = patches.length;
+  await button("Lưu thứ tự cho nhóm").click();
+  await page.getByText("Đã lưu thứ tự và lịch mới cho cả nhóm.").waitFor();
+  assert.equal(patches.length, patchesBefore + 1);
+  assert.equal(patches.at(-1).starts_at, null);
+  assert.equal(patches.at(-1).ends_at, null);
+  assert.equal(patches.at(-1).scheduled_date, "2026-11-13");
+  const moved = activities.find((a) => a.title === "Tham quan");
+  assert.equal(moved.scheduled_date, "2026-11-13");
+  assert.ok(
+    activities.indexOf(moved) > activities.findIndex((a) => a.title === "Ngày khác"),
+    "An all-day move goes after the activities already on that day.",
+  );
   await peer.close();
   assert.deepEqual(errors, []);
   console.log(

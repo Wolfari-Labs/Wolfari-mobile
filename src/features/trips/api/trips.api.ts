@@ -23,6 +23,9 @@ import type {
   Trip,
 } from "../types";
 
+const invitationBody = (secret: string) =>
+  secret.startsWith("inv1_") ? { token: secret } : { code: secret };
+
 export function createTripsApi(client: ApiClient) {
   const id = encodeURIComponent;
   const write = (
@@ -53,9 +56,13 @@ export function createTripsApi(client: ApiClient) {
     update: (
       trip: Trip,
       input: {
-        name: string;
-        description: string | null;
-        public_description: string | null;
+        name?: string;
+        description?: string | null;
+        public_description?: string | null;
+        start_at?: string;
+        end_at?: string;
+        timezone?: string;
+        budget_amount?: string | null;
       },
       key: string,
     ) =>
@@ -73,6 +80,12 @@ export function createTripsApi(client: ApiClient) {
       ),
     plan: (tripId: string, signal?: AbortSignal) =>
       client.request<Plan>(`/trips/${id(tripId)}/plan`, { signal }),
+    uploadCover: (tripId: string, body: FormData) =>
+      client.request<Trip>(`/trips/${id(tripId)}/cover`, { method: "POST", body }),
+    removeCover: (tripId: string) =>
+      client.request<Trip>(`/trips/${id(tripId)}/cover`, { method: "DELETE" }),
+    cover: (tripId: string, signal?: AbortSignal) =>
+      client.request<Blob>(`/trips/${id(tripId)}/cover`, { responseType: "blob", signal }),
     reorder: (
       tripId: string,
       activityIds: string[],
@@ -231,20 +244,21 @@ export function createTripsApi(client: ApiClient) {
         `/trips/${id(tripId)}/invitations/${id(invitation.id)}/${action}`,
         write("POST", { expected_version: invitation.version }, key),
       ),
-    previewInvitation: (token: string, signal?: AbortSignal) =>
+    /** `secret` is a short join code (XXXX-XXXX) or a legacy inv1_ link token. */
+    previewInvitation: (secret: string, signal?: AbortSignal) =>
       client.request<InvitationPreview>("/invitations/preview", {
         method: "POST",
-        body: { token },
+        body: invitationBody(secret),
         signal,
       }),
     respondInvitation: (
-      token: string,
+      secret: string,
       action: "accept" | "decline",
       key: string,
     ) =>
       client.request<{ membership?: Membership }>(
         `/invitations/${action}`,
-        write("POST", { token }, key),
+        write("POST", invitationBody(secret), key),
       ),
     searchPlaces: (tripId: string, q: string, signal?: AbortSignal) =>
       client.requestWithMeta<TravelPlace[], TravelMeta>(

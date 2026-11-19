@@ -74,8 +74,19 @@ export function localTimestamp(date: string, time: string, timezone: string): st
 }
 // The shared plan owns order. Timestamps are labels, not a client-side override.
 export function sortedActivities(items: Activity[]) { return [...items].sort((a, b) => a.position - b.position || a.id.localeCompare(b.id)); }
+/** Short join code as typed or read aloud → XXXX-XXXX (Crockford base32); undefined otherwise. */
+export function joinCode(value: string): string | undefined {
+  const code = value.trim().toUpperCase().replace(/[\s-]/g, "").replace(/O/g, "0").replace(/[IL]/g, "1");
+  return /^[0-9A-HJKMNP-TV-Z]{8}$/.test(code) ? `${code.slice(0, 4)}-${code.slice(4)}` : undefined;
+}
+/** A join code, a legacy inv1_ token, or a pasted link/message containing either. */
 export function invitationToken(value: string) {
   const match = /(?:^|[#?&])token=(inv1_[A-Za-z0-9_-]{43})(?:&|$)/.exec(value.trim());
   const token = match?.[1] ?? value.trim();
-  return /^inv1_[A-Za-z0-9_-]{43}$/.test(token) ? token : undefined;
+  if (/^inv1_[A-Za-z0-9_-]{43}$/.test(token)) return token;
+  const direct = joinCode(value);
+  if (direct) return direct;
+  // A shared message: pick the XXXX-XXXX code out of the text.
+  const found = /\b([0-9A-Za-z]{4})-([0-9A-Za-z]{4})\b/.exec(value);
+  return found ? joinCode(`${found[1]}${found[2]}`) : undefined;
 }

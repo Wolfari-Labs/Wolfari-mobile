@@ -4,6 +4,7 @@ import { colors, typography } from "@/shared/theme/tokens";
 import { Button } from "@/shared/ui/button";
 import { Feedback } from "@/shared/ui/feedback";
 import { FormField } from "@/shared/ui/form-field";
+import { MoneyField } from "@/shared/ui/money-field";
 import { EmptyState, Progress, Segments, ui } from "@/shared/ui/journal";
 import { Sheet } from "@/shared/ui/sheet";
 import { layered } from "@/shared/ui/page-intro";
@@ -335,7 +336,7 @@ export default function DemoFundScreen() {
         } })} /> : <>
           <Text style={typography.footnote}>Dùng tiền mẫu để thử góp quỹ. Chỉ cập nhật sổ quỹ mẫu trên màn hình này.</Text>
           <MemberPicker label="Người góp mẫu" value={contributor} onChange={setContributor} />
-          <FormField label="Số tiền góp mô phỏng (VND)" icon="wallet" keyboardType="number-pad" maxLength={12} value={contributionAmount} onChangeText={setContributionAmount} />
+          <MoneyField label="Số tiền góp mô phỏng (VND)" maxDigits={12} value={contributionAmount} onChangeText={setContributionAmount} />
           {error && <Feedback message={error} />}
           <Button label="Tiếp tục góp quỹ mô phỏng" onPress={() => {
             try { const amount = String(parseAmount(contributionAmount.trim())); setError(undefined); setPreparedContribution({ amount, member: contributor }); }
@@ -368,11 +369,9 @@ export default function DemoFundScreen() {
               onChangeText={(title) => setEditing({ ...editing, title })}
               placeholder="Ví dụ: Góp quỹ đợt 2"
             />
-            <FormField
+            <MoneyField
               label="Số tiền (VND)"
-              icon="wallet"
-              keyboardType="number-pad"
-              maxLength={12}
+              maxDigits={12}
               value={editing.amount}
               onChangeText={(amount) => setEditing({ ...editing, amount })}
             />

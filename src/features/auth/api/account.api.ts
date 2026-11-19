@@ -9,8 +9,14 @@ export function createAccountApi(client: ApiClient) {
     resetPassword: (token: string, new_password: string) => client.request<AcceptedResponse>("/auth/password-resets", {
       method: "POST", body: { token, new_password },
     }),
+    resetPasswordWithCode: (email: string, code: string, new_password: string) => client.request<AcceptedResponse>("/auth/password-resets", {
+      method: "POST", body: { email: email.trim().toLowerCase(), code, new_password },
+    }),
     confirmEmail: (token: string) => client.request<AcceptedResponse>("/auth/email-verifications/confirm", {
       method: "POST", body: { token },
+    }),
+    confirmEmailCode: (email: string, code: string) => client.request<AcceptedResponse>("/auth/email-verifications/confirm", {
+      method: "POST", body: { email: email.trim().toLowerCase(), code },
     }),
     resendVerification: () => client.request<AcceptedResponse>("/auth/email-verifications", { method: "POST", body: {} }),
     changePassword: (current_password: string, new_password: string) => client.request<AcceptedResponse>("/me/password-change", {

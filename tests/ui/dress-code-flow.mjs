@@ -193,15 +193,15 @@ try {
   assert.equal(await button('Chọn ảnh tham khảo').count(), 0);
   await button('Đóng').click();
 
-  // An older backend without the capability keeps the device-draft experience.
+  // An older backend without the capability gets a notice and never writes.
   server.capability = false;
   server.editable = true;
   const before = writes().length;
   await goto("/trip/" + tripId + "/dress-code");
-  await text("Bản nháp riêng · Chỉ lưu trên thiết bị").waitFor();
+  await text(/chưa hỗ trợ dress code dùng chung/).waitFor();
   assert.equal(writes().length, before);
   assert.deepEqual(errors, []);
-  console.log("Dress code UI passed: server list, validation, create/edit/delete, scope filter, version conflict recovery, viewer mode, draft fallback, 402px layout.");
+  console.log("Dress code UI passed: server list, validation, create/edit/delete, scope filter, version conflict recovery, viewer mode, old-server notice, 402px layout.");
 } catch (error) {
   await page.screenshot({ path: path.join(output, 'failure.png') });
   console.error((await page.locator('body').innerText()).slice(-2000));

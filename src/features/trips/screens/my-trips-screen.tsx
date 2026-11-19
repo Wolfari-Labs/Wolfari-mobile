@@ -1,5 +1,5 @@
 import { router } from "expo-router";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { StyleSheet, Text, TextInput, View } from "react-native";
 
 import { useApi } from "@/shared/api/use-api";
@@ -68,6 +68,18 @@ export default function MyTripsScreen() {
       setMore(false);
     }
   }
+  const searching = query.trim().length > 0;
+  const nextCursor = resource.data?.next_cursor;
+  const latestLoadMore = useRef(loadMore);
+  useEffect(() => {
+    latestLoadMore.current = loadMore;
+  });
+  // A search covers every trip: keep fetching the remaining pages (debounced while typing).
+  useEffect(() => {
+    if (!searching || !nextCursor || resource.loading || moreError) return;
+    const timer = setTimeout(() => void latestLoadMore.current(), 400);
+    return () => clearTimeout(timer);
+  }, [searching, nextCursor, resource.loading, moreError]);
   const items = resource.data?.items ?? [];
   const visible = queryTrips(items, filter, query, sort);
   const featured = filter === "ALL" && !query.trim() && sort === "default"
@@ -85,7 +97,7 @@ export default function MyTripsScreen() {
     >
       <View style={styles.search}>
         <DesignIcon name="search" size={20} tintColor={colors.muted} />
-        <TextInput accessibilityLabel="Tìm chuyến đi đã tải" value={query} onChangeText={setQuery} maxLength={200}
+        <TextInput accessibilityLabel="Tìm chuyến đi" value={query} onChangeText={setQuery} maxLength={200}
           placeholder="Tìm chuyến đi, điểm đến…" placeholderTextColor={colors.muted} style={styles.input} returnKeyType="search" />
         <IconButton icon="filter" label="Sắp xếp chuyến đi" onPress={() => setSortOpen(true)} />
       </View>
@@ -106,7 +118,7 @@ export default function MyTripsScreen() {
         />
       </View>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-        <Text style={[typography.footnote, { flex: 1 }]}>{visible.length} / {items.length} hành trình đã tải</Text>
+        <Text style={[typography.footnote, { flex: 1 }]}>{searching ? `${visible.length} kết quả${nextCursor ? " · đang tìm thêm…" : ""}` : `${items.length} hành trình`}</Text>
         <Text style={typography.footnote}>{sort === "default" ? "Mặc định" : sort === "asc" ? "Ngày tăng" : "Ngày giảm"}</Text>
       </View>
       <ResourceFeedback
@@ -120,12 +132,11 @@ export default function MyTripsScreen() {
       {resource.data && !visible.length && (
         <EmptyState
           title="Trang hành trình còn trống"
-          message="Không có chuyến phù hợp trong các trang đã tải. Thử đổi từ khóa, bộ lọc hoặc tải thêm."
+          message={searching && nextCursor ? "Đang tìm trong các chuyến đi còn lại…" : "Không có chuyến phù hợp. Thử đổi từ khóa hoặc bộ lọc."}
         />
       )}
       {moreError && <Feedback message={moreError} />}
-      <Text style={typography.footnote}>Bộ lọc, số đếm và sắp xếp áp dụng cho các trang đã tải{resource.data?.next_cursor ? "; bấm Xem thêm để tìm trong các chuyến còn lại." : "."}</Text>
-      {resource.data?.next_cursor && (
+      {nextCursor && !searching && (
         <Button
           label="Xem thêm chuyến đi"
           loading={more}
@@ -141,7 +152,7 @@ export default function MyTripsScreen() {
         onPress={() => router.push("/create-trip")}
       />
       <Sheet visible={sortOpen} title="Sắp xếp chuyến đi" onClose={() => setSortOpen(false)}>
-        <Text style={typography.footnote}>Sắp xếp theo ngày bắt đầu trong các chuyến đã tải.</Text>
+        <Text style={typography.footnote}>Sắp xếp theo ngày bắt đầu.</Text>
         <Segments value={sort} onChange={(value) => { setSort(value); setSortOpen(false); }} items={[{ value: "default", label: "Mặc định" }, { value: "asc", label: "Ngày tăng" }, { value: "desc", label: "Ngày giảm" }]} />
       </Sheet>
     </Screen>

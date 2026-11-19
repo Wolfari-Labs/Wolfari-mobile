@@ -406,7 +406,7 @@ try {
   await tab('Khoản chi').click();
   await button('Tạo khoản chi').click();
   await field('Nội dung').fill('Bữa trưa thử nghiệm');
-  await field('Số tiền (VND, chỉ chữ số)').fill('100000');
+  await field('Số tiền (VND)').fill('100000');
   await confirmSheet();
   await settle();
   await page.getByText('Bữa trưa thử nghiệm · 100.000 ₫', { exact: true }).waitFor();
@@ -448,7 +448,8 @@ try {
   await button('Tạo theo dõi giá').click();
   await field('Mã sân bay đi').fill('sgn');
   await field('Mã sân bay đến').fill('dad');
-  await field('Ngày đi (UTC)').fill(date);
+  await field('Ngày bay').fill(`${date.slice(8)}/${date.slice(5, 7)}/${date.slice(0, 4)}`);
+  await field('Giờ khởi hành (giờ Việt Nam)').fill('19:00');
   await field('Ngưỡng giá riêng (VND)').fill('2000000');
   await save();
   await page.getByText('SGN → DAD', { exact: true }).waitFor();

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createApiClient, ApiError } from "../src/shared/api/api-client.ts";
 import { createAccountApi } from "../src/features/auth/api/account.api.ts";
-import { accountToken, passwordError } from "../src/features/auth/account-validation.ts";
+import { accountToken, emailCodeInput, isEmailCode, passwordError } from "../src/features/auth/account-validation.ts";
 import { createTripsApi } from "../src/features/trips/api/trips.api.ts";
 import { membershipCommitted, membershipPending, membershipMessage } from "../src/features/trips/membership-operation.ts";
 
@@ -18,6 +18,14 @@ test("account links are parsed locally and password rules count Unicode code poi
   assert.ok(passwordError("a".repeat(15), "b".repeat(15)));
 });
 
+test("emailed codes keep digits only and must be exactly six", () => {
+  assert.equal(emailCodeInput("012 345"), "012345");
+  assert.equal(emailCodeInput(" 12-34-56-78 "), "123456");
+  assert.equal(emailCodeInput("abc"), "");
+  assert.equal(isEmailCode("012345"), true);
+  for (const invalid of ["12345", "1234567", "12345a", ""]) assert.equal(isEmailCode(invalid), false);
+});
+
 test("account APIs match the strict Identity DTOs and do not retry a wrong current password as expired auth", async () => {
   const calls = [];
   const api = createAccountApi({ request: async (path, options) => { calls.push({ path, ...options }); return {}; } });
@@ -28,6 +36,12 @@ test("account APIs match the strict Identity DTOs and do not retry a wrong curre
   assert.deepEqual(calls.at(-1).body, { token: "token", new_password: "new-password" });
   await api.confirmEmail("token");
   assert.deepEqual(calls.at(-1).body, { token: "token" });
+  await api.confirmEmailCode(" Demo@Example.TEST ", "012345");
+  assert.equal(calls.at(-1).path, "/auth/email-verifications/confirm");
+  assert.deepEqual(calls.at(-1).body, { email: "demo@example.test", code: "012345" });
+  await api.resetPasswordWithCode("DEMO@example.test", "654321", "new-password");
+  assert.equal(calls.at(-1).path, "/auth/password-resets");
+  assert.deepEqual(calls.at(-1).body, { email: "demo@example.test", code: "654321", new_password: "new-password" });
   await api.resendVerification();
   assert.deepEqual(calls.at(-1).body, {});
   await api.changePassword("old", "new");

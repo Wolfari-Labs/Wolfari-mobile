@@ -157,6 +157,7 @@ await context.route("**/api/v1/**", async (route) => {
   if (pathname === "/trips" && method === "POST") {
     assert.equal(body.client_request_id, headers["idempotency-key"]);
     assert.deepEqual(Object.keys(body).sort(), [
+      "budget_amount",
       "client_request_id",
       "description",
       "end_at",
@@ -164,6 +165,7 @@ await context.route("**/api/v1/**", async (route) => {
       "start_at",
       "timezone",
     ]);
+    assert.equal(body.budget_amount, "6000000");
     trip = { ...trip, ...body };
     return respond(201, trip);
   }
@@ -390,21 +392,16 @@ try {
     .getByLabel("Lời nhắn cho nhóm", { exact: true })
     .fill("Cùng nhau khám phá Đà Nẵng");
   await screenshot("m07-create-details.png");
-  // Invalid step-2 draft fields must not trap the user on step 1 after going back.
-  await page.getByLabel("Số người dự kiến", { exact: true }).fill("0");
+  // Going back to step 1 keeps step-2 input; the budget is saved with the trip.
+  await page.getByLabel("Ngân sách dự kiến (VND)", { exact: true }).fill("6000000");
   await page.getByRole("tab", { name: "1  Thông tin", exact: true }).click();
   await page.getByLabel("Tên chuyến đi", { exact: true }).waitFor();
   await click("Tiếp tục");
-  await page.getByLabel("Số người dự kiến", { exact: true }).waitFor();
-  await click("Tạo chuyến đi");
-  await page
-    .getByText("Số người dự kiến phải là số nguyên từ 1 trở lên.", { exact: true })
-    .waitFor();
+  assert.equal(await page.getByLabel("Ngân sách dự kiến (VND)", { exact: true }).inputValue(), "6.000.000");
   assert.equal(
     requests.filter((r) => r.pathname === "/trips" && r.method === "POST").length,
     0,
   );
-  await page.getByLabel("Số người dự kiến", { exact: true }).fill("2");
   await click("Tạo chuyến đi");
   await page.getByRole("tab", { name: "Tổng quan", exact: true }).waitFor();
   await screenshot("m08-overview.png");
@@ -507,6 +504,8 @@ try {
   await page.getByText("Minh Anh · Bạn", { exact: true }).waitFor();
   await screenshot("m16-members.png");
   await click("Mời thành viên");
+  // Sharing a link is the default; email is the secondary tab.
+  await page.getByRole("tab", { name: "Qua email", exact: true }).click();
   await page
     .getByLabel("Email người được mời", { exact: true })
     .fill("friend@example.test");
@@ -535,7 +534,7 @@ try {
   await click(`Mở chuyến đi ${trip.name}`);
   await page.getByRole("tab", { name: "Tiện ích", exact: true }).click();
   await click("Hành lý");
-  await page.getByText('Đã chuẩn bị đủ hành lý.', { exact: true }).waitFor();
+  await page.getByText('Cả nhóm đã chuẩn bị', { exact: true }).waitFor();
   assert.equal(await button('Danh sách đã sẵn sàng!').count(), 0, 'Packing completion stays inline without a popup.');
   await screenshot("m13-packing.png");
   await page.getByRole("tab", { name: "Tài khoản", exact: true }).click();

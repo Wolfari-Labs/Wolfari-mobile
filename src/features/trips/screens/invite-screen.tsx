@@ -1,74 +1,323 @@
 import * as Clipboard from "expo-clipboard";
 import { Image } from "expo-image";
+import * as Linking from "expo-linking";
 import { router } from "expo-router";
 import { useState } from "react";
-import { Share, Text, View } from "react-native";
+import { Share, StyleSheet, Text, View } from "react-native";
 
 import { useCommand } from "@/shared/hooks/use-command";
-import { typography } from "@/shared/theme/tokens";
+import { colors, fonts, radii, typography } from "@/shared/theme/tokens";
 import { Button } from "@/shared/ui/button";
 import { designAssets } from "@/shared/ui/design-assets";
+import { DesignIcon } from "@/shared/ui/design-icon";
 import { Feedback } from "@/shared/ui/feedback";
 import { FormField } from "@/shared/ui/form-field";
-import { EmptyState, Heading, Notice, ResourceFeedback, Segments } from "@/shared/ui/journal";
+import { EmptyState, Heading, Notice, ResourceFeedback, SectionLink, Segments } from "@/shared/ui/journal";
 import { Screen } from "@/shared/ui/screen";
+import { InviteQr } from "../components/invite-qr";
 import { useTrip } from "../hooks/use-trip";
+import { inviteMessage } from "../model/invite-message";
 import type { InvitationResult } from "../types";
-import { dateLabel, invitationToken } from "../utils";
+import { dateLabel } from "../utils";
+
+const STEPS = [
+  "Gửi mã qua Zalo, Messenger, tin nhắn — hoặc cho bạn quét QR ngay tại chỗ.",
+  "Bạn bè mở Wolfari → Tài khoản → Lời mời chuyến đi và nhập mã.",
+  "Khi họ nhận lời, bạn sẽ thấy họ trong Bạn đồng hành.",
+];
 
 export default function InviteScreen() {
   const resource = useTrip();
   const { data, api, id } = resource;
   const command = useCommand();
-  const [kind, setKind] = useState<"EMAIL" | "LINK">("EMAIL");
+  const [kind, setKind] = useState<"LINK" | "EMAIL">("LINK");
   const [email, setEmail] = useState("");
   const [validation, setValidation] = useState<string>();
   const [result, setResult] = useState<InvitationResult>();
   const [copied, setCopied] = useState(false);
-  const code = result?.one_time_link ? invitationToken(result.one_time_link) : undefined;
+  const [shareError, setShareError] = useState<string>();
+  const code = result?.join_code;
+  const archived = data?.trip.lifecycle === "ARCHIVED";
+  // Owner and members who may edit the plan can invite; older servers omit can_invite.
+  const allowed = !archived && (data?.trip.permissions.can_invite ?? data?.trip.current_membership.role === "OWNER");
+  const writable = allowed && !resource.loading && !resource.error;
+
   async function copy() {
     if (!code) return;
     await Clipboard.setStringAsync(code);
     setCopied(true);
   }
   async function share() {
-    if (!data || !result?.one_time_link) return;
-    const message = `Mình mời bạn tham gia chuyến đi "${data.trip.name}" trên Wolfari!\nMở app → Tài khoản → Lời mời chuyến đi, rồi dán mã:\n${code ?? result.one_time_link}\nMã hết hạn ${dateLabel(result.invitation.expires_at)}, chỉ dùng được một lần.`;
-    try { await Share.share({ message }); } catch { /* user closed share sheet */ }
+    if (!data || !result || !code) return;
+    setShareError(undefined);
+    const message = inviteMessage({
+      tripName: data.trip.name,
+      code,
+      expiresLabel: dateLabel(result.invitation.expires_at),
+    });
+    try {
+      await Share.share({ message, title: `Lời mời: ${data.trip.name}` });
+    } catch {
+      setShareError("Thiết bị này chưa mở được bảng chia sẻ. Hãy sao chép mã và gửi cho bạn bè.");
+    }
   }
-  const archived = data?.trip.lifecycle === "ARCHIVED";
-  const allowed = data?.trip.current_membership.role === "OWNER" && !archived;
-  const writable = allowed && !resource.loading && !resource.error;
   async function submit() {
     if (!data || !writable) return;
-    if (kind === "EMAIL" && (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) || email.trim().length > 255)) { setValidation("Vui lòng nhập địa chỉ email hợp lệ."); return; }
+    if (kind === "EMAIL" && (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) || email.trim().length > 255)) {
+      setValidation("Vui lòng nhập địa chỉ email hợp lệ.");
+      return;
+    }
     setValidation(undefined);
-    const response = await command.run({ kind, email: kind === "EMAIL" ? email.trim().toLowerCase() : undefined, revision: data.trip.membership_revision }, key => kind === "EMAIL" ? api.trips.invite(data.trip, email, key) : api.trips.inviteLink(data.trip, key));
-    if (response) setResult(response);
+    const response = await command.run(
+      { kind, email: kind === "EMAIL" ? email.trim().toLowerCase() : undefined, revision: data.trip.membership_revision },
+      (key) => (kind === "EMAIL" ? api.trips.invite(data.trip, email, key) : api.trips.inviteLink(data.trip, key)),
+    );
+    if (response) {
+      setResult(response);
+      setCopied(false);
+    }
   }
-  return <Screen title="Mời thành viên" bottomPadding={24} footer={allowed && !result ? <Button label={kind === "EMAIL" ? "Gửi lời mời" : "Tạo liên kết mời"} loading={command.busy} disabled={!writable} onPress={() => { void submit(); }} /> : undefined}>
-    <ResourceFeedback {...resource} hasData={!!data} onRetry={() => { void resource.reload(); }} />
-    {data && (allowed ? <>
-      <Heading title={"Đi cùng nhau,\nvui hơn nhiều!"} aside={<Image source={designAssets.mascot} style={{ width: 84, height: 84 }} contentFit="contain" />} subtitle={"Mời bạn bè tham gia " + data.trip.name + "."} />
-      {result ? <>
-        <Feedback success message={(result.invitation.email ? "Lời mời cho " + result.invitation.email : "Lời mời bằng liên kết") + " đã được tạo. Hết hạn " + dateLabel(result.invitation.expires_at) + "."} />
-        {result.one_time_link ? <View style={{ gap: 12 }}>
-          <Text style={typography.footnote}>Gửi mã này cho người bạn muốn mời. Họ mở app → Lời mời chuyến đi và dán mã. Mã chỉ dùng được một lần.</Text>
-          <Text selectable numberOfLines={1} ellipsizeMode="middle" style={typography.headline}>{code ?? result.one_time_link}</Text>
-          <View style={{ flexDirection: "row", gap: 12 }}>
-            <Button label={copied ? "Đã sao chép ✓" : "Sao chép mã"} variant="soft" style={{ flex: 1 }} onPress={() => { void copy(); }} />
-            <Button label="Chia sẻ" style={{ flex: 1 }} onPress={() => { void share(); }} />
-          </View>
-        </View> : result.invitation.invitation_type === "LINK" && <Notice>Máy chủ không trả lại liên kết bí mật ở lần thử này. Bạn có thể thu hồi lời mời trong Thành viên trước khi tạo lời mời khác.</Notice>}
-        <Button label="Xem bạn đồng hành" onPress={() => router.replace({ pathname: "/trip/[id]/members", params: { id } })} />
-        <Button label="Mời thêm một người bạn" variant="soft" onPress={() => { setResult(undefined); setEmail(""); setCopied(false); }} />
-      </> : <>
-        <Segments items={[{ value: "EMAIL", label: "Qua email" }, { value: "LINK", label: "Bằng liên kết" }]} value={kind} onChange={value => { if (!command.busy) { setKind(value); setValidation(undefined); } }} />
-        {validation && <Feedback message={validation} />}
-        {command.error && <><Feedback message={command.error} /><Button label="Cập nhật thông tin nhóm" variant="soft" compact onPress={() => { void resource.reload(); }} /></>}
-        {kind === "EMAIL" ? <FormField label="Email người được mời" icon="mail" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" autoComplete="email" placeholder="banbe@email.com" editable={!command.busy} /> : <Notice>Người có liên kết hợp lệ và đáp ứng điều kiện tài khoản của hệ thống có thể nhận lời mời. Không đăng liên kết công khai.</Notice>}
-        <Text style={typography.footnote}>Người nhận cần đăng nhập để phản hồi. Bạn có thể thu hồi lời mời trong danh sách thành viên.</Text>
-      </>}
-    </> : <EmptyState title={archived ? "Chuyến đi đã lưu trữ" : "Cùng mời bạn bè"} message={archived ? "Không thể tạo lời mời cho chuyến đi đã lưu trữ. Bạn vẫn có thể xem danh sách thành viên." : "Người tổ chức chuyến đi có quyền gửi lời mời cho nhóm."} icon="users" />)}
-  </Screen>;
+  /** The secret code is returned only once; a new code means revoking this one first. */
+  async function regenerate() {
+    if (!result || !writable) return;
+    const old = result.invitation;
+    const revoked = await command.run({ revoke: old.id, version: old.version }, (key) =>
+      api.trips.manageInvitation(id, old, "revoke", key),
+    );
+    if (!revoked) return;
+    const fresh = await resource.reload();
+    if (!fresh) return;
+    const next = await command.run({ kind: "LINK", replaces: old.id, revision: fresh.trip.membership_revision }, (key) =>
+      api.trips.inviteLink(fresh.trip, key),
+    );
+    if (next) {
+      setResult(next);
+      setCopied(false);
+    } else setResult(undefined);
+  }
+  function reset() {
+    setResult(undefined);
+    setEmail("");
+    setCopied(false);
+    setShareError(undefined);
+  }
+
+  return (
+    <Screen
+      title="Mời thành viên"
+      bottomPadding={24}
+      footer={
+        allowed && !result ? (
+          <Button
+            label={kind === "EMAIL" ? "Gửi lời mời" : "Tạo mã mời"}
+            loading={command.busy}
+            disabled={!writable}
+            onPress={() => {
+              void submit();
+            }}
+          />
+        ) : undefined
+      }
+    >
+      <ResourceFeedback {...resource} hasData={!!data} onRetry={() => { void resource.reload(); }} />
+      {data &&
+        (allowed ? (
+          <>
+            <Heading
+              title={"Đi cùng nhau,\nvui hơn nhiều!"}
+              aside={<Image source={designAssets.mascot} style={{ width: 84, height: 84 }} contentFit="contain" />}
+              subtitle={"Mời bạn bè tham gia " + data.trip.name + "."}
+            />
+            {command.error && (
+              <>
+                <Feedback message={command.error} />
+                <Button label="Cập nhật thông tin nhóm" variant="soft" compact onPress={() => { void resource.reload(); }} />
+              </>
+            )}
+            {result ? (
+              <>
+                <Feedback
+                  success
+                  message={
+                    (result.invitation.email ? "Lời mời cho " + result.invitation.email : "Mã mời") +
+                    " đã được tạo. Hết hạn " +
+                    dateLabel(result.invitation.expires_at) +
+                    "."
+                  }
+                />
+                {code ? (
+                  <View style={styles.ticket}>
+                    <View style={styles.ticketHead}>
+                      <DesignIcon name="users" size={18} tintColor={colors.teal} />
+                      <Text style={[typography.headline, { flex: 1 }]}>Mã mời vào nhóm</Text>
+                      <Text style={styles.expiry}>Dùng 1 lần · hết hạn {dateLabel(result.invitation.expires_at)}</Text>
+                    </View>
+                    <Text selectable accessibilityLabel={`Mã mời ${code.split("").join(" ")}`} style={styles.code}>
+                      {code}
+                    </Text>
+                    {/* Phone cameras open the app straight on the invitation with the code filled in. */}
+                    <InviteQr
+                      value={Linking.createURL("/invitation", { queryParams: { code } })}
+                      label={`Mã QR lời mời ${code}`}
+                    />
+                    <Text style={[typography.footnote, { textAlign: "center" }]}>Bạn ngồi cạnh có thể quét QR bằng camera điện thoại.</Text>
+                    <Button
+                      label="Chia sẻ mã mời"
+                      icon="users"
+                      onPress={() => {
+                        void share();
+                      }}
+                    />
+                    <Button
+                      label={copied ? "Đã sao chép ✓" : "Sao chép mã"}
+                      variant="soft"
+                      compact
+                      onPress={() => {
+                        void copy();
+                      }}
+                    />
+                    {shareError && <Feedback message={shareError} />}
+                    <View style={styles.steps}>
+                      {STEPS.map((step, index) => (
+                        <View key={step} style={styles.step}>
+                          <Text style={styles.stepIndex}>{index + 1}</Text>
+                          <Text style={[typography.footnote, { flex: 1 }]}>{step}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                ) : (
+                  result.invitation.invitation_type === "LINK" && (
+                    <Notice>
+                      Máy chủ không trả lại mã ở lần thử này. Hãy tạo mã mới; mã cũ sẽ được thu hồi.
+                    </Notice>
+                  )
+                )}
+                {result.invitation.invitation_type === "LINK" && (
+                  <Button
+                    label="Tạo mã mới (thu hồi mã này)"
+                    variant="soft"
+                    compact
+                    loading={command.busy}
+                    disabled={!writable}
+                    onPress={() => {
+                      void regenerate();
+                    }}
+                  />
+                )}
+                <Button label="Mời thêm một người bạn" variant="soft" disabled={command.busy} onPress={reset} />
+                <Button
+                  label="Xem bạn đồng hành"
+                  variant="text"
+                  onPress={() => router.replace({ pathname: "/trip/[id]/members", params: { id } })}
+                />
+              </>
+            ) : (
+              <>
+                <Segments
+                  items={[
+                    { value: "LINK", label: "Bằng mã mời" },
+                    { value: "EMAIL", label: "Qua email" },
+                  ]}
+                  value={kind}
+                  onChange={(value) => {
+                    if (!command.busy) {
+                      setKind(value);
+                      setValidation(undefined);
+                    }
+                  }}
+                />
+                {validation && <Feedback message={validation} />}
+                {kind === "EMAIL" ? (
+                  <>
+                    <FormField
+                      label="Email người được mời"
+                      icon="mail"
+                      value={email}
+                      onChangeText={setEmail}
+                      autoCapitalize="none"
+                      keyboardType="email-address"
+                      autoComplete="email"
+                      placeholder="banbe@email.com"
+                      editable={!command.busy}
+                    />
+                    <Text style={typography.footnote}>
+                      Wolfari gửi email kèm liên kết. Người nhận đăng nhập bằng đúng email này để nhận lời.
+                    </Text>
+                  </>
+                ) : (
+                  <View style={styles.steps}>
+                    {STEPS.map((step, index) => (
+                      <View key={step} style={styles.step}>
+                        <Text style={styles.stepIndex}>{index + 1}</Text>
+                        <Text style={[typography.footnote, { flex: 1 }]}>{step}</Text>
+                      </View>
+                    ))}
+                    <Text style={typography.footnote}>
+                      Mỗi mã dùng cho một người. Chỉ gửi cho người bạn muốn mời; ai có mã còn hạn đều có thể nhận lời.
+                    </Text>
+                  </View>
+                )}
+              </>
+            )}
+            <SectionLink
+              title="Lời mời đang chờ"
+              subtitle="Gửi lại hoặc thu hồi trong Bạn đồng hành"
+              icon="users"
+              onPress={() => router.push({ pathname: "/trip/[id]/members", params: { id } })}
+            />
+          </>
+        ) : (
+          <EmptyState
+            title={archived ? "Chuyến đi đã lưu trữ" : "Cùng mời bạn bè"}
+            message={
+              archived
+                ? "Không thể tạo lời mời cho chuyến đi đã lưu trữ. Bạn vẫn có thể xem danh sách thành viên."
+                : "Người tổ chức và những thành viên được quyền sửa kế hoạch có thể mời bạn bè."
+            }
+            icon="users"
+          />
+        ))}
+    </Screen>
+  );
 }
+
+const styles = StyleSheet.create({
+  ticket: {
+    gap: 12,
+    padding: 18,
+    borderRadius: radii.card,
+    backgroundColor: colors.surface,
+    borderWidth: 1.5,
+    borderStyle: "dashed",
+    borderColor: colors.teal,
+  },
+  ticketHead: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
+  expiry: { color: colors.muted, fontSize: 12, fontFamily: fonts.bold },
+  code: {
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    borderRadius: radii.control,
+    backgroundColor: colors.tealSoft,
+    color: colors.ink,
+    fontSize: 30,
+    fontFamily: fonts.bold,
+    textAlign: "center",
+    letterSpacing: 4,
+    fontVariant: ["tabular-nums"],
+  },
+  steps: { gap: 10 },
+  step: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  stepIndex: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    overflow: "hidden",
+    textAlign: "center",
+    lineHeight: 24,
+    fontSize: 12,
+    fontFamily: fonts.bold,
+    color: colors.surface,
+    backgroundColor: colors.teal,
+  },
+});

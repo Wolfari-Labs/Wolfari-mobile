@@ -26,6 +26,8 @@ type Props = {
   activities: Activity[];
   timezone: string;
   clearedTimeIds: ReadonlySet<string>;
+  changedTimeIds?: ReadonlySet<string>;
+  onEditTime?: (activity: Activity) => void;
   disabled: boolean;
   onChange: (ids: string[]) => void;
   onDragging: (dragging: boolean) => void;
@@ -58,6 +60,8 @@ export function ActivityOrderList({
   activities,
   timezone,
   clearedTimeIds,
+  changedTimeIds,
+  onEditTime,
   disabled,
   onChange,
   onDragging,
@@ -190,11 +194,12 @@ export function ActivityOrderList({
     <View
       ref={viewport}
       testID="activity-order-list"
-      style={{ maxHeight: Math.max(150, height * 0.37), flexShrink: 1 }}
+      style={{ maxHeight: Math.max(220, height * 0.56), flexShrink: 1 }}
     >
       <ScrollView
         ref={scroll}
         scrollEnabled={!activeId}
+        nestedScrollEnabled
         bounces={false}
         overScrollMode="never"
         scrollEventThrottle={16}
@@ -223,11 +228,37 @@ export function ActivityOrderList({
             }}
           >
             <View style={styles.copy}>
-              <Text style={styles.time}>
-                {index + 1} · {clearedTimeIds.has(activity.id)
-                  ? `Chưa chốt giờ · bỏ ${activityTimeLabel(activity, timezone)} khi lưu`
-                  : activityTimeLabel(activity, timezone)}
-              </Text>
+              <View style={styles.meta}>
+                <Text style={styles.index}>{index + 1}</Text>
+                {onEditTime ? (
+                  <Pressable
+                    cssInterop={false}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Đổi lịch ${activity.title}, ${activityTimeLabel(activity, timezone)}`}
+                    disabled={locked || !!activeId}
+                    accessibilityState={{ disabled: locked || !!activeId }}
+                    onPress={() => onEditTime(activity)}
+                    style={({ pressed }) => [
+                      styles.timePill,
+                      changedTimeIds?.has(activity.id) && styles.timeChanged,
+                      pressed && { opacity: 0.6 },
+                    ]}
+                  >
+                    <Text style={[styles.time, changedTimeIds?.has(activity.id) && styles.timeChangedText]}>
+                      {clearedTimeIds.has(activity.id)
+                        ? `Chưa chốt giờ · bỏ ${activityTimeLabel(activity, timezone)} khi lưu`
+                        : activityTimeLabel(activity, timezone)}
+                      {" ✎"}
+                    </Text>
+                  </Pressable>
+                ) : (
+                  <Text style={styles.time}>
+                    {clearedTimeIds.has(activity.id)
+                      ? `Chưa chốt giờ · bỏ ${activityTimeLabel(activity, timezone)} khi lưu`
+                      : activityTimeLabel(activity, timezone)}
+                  </Text>
+                )}
+              </View>
               <Text style={typography.headline}>{activity.title}</Text>
             </View>
             <View>
@@ -322,6 +353,28 @@ const styles = StyleSheet.create({
     borderColor: "transparent",
   },
   copy: { flex: 1, minWidth: 0, paddingVertical: 14, gap: 4 },
+  meta: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
+  index: {
+    minWidth: 22,
+    height: 22,
+    borderRadius: 11,
+    overflow: "hidden",
+    textAlign: "center",
+    lineHeight: 22,
+    fontSize: 12,
+    fontWeight: "800",
+    color: colors.ink,
+    backgroundColor: colors.fill,
+  },
+  timePill: {
+    minHeight: 32,
+    justifyContent: "center",
+    paddingHorizontal: 10,
+    borderRadius: 16,
+    backgroundColor: colors.tealSoft,
+  },
+  timeChanged: { backgroundColor: colors.lilac },
+  timeChangedText: { color: colors.violet },
   time: { color: colors.teal, fontSize: 12, fontWeight: "600" },
   arrow: {
     width: 44,

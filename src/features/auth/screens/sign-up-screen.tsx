@@ -27,7 +27,6 @@ export default function SignUpScreen() {
   const [errors, setErrors] = useState<AuthFieldErrors>({});
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [accepted, setAccepted] = useState(false);
   const submitting = useRef(false);
   const mounted = useRef(true);
   const emailInput = useRef<TextInputInstance>(null);
@@ -56,7 +55,8 @@ export default function SignUpScreen() {
       if (mounted.current) {
         setPassword("");
         setConfirmation("");
-        setAccepted(true);
+        // The same 202 answers new and existing emails, so the next step is always the code screen.
+        router.replace({ pathname: "/verify-email", params: { email: email.trim().toLowerCase(), sent: "1" } });
       }
     } catch (cause) {
       if (mounted.current) setError(authErrorMessage(cause));
@@ -67,14 +67,6 @@ export default function SignUpScreen() {
   }
 
   if (status === "authenticated") return <Redirect href={pendingInvitation.get() ? "/invitation" : "/(tabs)"} />;
-  if (accepted) return <Screen title="Kiểm tra email" onBack={() => router.replace("/sign-in")}>
-    <Text accessibilityRole="header" style={typography.section}>Kiểm tra email của bạn</Text>
-    <Text style={typography.body}>Mở email Wolfari trên điện thoại và bấm liên kết xác minh để hoàn tất đăng ký.</Text>
-    <Button label="Xác minh email" onPress={() => router.replace("/verify-email")} />
-    <Pressable accessibilityRole="link" onPress={() => router.replace("/sign-in")} style={styles.linkAction}>
-      <Text style={[typography.body, styles.link]}>Đã có tài khoản? Đăng nhập</Text>
-    </Pressable>
-  </Screen>;
   return (
     <Screen title="Tạo tài khoản">
       <AuthIntro registration />

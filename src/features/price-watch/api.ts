@@ -1,6 +1,7 @@
 import { ApiError, type ApiClient } from '../../shared/api/api-client.ts';
 import { decodeRow, object, pageQuery, validateMoney } from '../finance/api.ts';
 import { money, type Page } from '../finance/extended-model.ts';
+import { calendarLabel, dateKey, localTimestamp, parseDate, timeLabel } from '../trips/utils.ts';
 export type WatchInput = {
   provider: 'MOCK_FLIGHT';
   origin: string;
@@ -37,6 +38,43 @@ export type Observation = {
   fetched_at: string;
 };
 export type Observations = Page<Observation> & { stale: boolean; last_error: string | null };
+/** Airports offered as one-tap chips; any other 3-letter IATA code can still be typed. */
+export const QUICK_AIRPORTS = ['SGN', 'HAN', 'DAD', 'CXR', 'PQC', 'HPH'] as const;
+export const WATCH_TIMEZONE = 'Asia/Ho_Chi_Minh';
+
+/**
+ * The form asks for the departure in Vietnam time (DD/MM/YYYY + HH:mm). The API stores a UTC
+ * instant whose UTC calendar day must equal `departure_date`, so both are derived here.
+ */
+export function localWatchValues(
+  values: Record<string, string>,
+  timezone = WATCH_TIMEZONE,
+): Record<string, string> {
+  const day = parseDate(values.departure_date ?? '');
+  const at = day && localTimestamp(day, values.departure_time || '12:00', timezone);
+  if (!at) throw Error('Chọn ngày và giờ khởi hành hợp lệ (giờ Việt Nam).');
+  const round = values.journey_type === 'ROUND_TRIP';
+  const back = round ? parseDate(values.return_date ?? '') : '';
+  if (round && !back) throw Error('Chọn ngày về hợp lệ cho chuyến khứ hồi.');
+  return {
+    ...values,
+    departure_date: at.slice(0, 10),
+    departure_time: at.slice(11, 16),
+    return_date: back ?? '',
+  };
+}
+
+/** Inverse of localWatchValues for the edit form. */
+export function watchFormDates(watch: Watch | undefined, timezone = WATCH_TIMEZONE) {
+  const q = watch?.normalized_query;
+  if (!q) return { departure_date: '', departure_time: '12:00', return_date: '' };
+  return {
+    departure_date: calendarLabel(dateKey(q.departure_at, timezone)),
+    departure_time: timeLabel(q.departure_at, timezone),
+    return_date: q.return_date ? calendarLabel(q.return_date) : '',
+  };
+}
+
 export function watchInput(values: Record<string, string>, now = Date.now()): WatchInput {
   const date = values.departure_date;
   const at = `${date}T${values.departure_time || '12:00'}:00Z`;
@@ -51,7 +89,7 @@ export function watchInput(values: Record<string, string>, now = Date.now()): Wa
     new Date(at).toISOString().slice(0, 10) !== date ||
     Date.parse(at) <= now
   )
-    throw Error('Ngày/giờ khởi hành UTC phải hợp lệ và ở tương lai.');
+    throw Error('Ngày/giờ khởi hành phải hợp lệ và ở tương lai.');
   const origin = values.origin.trim().toUpperCase(),
     destination = values.destination.trim().toUpperCase();
   if (!/^[A-Z]{3}$/.test(origin) || !/^[A-Z]{3}$/.test(destination) || origin === destination)
