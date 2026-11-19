@@ -12,7 +12,6 @@ import { AppHeader } from "@/shared/ui/app-header";
 import { Button } from "@/shared/ui/button";
 import { designAssets } from "@/shared/ui/design-assets";
 import { ResourceFeedback, SectionLink } from "@/shared/ui/journal";
-import { StatGrid, StatTile } from "@/shared/ui/pastel";
 import { Screen } from "@/shared/ui/screen";
 
 export default function HomeScreen() {
@@ -31,10 +30,6 @@ export default function HomeScreen() {
         <TripCard trip={current} ticket />
         <Image source={designAssets.pastelMascot} style={styles.mascot} contentFit="contain" accessible={false} />
       </View>
-      <StatGrid>
-        <StatTile icon="bag" tone="butter" value="Hành lý" label="Cùng nhóm chuẩn bị" onPress={() => router.push({ pathname: "/trip/[id]/packing", params: { id: current.id } })} />
-        <StatTile icon="wallet" tone="mint" value="Quỹ nhóm" label="Đóng góp và chi tiêu" onPress={() => router.push({ pathname: "/trip/[id]/fund", params: { id: current.id } })} />
-      </StatGrid>
     </>}
     <Text accessibilityRole="header" style={typography.section}>Cảm hứng lên đường</Text>
     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.carousel} contentContainerStyle={styles.carouselContent}>

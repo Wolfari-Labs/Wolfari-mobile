@@ -21,8 +21,13 @@ import { paymentTransfer, sandboxAmount, scannedBankDeeplink, type PaymentTransf
 import { openPaymentApp } from '../open-payment-app';
 import { PaymentSimulation } from './payment-simulation';
 
-export type PaymentSimulationOptions = { simulationOnly?: boolean; onSimulatedPayment?: (transfer: PaymentTransfer, paymentId: string) => string | undefined };
-export function PaymentQrTransfer({ payment, tripId, simulationOnly = false, onSimulatedPayment }: { payment: PaymentQr; tripId?: string } & PaymentSimulationOptions) {
+export type PaymentSimulationOptions = {
+  simulationOnly?: boolean;
+  simulationAvailable?: string;
+  simulationSuccessMessage?: string;
+  onSimulatedPayment?: (transfer: PaymentTransfer, paymentId: string) => string | undefined | Promise<string | undefined>;
+};
+export function PaymentQrTransfer({ payment, tripId, simulationOnly = false, onSimulatedPayment, simulationAvailable, simulationSuccessMessage }: { payment: PaymentQr; tripId?: string } & PaymentSimulationOptions) {
   const api = useApi();
   const [amount, setAmount] = useState(payment.amount ?? '');
   const [note, setNote] = useState(payment.note ?? '');
@@ -94,7 +99,7 @@ export function PaymentQrTransfer({ payment, tripId, simulationOnly = false, onS
       <Text selectable style={typography.body}>{prepared.note}</Text>
       {sandboxDisabled && <Notice>MoMo Test chưa được bật. Chọn ngân hàng để tiếp tục chuyển khoản.</Notice>}
       <View accessibilityRole="radiogroup" accessibilityLabel="Ứng dụng thanh toán" style={{ borderWidth: 1, borderColor: colors.line, borderRadius: 16, overflow: 'hidden' }}>
-      <Pressable cssInterop={false} accessibilityRole="radio" accessibilityLabel="Mô phỏng trong app" accessibilityState={{ checked: selected === 'simulation', disabled: busy }} aria-checked={selected === 'simulation'} disabled={busy}
+      <Pressable cssInterop={false} accessibilityRole="radio" accessibilityLabel="Mô phỏng trong app" accessibilityState={{ checked: selected === 'simulation', disabled: busy || !onSimulatedPayment }} aria-checked={selected === 'simulation'} disabled={busy || !onSimulatedPayment}
         onPress={() => { setSelected('simulation'); setMessage(undefined); }} style={{ minHeight: 52, flexDirection: 'row', alignItems: 'center', padding: 12, gap: 12, backgroundColor: selected === 'simulation' ? colors.mint : colors.surface }}>
         <Text style={[typography.body, { flex: 1 }]}>Mô phỏng trong app · Miễn phí</Text><Text style={typography.body}>{selected === 'simulation' ? '●' : '○'}</Text>
       </Pressable>
@@ -113,7 +118,11 @@ export function PaymentQrTransfer({ payment, tripId, simulationOnly = false, onS
       </>}
       </View>
       {!resolveVietQrBank(payment.bankBin) && <Notice>Ngân hàng nhận chưa có trong danh mục. Bạn có thể sao chép thông tin để chuyển khoản thủ công.</Notice>}
-      {selected === 'simulation' ? <PaymentSimulation amount={prepared.amount} note={prepared.note} recipient={prepared.recipientLabel || prepared.account} onSuccess={onSimulatedPayment ? paymentId => onSimulatedPayment(prepared, paymentId) : undefined} /> : selected === 'momo' ? <>
+      {selected === 'simulation' ? <>
+        {simulationAvailable !== undefined && <Text style={typography.headline}>Khả dụng mô phỏng:{'\n'}{money(simulationAvailable)}</Text>}
+        {onSimulatedPayment && <PaymentSimulation amount={prepared.amount} note={prepared.note} recipient={prepared.recipientLabel || prepared.account}
+          onSuccess={paymentId => onSimulatedPayment(prepared, paymentId)} successMessage={simulationSuccessMessage} />}
+      </> : selected === 'momo' ? <>
         <Text style={typography.footnote}>MoMo Test dùng tiền thử, không chuyển vào tài khoản QR hoặc cập nhật quỹ.</Text>
         {checkout ? <>
           <Button label="Mở lại MoMo Test" onPress={() => { void open(checkout.payment_url); }} />

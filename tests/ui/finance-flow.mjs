@@ -262,6 +262,48 @@ try {
   await (await chooser).setFiles({ name: "receipt.png", mimeType: "image/png", buffer: png });
   await button("Đổi ảnh chứng từ").waitFor(); await confirm(); assert.equal(fund.current_balance, "0");
   await action("Xác nhận đã nhận đủ"); assert.equal(fund.current_balance, "500000");
+  // A simulated QR payment from the live workspace persists locally, with no Finance write.
+  await tab('Tổng quan');
+  const writesBeforeSimulation = calls.filter(call => call.method !== 'GET' && !call.p.startsWith('/auth/')).length;
+  async function prepareSimulation(amount) {
+    await button('Quét QR thanh toán').click(); await button('Dán nội dung QR').click();
+    await field('Nội dung QR').fill(makeQr({ bin: '970436', account: '0099998888', amount, note: 'Bua toi mo phong' }));
+    await button('Đọc thông tin QR').click(); await button('Chọn ứng dụng thanh toán').click();
+    await page.getByRole('radio', { name: 'Mô phỏng trong app', exact: true }).click();
+  }
+  await prepareSimulation('150000');
+  await page.evaluate(() => {
+    window.simulationOriginalSetItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function(key, value) {
+      if (key.includes('payment-simulation')) throw new Error('Simulated storage failure');
+      return window.simulationOriginalSetItem.call(this, key, value);
+    };
+  });
+  await button('Xác nhận thanh toán mô phỏng').click();
+  await page.getByText('Chưa lưu được khoản chi mô phỏng trên thiết bị. Hãy thử lại.', { exact: true }).waitFor();
+  assert.equal(await page.getByText('Thanh toán mô phỏng thành công', { exact: true }).count(), 0);
+  await page.evaluate(() => { Storage.prototype.setItem = window.simulationOriginalSetItem; delete window.simulationOriginalSetItem; });
+  await button('Xác nhận thanh toán mô phỏng').click();
+  await page.getByText('Thanh toán mô phỏng thành công', { exact: true }).waitFor();
+  await page.getByRole('dialog').getByText('Khả dụng mô phỏng: 350.000 ₫', { exact: true }).waitFor();
+  assert.equal(await button('Xác nhận thanh toán mô phỏng').count(), 0);
+  await button('Đóng').click();
+  await goto();
+  await page.getByText('Khả dụng mô phỏng: 350.000 ₫', { exact: true }).waitFor();
+  await button('Lịch sử mô phỏng (1)').click();
+  assert.equal(await page.getByText('Bua toi mo phong', { exact: true }).count(), 1);
+  await page.setViewportSize({ width: 320, height: 720 });
+  await page.getByText('Sổ quỹ mô phỏng', { exact: true }).scrollIntoViewIfNeeded();
+  await shot('02-local-simulation-320.png'); await page.setViewportSize({ width: 402, height: 874 });
+  await prepareSimulation('350001'); await button('Xác nhận thanh toán mô phỏng').click();
+  await page.getByText('Số dư mô phỏng không đủ sau khi giữ riêng khoản hoàn đang chờ.', { exact: true }).waitFor();
+  await button('Đóng').click();
+  await button('Lịch sử mô phỏng (1)').waitFor();
+  assert.equal(calls.filter(call => call.method !== 'GET' && !call.p.startsWith('/auth/')).length, writesBeforeSimulation);
+  assert.equal(fund.current_balance, '500000');
+  assert.equal(await page.evaluate(() => Object.values(localStorage).some(value => value.includes('0099998888'))), false);
+  await button('Đặt lại sổ mô phỏng').click();
+  await page.getByText('Sổ quỹ mô phỏng', { exact: true }).waitFor({ state: 'hidden' });
   await tab("Khoản chi"); await button("Tạo khoản chi").click();
   await field("Nội dung").fill("Bữa tối"); await field("Số tiền (VND, chỉ chữ số)").fill("200000"); await confirm();
   await action("Sửa khoản chi", { "Số tiền (VND, chỉ chữ số)": "150000" });

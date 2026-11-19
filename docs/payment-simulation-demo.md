@@ -21,10 +21,14 @@ Ví dụ: số dư mẫu ban đầu 3.300.000 ₫, góp 100.000 ₫ rồi chi 15
 
 ## Quét từ quỹ trên máy chủ
 
-Người giữ quỹ có thể dùng **Quét QR thanh toán → Chọn ứng dụng thanh toán → Mô phỏng trong app**. Lượt này chỉ xem kết quả thử; không tự ghi chi hoặc thay đổi số dư quỹ trên máy chủ. Dùng quỹ mẫu ở trên khi muốn demo cả thay đổi số dư và lịch sử.
+Người giữ quỹ dùng **Quét QR thanh toán → Chọn ứng dụng thanh toán → Mô phỏng trong app**. Lần thanh toán đầu tạo **Sổ quỹ mô phỏng** riêng cho tài khoản và quỹ hiện tại, lấy số dư và khoản hoàn đang giữ chỗ làm mốc. Mỗi thanh toán thành công trừ khả dụng mô phỏng và lưu số tiền, nội dung chuyển khoản đã xem lại, thời điểm và mã lần thử. Số tài khoản/tên người nhận trong QR không được lưu. Quỹ trên máy chủ không đổi.
 
-Dữ liệu quỹ mẫu chỉ tồn tại trong phiên demo. Tải lại trang/khởi động lại app hoặc đặt lại dữ liệu mẫu sẽ khôi phục dữ liệu ban đầu. Giao diện luôn ghi rõ mô phỏng. Không có yêu cầu API tài chính, webhook, mở ngân hàng hoặc ví thật từ luồng mẫu.
+Đóng màn hình thanh toán để xem **Sổ quỹ mô phỏng → Lịch sử mô phỏng** ngay dưới phần quỹ. Mở lại trang/app vẫn còn lịch sử trên thiết bị này; tài khoản hoặc quỹ khác dùng sổ riêng. Dữ liệu hết hạn sau 30 ngày kể từ lần lưu cuối, tối đa 200 khoản. **Đặt lại sổ mô phỏng** xóa lịch sử thử trên thiết bị; lần thử tiếp theo lấy số dư quỹ hiện tại làm mốc mới. Thay đổi quỹ trên máy chủ sau khi bắt đầu không tự thay mốc mô phỏng.
+
+Chỉ báo thanh toán thành công sau khi lưu sổ thành công. Lỗi lưu hoặc thiếu khả dụng không ghi khoản dở dang; thử lại giữ cùng mã thanh toán và không trừ lặp. Số dư mô phỏng được hiện trong màn thanh toán; số dư quỹ chính vẫn lấy từ máy chủ.
+
+Dữ liệu **chuyến đi mẫu** chỉ tồn tại trong phiên demo. Tải lại trang/khởi động lại app hoặc đặt lại dữ liệu mẫu sẽ khôi phục dữ liệu ban đầu. Giao diện luôn ghi rõ mô phỏng. Không có lệnh ghi API tài chính, webhook, mở ngân hàng hoặc ví thật từ thao tác thanh toán mô phỏng.
 
 ## Kiểm chứng
 
-`npm.cmd run lint`, `npm.cmd run typecheck`, `npm.cmd test` và UI suite `node scripts/check-ui.mjs payment-simulation` sau khi export web. UI kiểm tra góp quỹ, thất bại/thử lại, điền sẵn từ QR, thu/chi và lịch sử, tránh ghi trùng, thiếu số dư, reset, màn 320px và không gọi Finance API/mở ví ngoài.
+`npm.cmd run lint`, `npm.cmd run typecheck`, các test `simulated-fund`, `trip-demo`, `payment-transfer` và UI suite `node scripts/check-ui.mjs finance payment-simulation` sau khi export web với `EXPO_PUBLIC_API_URL=https://ci.invalid/api/v1` chỉ dành cho fixture. UI kiểm tra góp quỹ, thất bại/thử lại, điền sẵn từ QR, thu/chi và lịch sử, tránh ghi trùng, thiếu số dư, lỗi lưu/thử lại, mở lại trang vẫn còn lịch sử, reset và màn 320px. Thanh toán mô phỏng không gửi lệnh ghi Finance hoặc mở ví ngoài.

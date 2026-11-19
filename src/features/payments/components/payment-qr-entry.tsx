@@ -40,7 +40,8 @@ function PaymentQrSession({ onClose, tripId, ...simulation }: { onClose: () => v
   </Sheet>;
 }
 
-export function PaymentQrEntry({ simulationOnly, onSimulatedPayment }: PaymentSimulationOptions = {}) {
+export function PaymentQrEntry(simulation: PaymentSimulationOptions = {}) {
+  const { simulationOnly } = simulation;
   const { id } = useLocalSearchParams<{ id?: string }>();
   const [open, setOpen] = useState(false);
   const focused = useIsFocused();
@@ -49,6 +50,6 @@ export function PaymentQrEntry({ simulationOnly, onSimulatedPayment }: PaymentSi
     <View style={[ui.card, { backgroundColor: colors.mint }]}>
       <Button label={simulationOnly ? 'Quét QR thanh toán mô phỏng' : 'Quét QR thanh toán'} icon="wallet" onPress={() => setOpen(true)} />
     </View>
-    {open && focused && <PaymentQrSession tripId={id} simulationOnly={simulationOnly} onSimulatedPayment={onSimulatedPayment} onClose={() => setOpen(false)} />}
+    {open && focused && <PaymentQrSession tripId={id} {...simulation} onClose={() => setOpen(false)} />}
   </>;
 }

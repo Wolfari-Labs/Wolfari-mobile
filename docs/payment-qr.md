@@ -20,11 +20,11 @@ Ngân hàng hỗ trợ điền sẵn: Quân đội, Công thương Việt Nam, �
 
 CRC chỉ phát hiện lỗi dữ liệu, không xác thực người nhận, hạn dùng hoặc trạng thái giao dịch. Người dùng kiểm tra và xác nhận trong app ngân hàng. Wolfari không tự ghi trạng thái “đã thanh toán”, cập nhật quỹ hay tạo nháp khoản chi từ việc mở app.
 
-Dữ liệu quét chỉ ở trong bộ nhớ màn hình, không gửi lên API/analytics, không log hoặc lưu AsyncStorage. Dữ liệu chuyển khoản chỉ gửi VietQR sau thao tác mở rõ ràng nêu trên. Đóng màn hình, đổi tài khoản/chuyến đi hoặc rời trang sẽ bỏ kết quả. Camera tắt sau một kết quả (kể cả lỗi), khi đóng/chuyển chế độ, rời trang hoặc đưa app xuống nền. Nút “Quét mã khác” mở một lượt quét mới.
+Dữ liệu người nhận trong QR chỉ ở trong bộ nhớ màn hình, không gửi lên API/analytics, không log hoặc lưu AsyncStorage. Khi xác nhận **Mô phỏng trong app**, sổ mô phỏng trên thiết bị lưu riêng số tiền, nội dung chuyển khoản đã xem lại, thời điểm và mã lần thử; không lưu tài khoản/tên người nhận. Dữ liệu chuyển khoản chỉ gửi VietQR sau thao tác mở rõ ràng nêu trên. Đóng màn hình, đổi tài khoản/chuyến đi hoặc rời trang sẽ bỏ kết quả quét. Camera tắt sau một kết quả (kể cả lỗi), khi đóng/chuyển chế độ, rời trang hoặc đưa app xuống nền. Nút “Quét mã khác” mở một lượt quét mới.
 
 ## Thử với MoMo Sandbox
 
-Muốn demo ngay, không có khóa: chọn **Mô phỏng trong app** sau khi đọc QR và nhập tiền/nội dung. Xem [pipeline demo mô phỏng](payment-simulation-demo.md) để thử cả góp quỹ, cập nhật số dư mẫu và lịch sử. Lựa chọn này không gọi MoMo hay cập nhật sổ quỹ máy chủ.
+Muốn demo ngay, không có khóa: chọn **Mô phỏng trong app** sau khi đọc QR và nhập tiền/nội dung. Thanh toán thành công sẽ trừ và ghi lịch sử vào **Sổ quỹ mô phỏng** riêng của chuyến đi trên thiết bị. Xem [pipeline demo mô phỏng](payment-simulation-demo.md) về số dư, lưu lại lịch sử và đặt lại sổ. Lựa chọn này không gọi MoMo hay cập nhật sổ quỹ máy chủ.
 
 Sau khi nhập tiền/nội dung, **MoMo Test · Thanh toán thử** được chọn sẵn khi có chuyến đi. Danh sách ngân hàng nằm trong **Chuyển bằng ngân hàng**. Bấm **Mở MoMo Test**; native yêu cầu mở trang thanh toán ngay khi nhận được liên kết, web có nút **Mở lại MoMo Test** để tránh trình duyệt chặn popup sau request bất đồng bộ. Có thể mở lại cùng liên kết. Đây là giao dịch thử với đối tác MoMo cấu hình cho Wolfari, **không chuyển tiền tới tài khoản ngân hàng trong QR**. Chỉ số tiền/nội dung người dùng đã nhập và UUID lần thử được gửi tới backend, không gửi số tài khoản nhận.
 
@@ -39,7 +39,11 @@ Backend local đang đọc `backend/apps/finance-service/.env`. Để thử từ
 3. Build backend và khởi động lại Gateway/Finance theo cách chạy local đang dùng. Nếu dùng `dev:gateway`, khởi động lại bridge để nhận timeout 40 giây cho API thử này.
 4. Cài **MoMo Test**, dùng tài khoản test; quét một VietQR rồi nhập số tiền/nội dung và chọn ví thử. Chưa thực hiện chuyển tiền thật hoặc cài MoMo Test trong kiểm thử tự động.
 
-Kiểm tra ngày 18/11/2026: file Finance local có mode `disabled`, ba khóa trên để trống và URL callback/redirect còn là ví dụ. Chưa thể xác minh end-to-end tới MoMo thật cho đến khi cấu hình test hợp lệ.
+Kiểm tra lại ngày 19/11/2026: Gateway local `/health/ready` trả trạng thái sẵn sàng; file Finance local vẫn có mode `disabled`, ba khóa trên để trống và URL callback/redirect còn là ví dụ. 12 unit test của provider, checkout, callback QR và Gateway đạt, nhưng chưa thể xác minh end-to-end tới MoMo cho đến khi cấu hình test hợp lệ. File cần chỉnh là `backend/apps/finance-service/.env`, không phải `automation-service/.env`.
+
+Lấy bộ khóa **Test** từ tài khoản MoMo for Business (M4B) theo [hướng dẫn tích hợp chính thức](https://developers.momo.vn/v3/vi/docs/payment/onboarding/integration-process/). Tải app từ [trang MoMo dành cho developer](https://developers.momo.vn/v3/download/), tạo ví test theo [Test Instructions](https://developers.momo.vn/v3/docs/payment/onboarding/test-instructions/) và nạp số dư test trước khi thanh toán. Theo hướng dẫn MoMo, OTP test mặc định là `0000` hoặc `000000`; tài khoản mới tự đặt mật khẩu sáu số. Nếu bị yêu cầu eKYC, liên hệ MoMo. Chưa cài app, tạo ví hoặc thử giao dịch bên ngoài trong lần kiểm tra này.
+
+Để thử **cả cập nhật sổ quỹ trên máy chủ**, dùng luồng **góp quỹ**: thêm tài khoản nhận **MoMo Test**, người giữ quỹ xác nhận tài khoản, tạo đợt góp với đích MoMo Test, rồi chính người được phân bổ chọn **Góp bằng MoMo Test**. Sau IPN/query được xác minh, backend ghi khoản thu một lần và app tải lại quỹ. Luồng **Quét QR → MoMo Test** chỉ thử checkout độc lập, không ghi chi và không gửi tiền tới tài khoản ngân hàng trong QR.
 
 Dò lại cả backend/mobile, file ẩn và 42 nhánh/ref Git đang có trên máy: không có bộ khóa remote dùng được; các giá trị không rỗng còn lại thuộc fixture kiểm thử. File `.env` là cấu hình local, không đi kèm commit tích hợp của thành viên. Báo cáo đã che giá trị ở `.cache/momo-config-audit.json`.
 

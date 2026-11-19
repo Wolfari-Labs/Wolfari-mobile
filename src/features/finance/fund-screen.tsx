@@ -32,7 +32,7 @@ import { MomoPaymentSheet } from "./components/momo-payment-sheet";
 import { QrImage } from "./components/qr-image";
 import { resolveVietQrBank } from "./vietqr-banks";
 import { bankDisplayName } from "./bank-names";
-import { PaymentQrEntry } from "@/features/payments/components/payment-qr-entry";
+import { FundPaymentTools } from "@/features/payments/components/fund-payment-tools";
 import { historyTimeLabel as timeAt } from "./history-labels";
 import { PagedRecords } from "./components/paged-records";
 import { actionLabels, budgetForm, closureActionForm, closureForm, contributionForm, contributionRequestEditForm, contributionRequestForm, destinationForm, enableForm, expenseActionForm, expenseForm, handoverActionForm, handoverCreateForm, momoDestinationForm, refundActionForm, refundForm, refundVerifierForm } from "./forms";
@@ -242,7 +242,7 @@ function FundWorkspace({ tripId, userId }: { tripId: string; userId: string }) {
         <ResourceFeedback {...members} hasData={!!members.data} onRetry={() => { void members.reload(); }} />
         {owner && !archived && <Button label="Mở quỹ nhóm" disabled={locked || !members.data || members.loading || !!members.error} onPress={() => open(enableForm(tripId, members.data!, userId))} />}
       </>}
-      {tab === "overview" && canScanPayment && <PaymentQrEntry key={tripId} />}
+      {tab === "overview" && canScanPayment && fund && <FundPaymentTools key={fund.id} fund={fund} timezone={trip?.timezone ?? 'Asia/Ho_Chi_Minh'} />}
       {(!fund || tab === "overview") && <>
       <Details title="Công cụ và hướng dẫn">
       <SectionLink title="Thử thanh toán mô phỏng" subtitle="Góp quỹ, quét QR và xem sổ mẫu miễn phí" icon="wallet" onPress={() => router.push('/demo-trip/fund')} />
