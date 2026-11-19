@@ -7,6 +7,7 @@ import { dateLabel, timeLabel, parseDate, localTimestamp } from "../trips/utils.
 import type { Closure, Contribution, ContributionRequest, Destination, Expense, Fund, HolderHandover, Refund } from "./types";
 import type { PaymentQr } from "../payments/model/payment-qr";
 import { resolveVietQrBank, validVietQrAccount } from "./vietqr-banks.ts";
+import { bankDisplayName } from "./bank-names.ts";
 
 const amountField = { key: "amount", label: "Số tiền (VND, chỉ chữ số)", numeric: true, max: 19 };
 const reasonField = { key: "reason", label: "Lý do", multiline: true, max: 1024 };
@@ -16,14 +17,14 @@ const memberOptions = (members: Membership[], self: string) => members.filter(me
 type Namer = (userId: string) => string;
 const unnamedMember: Namer = () => "Thành viên";
 const bankFields = [
-  { key: "bank_code", label: "Ngân hàng (mã VD: VCB, hoặc BIN VD: 970436)", max: 30 },
+  { key: "bank_code", label: "Ngân hàng nhận", max: 30 },
   { key: "account_number", label: "Số tài khoản (chữ/số, tối đa 19 ký tự)", max: 19 },
   { key: "account_name", label: "Tên chủ tài khoản", max: 150 },
 ];
 /** Same rules the backend applies before it can issue a VietQR instruction (unknown bank → 409). */
 export function bankInput(values: Record<string, string>) {
   const bank = resolveVietQrBank(values.bank_code ?? "");
-  if (!bank) throw new Error("Ngân hàng không có trong danh mục VietQR. Nhập mã (VD: VCB, TCB, MB) hoặc BIN 6 số, hoặc quét QR tài khoản.");
+  if (!bank) throw new Error("Ngân hàng không có trong danh mục VietQR. Chọn ngân hàng trong danh sách hoặc quét QR tài khoản.");
   const account = (values.account_number ?? "").replace(/\s/g, "");
   if (!validVietQrAccount(account)) throw new Error("Số tài khoản VietQR chỉ gồm chữ/số, từ 1 đến 19 ký tự.");
   // Backend resolves `b.code === bankCode.toUpperCase() || b.bin === bankCode`, so mixed-case directory codes use BIN.
@@ -53,23 +54,35 @@ export function enableForm(tripId: string, members: Membership[], self: string):
     build: values => { if (!members.some(member => member.user_id === values.holder && !member.left_at)) throw new Error("Chọn người giữ quỹ đang tham gia."); return commands.enable(tripId, values.holder, bankInput(values), values.budget?.trim() ? parseMoney(values.budget, true) : undefined); } };
 }
 export function budgetForm(fund: Fund): FinanceFormSpec {
-  return { title: "Cập nhật ngân sách", description: "Ngân sách là dự kiến, không thay đổi số dư đã xác nhận. Để trống để bỏ ngân sách.", initial: { amount: fund.budget_amount ?? "" }, fields: [amountField], build: values => commands.budget(fund, values.amount?.trim() ? parseMoney(values.amount, true) : null) };
+  return { title: "Cập nhật ngân sách", review: false, submitLabel: "Lưu ngân sách", description: "Ngân sách là dự kiến, không thay đổi số dư đã xác nhận. Để trống để bỏ ngân sách.", initial: { amount: fund.budget_amount ?? "" }, fields: [amountField], build: values => commands.budget(fund, values.amount?.trim() ? parseMoney(values.amount, true) : null) };
 }
 export function destinationForm(fund: Fund, row?: Destination): FinanceFormSpec {
   return { title: row ? "Sửa tài khoản nhận" : "Thêm tài khoản nhận", description: "Tài khoản VietQR mới/sửa sẽ cần người giữ quỹ xác nhận. Chỉ dẫn của các khoản đóng góp đã phát hành không đổi. Tài khoản này sẽ được đặt mặc định cho yêu cầu mới.",
     initial: { bank_code: row?.bank_code ?? "", account_number: row?.account_number ?? "", account_name: row?.account_name ?? "" }, fields: bankFields, scan: destinationScan,
     build: values => commands.destination(fund, bankInput(values), row) };
 }
+export function momoDestinationForm(fund: Fund): FinanceFormSpec {
+  return { title: 'Thêm MoMo Test', review: false, description: 'Dùng số điện thoại MoMo Test. Người giữ quỹ cần xác nhận trước khi tạo đợt góp thử.', fields: [{ key: 'phone', label: 'Số điện thoại MoMo Test', numeric: true, max: 10 }],
+    build: values => {
+      const phone = values.phone?.trim();
+      if (!phone || !/^0\d{9}$/.test(phone)) throw Error('Nhập số điện thoại MoMo Test gồm 10 chữ số, bắt đầu bằng 0.');
+      return commands.destination(fund, { destination_type: 'MOMO_SANDBOX', momo_phone: phone, active: true, is_default: false });
+    } };
+}
 export function contributionRequestForm(fund: Fund, members: Membership[], destinations: Destination[], self: string, timezone = "Asia/Ho_Chi_Minh"): FinanceFormSpec {
   const eligible = eligibleDestinations(destinations);
-  return { title: "Tạo yêu cầu đóng góp", description: "Số tiền nhập áp dụng cho mỗi người đã chọn, không phải tổng chia đều. Chỉ dùng tài khoản VietQR đã được người giữ quỹ xác nhận.",
+  return { title: "Tạo đợt góp", description: "Chọn người góp, số tiền mỗi người và tài khoản đã xác nhận. VietQR dùng chuyển khoản; MoMo Test dùng thanh toán thử, không thu tiền thật.",
     initial: { members: "", destination: eligible.find(row => row.is_default)?.id ?? eligible[0]?.id ?? "" },
-    fields: [titleField, amountField, { key: "members", label: "Người đóng góp", multiple: true, options: memberOptions(members, self) }, { key: "destination", label: "Tài khoản nhận", options: eligible.map(row => ({ value: row.id, label: row.account_number ? `${row.bank_code ?? "VietQR"} · ${row.account_number}` : (row.bank_code ?? "VietQR") })) }, { key: "note", label: "Ghi chú (không bắt buộc)", multiline: true }, ...dueFields(timezone)],
+    fields: [titleField, amountField, { key: "members", label: "Người đóng góp", multiple: true, options: memberOptions(members, self) }, { key: "destination", label: "Tài khoản nhận", options: eligible.map(row => ({ value: row.id, label: row.destination_type === 'MOMO_SANDBOX' ? `MoMo Test · ${row.momo_phone ?? ''}` : row.account_number ? `${bankDisplayName(row.bank_code ?? '')} · ${row.account_number}` : bankDisplayName(row.bank_code ?? '') })) }, { key: "note", label: "Ghi chú (không bắt buộc)", multiline: true }, ...dueFields(timezone)],
     build: values => {
       const due_at = dueAt(values, timezone);
       const selected = [...new Set((values.members ?? "").split(",").filter(Boolean))];
       if (!selected.length || selected.some(user => !members.some(member => member.user_id === user && !member.left_at))) throw new Error("Chọn ít nhất một thành viên đang tham gia.");
       if (!eligible.some(row => row.id === values.destination)) throw new Error("Cần tài khoản nhận đang hoạt động và đã xác nhận.");
+      if (eligible.find(row => row.id === values.destination)?.destination_type === 'MOMO_SANDBOX') {
+        const amount = BigInt(parseMoney(values.amount ?? ''));
+        if (amount < 1000n || amount > 50_000_000n) throw Error('MoMo Test nhận số tiền từ 1.000 đến 50.000.000 VND.');
+      }
       return commands.contributionRequest(fund, { title: text(values.title ?? "", "Nội dung", 200), contributions: selected.map(member_user_id => ({ member_user_id, amount: parseMoney(values.amount ?? ""), destination_id: values.destination })), ...(values.note?.trim() ? { note: text(values.note, "Ghi chú") } : {}), ...(due_at ? { due_at } : {}) });
     } };
 }
@@ -97,13 +110,13 @@ export function contributionRequestEditForm(fund: Fund, row: ContributionRequest
 }
 export function contributionForm(fund: Fund, row: Contribution, action: Parameters<typeof commands.contribution>[2], who: Namer = unnamedMember): FinanceFormSpec {
   const reason = ["waive", "cancel", "reject-transfer", "reverse"].includes(action);
-  return { title: actionLabels[action], description: `${money(row.amount)} · ${who(row.member_user_id)}. ${reason ? reasonDescription : action === "confirm-received" ? "Chỉ xác nhận sau khi đối chiếu đã nhận đủ tiền; xác nhận sẽ ghi thu vào sổ quỹ." : action === "report-transfer" ? "Báo đã chuyển chưa làm tăng số dư. Chờ người giữ quỹ xác nhận nhận đủ." : "Chỉ sửa khoản còn chờ; không thay đổi tài khoản nhận đã chốt."}`,
+  return { title: actionLabels[action], review: false, description: `${money(row.amount)} · ${who(row.member_user_id)}. ${reason ? reasonDescription : action === "confirm-received" ? "Chỉ xác nhận sau khi đối chiếu đã nhận đủ tiền; xác nhận sẽ ghi thu vào sổ quỹ." : action === "report-transfer" ? "Báo đã chuyển chưa làm tăng số dư. Chờ người giữ quỹ xác nhận nhận đủ." : "Chỉ sửa khoản còn chờ; không thay đổi tài khoản nhận đã chốt."}`,
     initial: { amount: row.amount }, fields: action === "amount" ? [amountField] : reason ? [reasonField] : [], destructive: reason,
     receipt: action === "report-transfer" ? { fundId: fund.id, field: "evidence_object_key" } : undefined,
     build: values => commands.contribution(fund, row, action, action === "amount" ? { amount: parseMoney(values.amount ?? "") } : reason ? { reason: text(values.reason ?? "", "Lý do") } : {}) };
 }
 export function expenseForm(fund: Fund, row?: Expense): FinanceFormSpec {
-  return { title: row ? "Sửa khoản chi" : "Tạo khoản chi", description: "Lưu nháp trên máy chủ. Sau đó gửi duyệt; chỉ khi người giữ quỹ xác nhận đã chi mới ghi giảm số dư.",
+  return { title: row ? "Sửa khoản chi" : "Tạo khoản chi", review: false, submitLabel: "Lưu khoản chi", description: "Lưu nháp trên máy chủ. Sau đó gửi duyệt; chỉ khi người giữ quỹ xác nhận đã chi mới ghi giảm số dư.",
     initial: { title: row?.title ?? "", amount: row?.amount ?? "", category: row?.category ?? "", description: row?.description ?? "" },
     fields: [titleField, amountField, { key: "category", label: "Danh mục (không bắt buộc)", max: 80 }, { key: "description", label: "Mô tả (không bắt buộc)", multiline: true, max: 10000 }], receipt: { fundId: fund.id, field: "receipt_object_key" },
     build: values => commands.expense(fund, { title: text(values.title ?? "", "Nội dung", 200), amount: parseMoney(values.amount ?? ""), category: values.category?.trim() ? text(values.category, "Danh mục", 80) : null, description: values.description?.trim() ? text(values.description, "Mô tả", 10000) : null }, row) };
@@ -111,7 +124,7 @@ export function expenseForm(fund: Fund, row?: Expense): FinanceFormSpec {
 export function expenseActionForm(fund: Fund, row: Expense, action: Parameters<typeof commands.expenseAction>[2], timezone: string): FinanceFormSpec {
   const reason = action === "reject" || action === "reverse";
   const paidAt = row.paid_at ?? new Date().toISOString();
-  return { title: actionLabels[action], description: `${row.title} · ${money(row.amount)}. ${reason ? reasonDescription : action === "confirm" ? "Đối chiếu tiền thực tế. Máy chủ kiểm số dư khả dụng sau phần giữ chỗ hoàn tiền trước khi ghi chi." : "Cập nhật trạng thái đề nghị chi trên máy chủ."}`, destructive: reason || action === "delete",
+  return { title: actionLabels[action], review: false, description: `${row.title} · ${money(row.amount)}. ${reason ? reasonDescription : action === "confirm" ? "Chỉ xác nhận khi đã chi thực tế. Khoản chi sẽ trừ vào số dư khả dụng." : "Cập nhật trạng thái đề nghị chi."}`, destructive: reason || action === "delete",
     initial: { date: dateLabel(paidAt, timezone), time: timeLabel(paidAt, timezone), payment_method: row.payment_method ?? "BANK_TRANSFER" },
     fields: reason ? [reasonField] : action === "confirm" ? [{ key: "date", label: "Ngày đã chi", mode: "date" }, { key: "time", label: `Giờ đã chi (${timezone})`, mode: "time" }, { key: "payment_method", label: "Hình thức chi", options: [{ value: "BANK_TRANSFER", label: "Chuyển khoản" }, { value: "CASH", label: "Tiền mặt" }, { value: "OTHER", label: "Khác" }] }] : [],
     build: values => {
@@ -127,7 +140,7 @@ export function refundForm(fund: Fund, members: Membership[], self: string): Fin
 }
 export function refundActionForm(fund: Fund, row: Refund, action: Parameters<typeof commands.refundAction>[2], who: Namer = unnamedMember): FinanceFormSpec {
   const reason = ["confirm-nonreceipt", "cancel", "request-reversal", "reverse"].includes(action);
-  return { title: actionLabels[action], description: `${money(row.amount)} · Người nhận: ${who(row.member_user_id)}. ${action === "reverse" ? (row.reversal_reason ? "Lý do đảo được điền sẵn từ yêu cầu đảo mà người nhận đã đồng ý; giữ nguyên để máy chủ chấp nhận." : "Nhập đúng lý do của yêu cầu đảo đã được người nhận đồng ý.") : action === "consent-reversal" ? `Chỉ đồng ý sau khi đã trao đổi lý do với người giữ quỹ${row.reversal_reason ? ` (lý do: ${row.reversal_reason})` : ""}. Đây là đồng ý đảo sổ, không phải tự thu hồi tiền ngân hàng.` : action === "confirm-received" ? "Chỉ xác nhận sau khi đã kiểm tra tiền thực sự đã được hoàn." : "Người giữ quỹ báo trả; người nhận (hoặc người kiểm chứng) xác nhận đã nhận đủ. Hủy khoản đã báo trả cần người nhận báo chưa nhận trước."}`,
+  return { title: actionLabels[action], review: false, description: `${money(row.amount)} · Người nhận: ${who(row.member_user_id)}. ${action === "reverse" ? (row.reversal_reason ? "Lý do đảo được điền sẵn từ yêu cầu đảo mà người nhận đã đồng ý; giữ nguyên để máy chủ chấp nhận." : "Nhập đúng lý do của yêu cầu đảo đã được người nhận đồng ý.") : action === "consent-reversal" ? `Chỉ đồng ý sau khi đã trao đổi lý do với người giữ quỹ${row.reversal_reason ? ` (lý do: ${row.reversal_reason})` : ""}. Đây là đồng ý đảo sổ, không phải tự thu hồi tiền ngân hàng.` : action === "confirm-received" ? "Chỉ xác nhận sau khi đã kiểm tra tiền thực sự đã được hoàn." : "Người giữ quỹ báo trả; người nhận (hoặc người kiểm chứng) xác nhận đã nhận đủ. Hủy khoản đã báo trả cần người nhận báo chưa nhận trước."}`,
     ...(action === "reverse" && row.reversal_reason ? { initial: { reason: row.reversal_reason } } : {}),
     fields: reason ? [reasonField] : [], destructive: ["cancel", "reverse", "request-reversal"].includes(action),
     build: values => commands.refundAction(fund, row, action, reason ? text(values.reason ?? "", "Lý do") : undefined) };
@@ -135,14 +148,14 @@ export function refundActionForm(fund: Fund, row: Refund, action: Parameters<typ
 /** Owner = Holder = recipient: another active member must verify the refund (FR-FN07). */
 export function refundVerifierForm(fund: Fund, row: Refund, members: Membership[], self: string, who: Namer = unnamedMember): FinanceFormSpec {
   const candidates = memberOptions(members, self).filter(option => option.value !== fund.holder_user_id);
-  return { title: actionLabels["assign-verifier"], description: `${money(row.amount)} · Người nhận: ${who(row.member_user_id)}. Người nhận đồng thời là chủ nhóm và người giữ quỹ, nên một thành viên khác phải kiểm chứng việc đã hoàn tiền.`,
+  return { title: actionLabels["assign-verifier"], review: false, description: `${money(row.amount)} · Người nhận: ${who(row.member_user_id)}. Người nhận đồng thời là chủ nhóm và người giữ quỹ, nên một thành viên khác phải kiểm chứng việc đã hoàn tiền.`,
     ...(row.verifier_user_id ? { initial: { verifier: row.verifier_user_id } } : {}),
     fields: [{ key: "verifier", label: "Người kiểm chứng", options: candidates }],
     build: values => { if (!candidates.some(option => option.value === values.verifier)) throw new Error("Chọn một thành viên khác người giữ quỹ."); return commands.refundVerifier(fund, row, values.verifier); } };
 }
 export function handoverCreateForm(fund: Fund, members: Membership[], self: string): FinanceFormSpec {
   const candidates = memberOptions(members, self).filter(option => option.value !== fund.holder_user_id);
-  return { title: "Đề cử người giữ quỹ mới", description: "Người được đề cử phải đồng ý; sau đó người giữ quỹ cũ và mới cùng xác nhận bản chốt số dư. Tiền được giao nhận bên ngoài ứng dụng; số dư sổ quỹ không đổi.",
+  return { title: "Đề cử người giữ quỹ mới", review: false, description: "Người được đề cử phải đồng ý; sau đó người giữ quỹ cũ và mới cùng xác nhận bản chốt số dư. Tiền được giao nhận bên ngoài ứng dụng; số dư sổ quỹ không đổi.",
     fields: [{ key: "holder", label: "Người giữ quỹ mới", options: candidates }],
     build: values => { if (!candidates.some(option => option.value === values.holder)) throw new Error("Chọn thành viên đang tham gia, khác người giữ quỹ hiện tại."); return commands.handover(fund, values.holder); } };
 }
@@ -153,12 +166,12 @@ export function handoverActionForm(fund: Fund, row: HolderHandover, action: "acc
     : action === "refresh-snapshot" ? "Số liệu quỹ đã thay đổi sau khi chốt. Cập nhật bản chốt rồi cả hai bên xác nhận lại."
     : action === "cancel" ? "Hủy không hoàn tác việc giao tiền đã làm bên ngoài ứng dụng; hai bên tự đối chiếu."
     : self === row.old_holder_user_id ? `Xác nhận bạn đã giao ${amount} cho ${who(row.new_holder_user_id)}.` : `Xác nhận bạn đã nhận ${amount} từ ${who(row.old_holder_user_id)}. Khi cả hai bên xác nhận, bạn trở thành người giữ quỹ.`;
-  return { title, description, fields: action === "cancel" ? [reasonField] : [], destructive: action === "cancel",
+  return { title, description, review: false, fields: action === "cancel" ? [reasonField] : [], destructive: action === "cancel",
     build: values => commands.handoverAction(fund, row, action, action === "cancel" ? text(values.reason ?? "", "Lý do") : undefined) };
 }
 export function closureForm(fund: Fund): FinanceFormSpec {
-  return { title: "Yêu cầu đóng quỹ", description: "Cần số dư bằng 0, không còn khoản góp/chi/hoàn tiền hay thanh toán chưa xử lý. Quỹ chuyển sang đang đóng và khóa thay đổi; mọi người trong bản chốt phải xác nhận. Không tự đóng theo thời gian.", build: () => commands.closure(fund) };
+  return { title: "Yêu cầu chốt quỹ", description: "Kết thúc thu/chi của quỹ. Cần số dư bằng 0 và xử lý xong các khoản đang chờ. Khi mọi người xác nhận bản chốt, quỹ chỉ còn xem lịch sử và không thể góp thêm.", build: () => commands.closure(fund) };
 }
 export function closureActionForm(row: Closure, action: "confirm" | "cancel" | "remind"): FinanceFormSpec {
-  return { title: action === "confirm" ? "Xác nhận bản chốt quỹ" : action === "cancel" ? "Hủy phiên đóng quỹ" : "Nhắc xác nhận đóng quỹ", description: action === "confirm" ? "Bạn xác nhận đúng bản chốt đã xem. Người xác nhận cuối sẽ đóng quỹ vĩnh viễn." : action === "cancel" ? "Hủy phiên hiện tại và mở lại quỹ. Phiên đóng mới cần mọi người xác nhận lại." : "Ghi yêu cầu nhắc vào backend; phản hồi chấp nhận không chứng minh thông báo đã được gửi.", fields: action === "cancel" ? [reasonField] : [], destructive: action === "cancel", build: values => commands.closureAction(row, action, action === "cancel" ? text(values.reason ?? "", "Lý do") : undefined) };
+  return { title: action === "confirm" ? "Xác nhận bản chốt quỹ" : action === "cancel" ? "Hủy phiên chốt quỹ" : "Nhắc xác nhận chốt quỹ", review: false, description: action === "confirm" ? "Bạn xác nhận đúng bản chốt đã xem. Người xác nhận cuối sẽ chốt quỹ vĩnh viễn." : action === "cancel" ? "Hủy phiên hiện tại và mở lại quỹ. Phiên đóng mới cần mọi người xác nhận lại." : "Yêu cầu nhắc được ghi nhận; thông báo có thể chưa được gửi ngay.", fields: action === "cancel" ? [reasonField] : [], destructive: action === "cancel", build: values => commands.closureAction(row, action, action === "cancel" ? text(values.reason ?? "", "Lý do") : undefined) };
 }

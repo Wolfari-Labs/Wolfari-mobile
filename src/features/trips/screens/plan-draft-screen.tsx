@@ -20,11 +20,11 @@ export default function PlanDraftScreen() {
     ...(places.value?.places ?? []),
   ].filter(p => places.value?.selected.includes(p.id) && !places.value.hidden.includes(p.id));
   return <Screen title="Bản nháp lịch trình" tab="trips" onRefresh={() => { void resource.reload(); }} refreshing={resource.loading && !!data}>
-    <Heading title="Thử xếp một hành trình" subtitle="Lịch trình chung và chức năng sắp xếp thật vẫn nằm ở tab Lịch trình." />
+    <Heading title="Thử xếp một hành trình" />
     <ResourceFeedback {...resource} hasData={!!data} onRetry={() => { void resource.reload(); }} />
     {places.error && <Notice>{places.error}</Notice>}
     {data && <>
-      <Notice>Đổi ngày, giờ và nội dung ở đây chỉ tạo phương án riêng. Không có nút đồng bộ tự động để tránh ghi đè lịch trình của nhóm.</Notice>
+      <Text style={typography.footnote}>Bản nháp riêng · Chưa thay đổi lịch trình nhóm</Text>
       {!!selectedLocations.length && <Text style={typography.footnote}>Địa điểm đã chọn trên bản đồ: {selectedLocations.map(p => p.name).join(" · ")}</Text>}
       <Segments scroll value={day} onChange={setDay} items={[{ value: "all", label: "Mọi ngày" }, ...choices]} />
       <DraftCollection key={id} scope={id} feature="plan" title="hoạt động nháp"

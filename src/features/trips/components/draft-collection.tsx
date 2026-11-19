@@ -54,7 +54,7 @@ export function DraftCollection({ scope, feature, title, fields, initial, seed =
   const visible = rows.filter(row => !filter || filter(row));
   const groups = groupBy ? [...new Set(visible.map(row => row[groupBy] || "Khác"))] : [""];
   return <>
-    <Notice>Bản nháp trên thiết bị · Riêng tài khoản này · Không đồng bộ với nhóm, tự hết hạn sau 30 ngày.</Notice>
+    <Text style={typography.footnote}>Bản nháp riêng · Chỉ lưu trên thiết bị</Text>
     {!draft.ready && !draft.error && <Text style={typography.footnote}>Đang đọc bản nháp…</Text>}
     {draft.error && <Feedback message={draft.error} />}
     {stale && <Feedback message="Dữ liệu nhóm đã thay đổi. Bản nháp cũ được giữ để tham khảo; hãy bỏ bản nháp và bắt đầu từ dữ liệu mới trước khi chỉnh sửa." />}
@@ -81,7 +81,6 @@ export function DraftCollection({ scope, feature, title, fields, initial, seed =
     {!history && !visible.length && <EmptyState title="Chưa có mục phù hợp" message="Thêm bản nháp mới hoặc đổi bộ lọc để xem các mục khác." />}
     <Sheet visible={!!editing} title={"Bản nháp " + title} dismissible={!draft.busy} onClose={() => setEditing(undefined)}>
       {editing && <>
-        <Notice>Chỉ lưu trên thiết bị, không thay đổi kế hoạch chung.</Notice>
         {fields.filter(field => !field.visible || field.visible(editing)).map(field => <View key={field.key} style={ui.stack}>
           {field.options ? <><Text style={typography.headline}>{field.label}</Text><Segments scroll value={editing[field.key] ?? ""} items={field.options} onChange={value => { if (!draft.busy) setEditing({ ...editing, [field.key]: value }); }} /></> :
             <FormField label={field.label} icon="edit" value={editing[field.key] ?? ""} placeholder={field.placeholder} keyboardType={field.numeric ? "decimal-pad" : "default"} multiline={field.multiline} maxLength={field.multiline ? 5000 : 200} editable={!draft.busy} onChangeText={value => setEditing({ ...editing, [field.key]: value })} />}

@@ -1,5 +1,6 @@
 import type { PaymentInstruction } from './types';
 import { parsePaymentQr } from '../payments/model/payment-qr.ts';
+import { bankDisplayName } from './bank-names.ts';
 export type { Page, Fund, Destination, Contribution, ContributionRequest, Expense, Refund, FinancialNote, Transaction as LedgerEntry, AuditEntry, Closure, PaymentInstruction, PaymentAttempt, PaymentException, FinanceCollections } from './types';
 
 // Extended forms use money as a parser; the primary model's money formats labels.
@@ -74,14 +75,14 @@ export function instructionQrImage(instruction: PaymentInstruction): string {
  * .../ios-app-deeplinks, checked 2026-11-10). Other apps only open, without the transfer.
  */
 export const AUTOFILL_BANK_APPS: readonly { id: string; name: string }[] = [
-  { id: 'mb', name: 'MB Bank' },
-  { id: 'icb', name: 'VietinBank' },
-  { id: 'bidv', name: 'BIDV' },
-  { id: 'acb', name: 'ACB' },
-  { id: 'ocb', name: 'OCB' },
+  { id: 'mb', name: bankDisplayName('MB') },
+  { id: 'icb', name: bankDisplayName('ICB') },
+  { id: 'bidv', name: bankDisplayName('BIDV') },
+  { id: 'acb', name: bankDisplayName('ACB') },
+  { id: 'ocb', name: bankDisplayName('OCB') },
 ];
 /** https://dl.vietqr.io/pay deeplink for this instruction. The user still confirms in the bank app. */
-export function bankAppDeeplink(instruction: PaymentInstruction, appId: string, returnUrl: string): string {
+export function bankAppDeeplink(instruction: Pick<PaymentInstruction, 'environment' | 'bank_code' | 'account_number' | 'amount' | 'reference' | 'recipient_name'>, appId: string, returnUrl: string): string {
   const bank = instruction.bank_code.trim().toLowerCase();
   if (
     instruction.environment !== 'LIVE' ||

@@ -379,7 +379,11 @@ try {
       .length,
     0,
   );
+  // Focus the controlled field before replacing its rejected value.
+  await page.getByLabel("Ngày đi", { exact: true }).click();
   await page.getByLabel("Ngày đi", { exact: true }).fill("12/11/2026");
+  assert.equal(await page.getByLabel("Ngày đi", { exact: true }).inputValue(), "12/11/2026");
+  assert.equal(await page.getByLabel("Ngày về", { exact: true }).inputValue(), "14/11/2026");
   await screenshot("m06-create-info.png");
   await click("Tiếp tục");
   await page
@@ -531,12 +535,9 @@ try {
   await click(`Mở chuyến đi ${trip.name}`);
   await page.getByRole("tab", { name: "Tiện ích", exact: true }).click();
   await click("Hành lý");
-  await button("Danh sách đã sẵn sàng!").waitFor();
+  await page.getByText('Đã chuẩn bị đủ hành lý.', { exact: true }).waitFor();
+  assert.equal(await button('Danh sách đã sẵn sàng!').count(), 0, 'Packing completion stays inline without a popup.');
   await screenshot("m13-packing.png");
-  await click("Danh sách đã sẵn sàng!");
-  await page.getByText("Sẵn sàng lên đường!", { exact: true }).waitFor();
-  await screenshot("p15-packing-complete.png");
-  await click("Tuyệt, đi thôi!");
   await page.getByRole("tab", { name: "Tài khoản", exact: true }).click();
   await click("Chỉnh sửa hồ sơ");
   await page.getByLabel("Họ và tên", { exact: true }).fill("Minh Anh Nguyễn");

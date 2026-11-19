@@ -113,6 +113,7 @@ export type DemoAction =
   | { type: "packing.toggle" | "packing.delete" | "dress.delete"; id: string }
   | { type: "dress.save"; value: DemoDress }
   | { type: "entry.add"; value: DemoEntry }
+  | { type: "payment.complete"; value: DemoEntry }
   | { type: "entry.confirm" | "entry.cancel"; id: string }
   | { type: "reset" };
 
@@ -335,6 +336,14 @@ export function applyDemoAction(
   action: DemoAction,
 ): DemoState {
   switch (action.type) {
+    case 'payment.complete': {
+      const value = action.value;
+      if (!['contribution', 'expense'].includes(value.kind)) throw Error('Chọn góp quỹ hoặc thanh toán mẫu.');
+      const existing = state.entries.find(entry => entry.id === value.id);
+      if (existing && (existing.kind !== value.kind || existing.amount !== value.amount)) throw Error('Lượt mô phỏng này đã được sử dụng.');
+      // Compute both steps before the provider commits; insufficient funds leave no partial row.
+      return applyDemoAction(applyDemoAction(state, { type: 'entry.add', value }), { type: 'entry.confirm', id: value.id });
+    }
     case "reset":
       return createDemoState();
     case "details": {

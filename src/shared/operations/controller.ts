@@ -43,9 +43,9 @@ export function operationMessage(receipt?: OperationReceipt) {
   if (!receipt) return "";
   if (operationCommitted(receipt)) return "Thao tác đã hoàn tất trên máy chủ.";
   const code = receipt.rejection ?? receipt.operation?.error_code ?? receipt.operation?.outcome?.error_code;
-  if (code === "FINANCE_OBLIGATION_BLOCKED") return receipt.kind === "trip" ? "Cần đóng quỹ trước khi lưu trữ hoặc xóa chuyến đi. Chuyển chủ nhóm yêu cầu hoàn tất phiên đóng quỹ hoặc bàn giao đang chờ; người giữ quỹ không tự thay đổi." : "Chưa thể rời hoặc xóa thành viên: cần xử lý giao dịch đang chờ, hoàn tiền hoặc quỹ đang giữ. Khoản đang chờ đủ điều kiện sẽ được máy chủ miễn; lịch sử tiền được giữ nguyên.";
+  if (code === "FINANCE_OBLIGATION_BLOCKED") return receipt.kind === "trip" ? "Cần chốt quỹ trước khi lưu trữ hoặc xóa chuyến đi. Chuyển chủ nhóm yêu cầu hoàn tất phiên chốt quỹ hoặc bàn giao đang chờ; người giữ quỹ không tự thay đổi." : "Chưa thể rời hoặc xóa thành viên: cần xử lý giao dịch đang chờ, hoàn tiền hoặc quỹ đang giữ. Khoản đang chờ đủ điều kiện sẽ được máy chủ miễn; lịch sử tiền được giữ nguyên.";
   if (code === "VERSION_CONFLICT") return "Dữ liệu quỹ hoặc thành viên đã thay đổi. Tải lại rồi kiểm tra trước khi gửi yêu cầu mới.";
-  if (code === "STATE_CONFLICT") return "Trạng thái chưa cho phép thao tác: kiểm tra số dư khả dụng, giao dịch đang chờ, phiên đóng quỹ hoặc bàn giao đang chờ.";
+  if (code === "STATE_CONFLICT") return "Trạng thái chưa cho phép thao tác: kiểm tra số dư khả dụng, giao dịch đang chờ, phiên chốt quỹ hoặc bàn giao đang chờ.";
   if (receipt.operation?.state === "NEEDS_REVIEW") return "Yêu cầu cần bộ phận vận hành kiểm tra. Giữ nguyên yêu cầu này; không tạo yêu cầu khác.";
   if (operationTerminal(receipt)) return "Yêu cầu không được ghi nhận thành công. Tải lại dữ liệu trước khi thực hiện thao tác khác.";
   if (receipt.operation) return "Máy chủ đang xử lý. Chưa xác nhận thành công; app sẽ kiểm tra lại khi màn hình đang mở.";

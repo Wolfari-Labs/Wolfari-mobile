@@ -25,6 +25,8 @@ export type Contribution = {
   member_reported_at: string | null; confirmed_at: string | null;
   confirmed_by_user_id: string | null; waived_reason: string | null; cancelled_reason: string | null;
   rejected_reason?: string | null;
+  destination_type?: "VIETQR" | "MOMO_SANDBOX";
+  latest_payment_attempt_id?: string;
 };
 export type ContributionRequest = {
   id: string; fund_id: string; title: string; status: "OPEN" | "CLOSED" | "CANCELLED";

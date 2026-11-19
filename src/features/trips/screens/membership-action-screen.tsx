@@ -8,8 +8,9 @@ import { OperationFeedback } from "@/shared/operations/operation-feedback";
 import { useTripOperation } from "@/shared/operations/use-trip-operation";
 import { typography } from "@/shared/theme/tokens";
 import { Button } from "@/shared/ui/button";
+import { Details } from "@/shared/ui/details";
 import { FormField } from "@/shared/ui/form-field";
-import { Heading, Notice, ResourceFeedback } from "@/shared/ui/journal";
+import { Heading, ResourceFeedback } from "@/shared/ui/journal";
 import { Screen } from "@/shared/ui/screen";
 import { Sheet } from "@/shared/ui/sheet";
 import { memberName } from "../model/member-name";
@@ -56,8 +57,8 @@ function MembershipWorkspace({ memberId }: { memberId?: string }) {
       {!!memberId && <ResourceFeedback {...members} hasData={!!members.data} onRetry={() => { void members.reload(); }} />}
       {data && <>
         {target && <Text style={typography.headline}>Thành viên: {memberName(target)}</Text>}
-        <Notice>Máy chủ kiểm tra nghĩa vụ tài chính trước khi cho rời/xóa. Giao dịch đang chờ, hoàn tiền chưa xử lý, phiên đóng quỹ hoặc người đang giữ quỹ chưa đóng có thể chặn thao tác. Chủ nhóm không được tự rời hay bị xóa qua chức năng này.</Notice>
-        <Notice>Khoản đóng góp PENDING đủ điều kiện sẽ được miễn tự động khi rời nhóm; lịch sử đóng góp, chi và hoàn tiền không bị xóa. Không được xem là đã rời cho đến khi máy chủ xác nhận hoàn tất.</Notice>
+        <Text style={typography.footnote}>Cần xử lý xong nghĩa vụ quỹ trước khi rời hoặc xóa thành viên.</Text>
+        <Details title="Điều kiện rời nhóm"><Text style={typography.footnote}>Người giữ quỹ cần bàn giao hoặc chốt quỹ. Khoản góp chưa chuyển đủ điều kiện được miễn; lịch sử thu chi được giữ lại. Chủ nhóm cần chuyển quyền trước khi rời.</Text></Details>
         <FormField icon="edit" label="Lý do" value={reason} onChangeText={setReason} maxLength={1000} multiline editable={allowed} />
         <Button label={memberId ? "Xóa thành viên" : "Rời chuyến đi"} variant="destructive" disabled={!allowed || !validReason} onPress={() => setConfirm(true)} />
         {!allowed && !members.loading && <Text style={typography.footnote}>Chờ tải đủ thông tin hoặc kiểm tra quyền và trạng thái thành viên.</Text>}

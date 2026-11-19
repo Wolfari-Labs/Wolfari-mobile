@@ -76,7 +76,7 @@ export default function MyTripsScreen() {
   const rows = featured ? visible.filter(trip => trip.id !== featured.id) : visible;
   return (
     <Screen
-      header={<AppHeader />}
+      header={<AppHeader title="Chuyến đi" showGreeting={false} />}
       tab="trips"
       refreshing={resource.loading && !!resource.data}
       onRefresh={() => {

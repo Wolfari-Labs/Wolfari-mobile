@@ -59,7 +59,7 @@ function ManagementWorkspace({ resource }: { resource: ReturnType<typeof useTrip
           <Segments scroll value={selectedAction} items={[{ value: archived ? "REOPEN" : "ARCHIVE", label: archived ? "Mở lại" : "Lưu trữ" }, ...(!archived ? [{ value: "TRANSFER" as const, label: "Chuyển chủ" }] : []), { value: "DELETE", label: "Xóa" }]} onChange={value => { if (!operation.busy) { setAction(value as Action); setTarget(""); setName(""); } }} />
           <Notice>Lưu trữ giữ kế hoạch ở chế độ chỉ xem và có thể mở lại. Xóa ẩn chuyến đi với mọi thành viên; lịch sử tài chính và kiểm toán được giữ ở máy chủ. Cả hai yêu cầu quỹ đã đóng.</Notice>
           {selectedAction === "TRANSFER" && <>
-            <Notice>Chủ cũ trở thành thành viên. Người giữ quỹ và tài khoản nhận tiền giữ nguyên; hoàn tất bàn giao hoặc phiên đóng quỹ đang chờ trước khi chuyển chủ. Các lời mời cũ sẽ bị thu hồi.</Notice>
+            <Notice>Chủ cũ trở thành thành viên. Người giữ quỹ và tài khoản nhận tiền giữ nguyên; hoàn tất bàn giao hoặc phiên chốt quỹ đang chờ trước khi chuyển chủ. Các lời mời cũ sẽ bị thu hồi.</Notice>
             <ResourceFeedback {...members} hasData={!!members.data} onRetry={() => { void members.reload(); }} />
             {eligible.map(m => <Button key={m.id} label={`${target === m.id ? "✓ " : ""}${memberName(m)}`} variant={target === m.id ? "primary" : "soft"} disabled={operation.locked} onPress={() => setTarget(m.id)} />)}
             {!members.loading && !eligible.length && <Text style={typography.footnote}>Cần ít nhất một thành viên khác đang tham gia.</Text>}

@@ -8,7 +8,7 @@ import { useResource } from "@/shared/hooks/use-resource";
 import { typography } from "@/shared/theme/tokens";
 import { Button } from "@/shared/ui/button";
 import { Feedback } from "@/shared/ui/feedback";
-import { Heading, Notice, ResourceFeedback, SectionLink, Segments, ui } from "@/shared/ui/journal";
+import { Heading, ResourceFeedback, SectionLink, Segments, ui } from "@/shared/ui/journal";
 import { Screen } from "@/shared/ui/screen";
 import { Sheet } from "@/shared/ui/sheet";
 import { collectPages } from "../api/pagination";
@@ -59,7 +59,7 @@ export default function TripSettingsScreen() {
           {members.data && !members.loading && !members.error && policy.data && !policy.loading && !policy.error && <Text style={typography.footnote}>Được sửa: {eligible.filter(member => policy.data?.editor_member_ids.includes(member.id)).map(member => memberName(member)).join(", ") || "Chỉ chủ nhóm"}</Text>}
         </>}
         {choice === "SELECTED_MEMBERS" && <>
-          <Notice>Đã chọn sẵn người đang có quyền. Thay đổi sẽ cập nhật danh sách của nhóm; chủ nhóm luôn giữ quyền sửa.</Notice>
+          <Text style={typography.footnote}>Chọn người được sửa kế hoạch. Chủ nhóm luôn có quyền sửa.</Text>
           <ResourceFeedback {...members} hasData={!!members.data} onRetry={() => { void members.reload(); }} />
           {eligible.map(member => <Pressable key={member.id} accessibilityRole="checkbox" accessibilityLabel={"Cho phép " + memberName(member) + " sửa lịch trình"} accessibilityState={{ checked: selected.includes(member.id), disabled: command.busy }} disabled={command.busy} style={ui.link} onPress={() => setSelected(old => old.includes(member.id) ? old.filter(value => value !== member.id) : [...old, member.id])}>
             <Text style={typography.headline}>{selected.includes(member.id) ? "✓" : "○"} {memberName(member)}</Text>

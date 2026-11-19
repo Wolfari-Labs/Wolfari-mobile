@@ -2,6 +2,7 @@ import { ApiError } from "./api-client.ts";
 
 export function errorMessage(error: unknown, fallback = "Chưa thể hoàn tất. Vui lòng thử lại."): string {
   if (error instanceof ApiError) {
+    if (error.code === 'PAYMENT_PROVIDER_NOT_CONFIGURED') return 'Máy chủ chưa cấu hình MoMo Test. Cần bộ khóa sandbox và địa chỉ nhận kết quả thanh toán.';
     if (error.code === "NETWORK_ERROR") return "Không thể kết nối. Kiểm tra mạng rồi thử lại.";
     if (error.code === "REQUEST_TIMEOUT") return "Chưa nhận được phản hồi. Vui lòng kiểm tra lại trạng thái yêu cầu.";
     if (error.code === "VERSION_CONFLICT") return "Dữ liệu vừa được cập nhật. Tải lại thông tin và kiểm tra trước khi gửi yêu cầu mới.";

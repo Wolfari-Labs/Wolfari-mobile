@@ -7,6 +7,21 @@ import {
   parseAmount,
 } from "../src/features/trip-demo/model.ts";
 
+test('simulated payments update the demo ledger once and fail atomically when funds are insufficient', () => {
+  const state = createDemoState();
+  const value = { id: 'payment-1', kind: 'contribution', title: 'Góp quỹ mô phỏng', amount: '100000', member: 'linh', category: 'Góp quỹ', date: '2026-11-19', note: '', status: 'PENDING' };
+  const paid = applyDemoAction(state, { type: 'payment.complete', value });
+  assert.equal(fundTotals(paid.entries).available, fundTotals(state.entries).available + 100000);
+  assert.equal(paid.entries.at(-1).status, 'CONFIRMED');
+  assert.equal(applyDemoAction(paid, { type: 'payment.complete', value }), paid);
+  assert.throws(() => applyDemoAction(paid, { type: 'payment.complete', value: { ...value, amount: '200000' } }), /đã được sử dụng/);
+  const tooMuch = { ...value, id: 'payment-2', kind: 'expense', amount: '99999999' };
+  assert.throws(() => applyDemoAction(paid, { type: 'payment.complete', value: tooMuch }), /không đủ/);
+  assert.equal(paid.entries.some(entry => entry.id === 'payment-2'), false);
+  const spent = applyDemoAction(paid, { type: 'payment.complete', value: { ...tooMuch, amount: '50000' } });
+  assert.equal(fundTotals(spent.entries).available, fundTotals(paid.entries).available - 50000);
+});
+
 test("demo seed is independent on every opening and has balanced example totals", () => {
   const state = createDemoState();
   assert.deepEqual(fundTotals(state.entries), {

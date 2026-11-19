@@ -5,6 +5,7 @@ import { useCommand } from "@/shared/hooks/use-command";
 import { useResource } from "@/shared/hooks/use-resource";
 import { typography } from "@/shared/theme/tokens";
 import { Button } from "@/shared/ui/button";
+import { Details } from "@/shared/ui/details";
 import { DateTimeField } from "@/shared/ui/date-time-field";
 import { Feedback } from "@/shared/ui/feedback";
 import { FormField } from "@/shared/ui/form-field";
@@ -38,7 +39,8 @@ export default function RemindersScreen() {
   return <Screen title="Lịch nhắc của tôi" onRefresh={() => { void Promise.all([trip.reload(), reminders.reload()]); }} refreshing={trip.loading || reminders.loading}>
     <Heading title="Nhớ những điều cần làm" subtitle={data?.trip.name} />
     <ResourceFeedback {...trip} hasData={!!data} onRetry={() => { void trip.reload(); }} />
-    <Notice>Lịch nhắc chỉ dành cho bạn, dùng múi giờ {data?.trip.timezone ?? "của chuyến đi"}. Khi hoạt động/vật dụng đổi giờ, hoàn thành, chuyến đi lưu trữ hoặc bạn mất quyền, lịch nhắc cũ sẽ được hủy khi xử lý. Đặt lại nếu cần.</Notice>
+    <Text style={typography.footnote}>Lịch nhắc riêng · Múi giờ {data?.trip.timezone ?? "của chuyến đi"}</Text>
+    <Details title="Khi kế hoạch thay đổi"><Text style={typography.footnote}>Lịch nhắc cũ được hủy khi mục đã hoàn thành, đổi giờ, chuyến đi lưu trữ hoặc bạn không còn tham gia. Đặt lại lịch nếu cần.</Text></Details>
     {enabled && <>
       <Segments value={type} items={[{ value: "ACTIVITY", label: "Hoạt động" }, { value: "PACKING", label: "Hành lý" }]} onChange={value => { if (!command.busy) { setType(value); setSelected(""); setError(undefined); } }} />
       <FormField label="Tìm hoạt động hoặc vật dụng" icon="search" value={query} onChangeText={setQuery} maxLength={200} />

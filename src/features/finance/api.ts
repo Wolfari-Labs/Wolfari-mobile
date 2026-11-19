@@ -6,7 +6,7 @@ import type {
   Page,
   PaymentAttempt,
   PaymentInstruction,
-  Closure, DestinationInput, ExpenseInput, HolderHandover, Receipt, WriteResult,
+  Closure, Contribution, DestinationInput, ExpenseInput, HolderHandover, Receipt, WriteResult,
 } from './types';
 import type { OperationCommand } from '../../shared/operations/controller';
 
@@ -127,6 +127,7 @@ function command(title: string, path: string, body: Record<string, unknown>, met
 }
 // All callers supply a snapshot. Retry must keep this entire command unchanged.
 export const financeCommands = {
+  paymentAttempt: (fund: Fund, row: Contribution) => command('Góp quỹ qua MoMo Test', `/contributions/${id(row.id)}/payment-attempts`, { provider: 'MOMO_SANDBOX', ...versions(fund, row) }),
   enable: (tripId: string, holder_user_id: string, destination: DestinationInput, budget_amount?: string) =>
     command("Mở quỹ nhóm", `/trips/${id(tripId)}/fund`, { holder_user_id, currency: "VND", destination, ...(budget_amount !== undefined ? { budget_amount } : {}) }),
   budget: (fund: Fund, budget_amount: string | null) => command("Cập nhật ngân sách", `/funds/${id(fund.id)}/budget`, { budget_amount, ...versions(fund) }, "PATCH"),
@@ -156,8 +157,8 @@ export const financeCommands = {
       ...(action === "confirm" && row.snapshot_finance_version ? { expected_snapshot_finance_version: row.snapshot_finance_version } : {}),
       ...(action === "cancel" ? { reason } : {}),
     }),
-  closure: (fund: Fund) => command("Yêu cầu đóng quỹ", `/funds/${id(fund.id)}/closures`, versions(fund)),
-  closureAction: (row: Closure, action: "confirm" | "cancel" | "remind", reason?: string) => command("Cập nhật đóng quỹ", `/closures/${id(row.id)}/${action}`, action === "confirm" ? { snapshot_hash: row.snapshot_hash } : action === "cancel" ? { reason } : {}),
+  closure: (fund: Fund) => command("Yêu cầu chốt quỹ", `/funds/${id(fund.id)}/closures`, versions(fund)),
+  closureAction: (row: Closure, action: "confirm" | "cancel" | "remind", reason?: string) => command("Cập nhật chốt quỹ", `/closures/${id(row.id)}/${action}`, action === "confirm" ? { snapshot_hash: row.snapshot_hash } : action === "cancel" ? { reason } : {}),
 };
 
 
@@ -219,8 +220,8 @@ export function createFinanceApi(client: ApiClient) {
         throw new ApiError('INVALID_RESPONSE', 'Hướng dẫn chuyển khoản không hợp lệ.');
       return row as PaymentInstruction;
     },
-    async attempt(id: string) {
-      return decodeRow<PaymentAttempt>(await client.request(`/payment-attempts/${enc(id)}`));
+    async attempt(id: string, signal?: AbortSignal) {
+      return decodeRow<PaymentAttempt>(await client.request(`/payment-attempts/${enc(id)}`, { signal }));
     },
     async write(intent: WriteIntent) {
       const result = await client.request<unknown>(intent.path, {

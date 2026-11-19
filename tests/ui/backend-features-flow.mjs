@@ -144,6 +144,10 @@ try {
   await screenshot("reset-password.png");
   await button("Lưu mật khẩu mới").click();
   await page.waitForURL("**/sign-in?notice=password-updated");
+  await goto('/verify-email');
+  await button('Tôi đã xác minh').click();
+  await page.getByText(/Email chưa được xác minh/).waitFor();
+  assert.equal(calls.filter(call => call.pathname === '/auth/email-verifications/confirm').length, 0, 'Checking verification never marks the account verified.');
   await goto(`/verify-email?token=${"b".repeat(43)}`);
   await page.waitForFunction(() => !new URL(location.href).searchParams.get("token"));
   assert.equal(await field("Mã hoặc liên kết xác minh").inputValue(), "b".repeat(43));
@@ -267,11 +271,10 @@ try {
   assert.equal(calls.filter(call => ["POST", "PATCH", "PUT", "DELETE"].includes(call.method) && call.pathname.startsWith("/trips/")).length, writesBeforeArchive);
   await goto("/profile");
   await button("Đăng xuất").click();
-  await button("Đăng xuất tài khoản").click();
   await page.getByText(/Chưa xác nhận được đăng xuất/).waitFor();
   assert.equal(loggedOut, false);
   logoutOffline = false;
-  await button("Đăng xuất tài khoản").click();
+  await button("Đăng xuất").click();
   await page.waitForURL(`${appUrl}/`);
   await page.reload({ waitUntil: "networkidle" });
   await button("Bắt đầu hành trình").waitFor();

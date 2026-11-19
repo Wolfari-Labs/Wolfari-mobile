@@ -201,6 +201,8 @@ async function openEditor() {
 }
 async function dragTo(title, targetTitle) {
   const handle = page.getByLabel(`Kéo để di chuyển ${title}`, { exact: true });
+  await handle.and(page.locator(':not([aria-disabled="true"])')).waitFor();
+  await handle.scrollIntoViewIfNeeded();
   const target = page.getByLabel(`Kéo để di chuyển ${targetTitle}`, {
     exact: true,
   });
@@ -209,7 +211,9 @@ async function dragTo(title, targetTitle) {
   assert.ok(from && to);
   await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
   await page.mouse.down();
-  await page.waitForTimeout(350); // Intentional long-press activation, not a network wait.
+  // The hold timer and render can be delayed on a busy CI runner.
+  // Wait for activation before sending any drag movement.
+  await handle.and(page.locator('[aria-selected="true"]')).waitFor();
   await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, {
     steps: 12,
   });
@@ -222,12 +226,14 @@ async function checkTouchGestures() {
   const idle = page.getByText("Nhấn giữ ☰ rồi kéo · Vuốt phần tên để cuộn", { exact: true });
   const save = button("Lưu thứ tự cho nhóm");
   const start = async () => {
+    await grip.and(page.locator(':not([aria-disabled="true"])')).waitFor();
+    await grip.scrollIntoViewIfNeeded();
     const from = await grip.boundingBox();
     const to = await page.getByLabel("Kéo để di chuyển Tham quan", { exact: true }).boundingBox();
     assert.ok(from && to);
     const point = { id: 1, x: from.x + from.width / 2, y: from.y + from.height / 2 };
     await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [point] });
-    await page.waitForTimeout(350); // User holds the grip before moving.
+    await grip.and(page.locator('[aria-selected="true"]')).waitFor();
     const startY = point.y;
     for (let step = 1; step <= 8; step++) {
       point.y = startY + (to.y + to.height / 2 - startY) * step / 8;
@@ -261,10 +267,14 @@ async function checkTouchGestures() {
       await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
     }
     if (reason === "background") {
+      const refreshed = page.waitForResponse(response =>
+        new URL(response.url()).pathname === `/api/v1/trips/${tripId}/plan` && response.request().method() === 'GET' && response.ok(),
+      );
       await page.evaluate(() => {
         delete document.visibilityState;
         document.dispatchEvent(new Event("visibilitychange"));
       });
+      await refreshed;
       await page.getByText("Đã đồng bộ", { exact: true }).waitFor();
     }
     if (reason === "resize") await page.setViewportSize({ width: 402, height: 874 });
@@ -449,7 +459,8 @@ try {
     handle.y + handle.height / 2,
   );
   await page.mouse.down();
-  await page.waitForTimeout(350);
+  await page.getByLabel(`Kéo để di chuyển ${firstTitle}`, { exact: true })
+    .and(page.locator('[aria-selected="true"]')).waitFor();
   await page.mouse.move(
     handle.x + handle.width / 2,
     viewport.y + viewport.height - 15,

@@ -28,6 +28,7 @@ export type RequestOptions = {
   signal?: AbortSignal;
   responseType?: "json" | "blob";
   retryAuth?: boolean;
+  timeoutMs?: number;
 };
 
 type ClientOptions = {
@@ -64,7 +65,7 @@ export function createApiClient({
       const timeout = setTimeout(() => {
         timedOut = true;
         controller.abort();
-      }, timeoutMs);
+      }, options.timeoutMs ?? timeoutMs);
 
       try {
         const multipart = typeof FormData !== "undefined" && options.body instanceof FormData;

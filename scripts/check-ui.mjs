@@ -11,11 +11,13 @@ const available = [
   "order",
   "backend-features",
   "finance",
+  "payment-simulation",
   "finance-price-watch",
   "dress-code",
   "packing",
   "mobile-completion",
   "reliability",
+  "mobile-parity",
 ];
 const selected = process.argv.slice(2);
 const suites = selected.length ? selected : available;

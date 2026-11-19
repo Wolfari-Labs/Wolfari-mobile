@@ -14,7 +14,6 @@ import { memberName } from "../model/member-name";
 import { packingForm, packingInput, type PackingForm } from "../model/packing";
 import type { Membership, PackingItem, Plan, Trip } from "../types";
 import { dateLabel } from "../utils";
-import { PackingCompletion } from "./packing-completion";
 
 export function PackingList({
   api,
@@ -39,8 +38,7 @@ export function PackingList({
   const [form, setForm] = useState<PackingForm>(),
     [error, setError] = useState<string>();
   const [deleting, setDeleting] = useState<PackingItem>();
-  const [saved, setSaved] = useState<string>(),
-    [celebrate, setCelebrate] = useState(false);
+  const [saved, setSaved] = useState<string>();
   const rows = plan.packing_items.filter(
     (item) =>
       (category === "all" || (item.category || "Khác") === category) &&
@@ -122,7 +120,7 @@ export function PackingList({
       </Text>
       <Progress done={done} total={plan.packing_items.length} />
       {!!plan.packing_items.length && done === plan.packing_items.length && (
-        <Button label="Danh sách đã sẵn sàng!" onPress={() => setCelebrate(true)} />
+        <Text style={typography.footnote}>Đã chuẩn bị đủ hành lý.</Text>
       )}
       {saved && <Feedback success message={saved} />}
       {!form && !deleting && failure}
@@ -321,7 +319,6 @@ export function PackingList({
           }}
         />
       </Sheet>
-      <PackingCompletion visible={celebrate} count={done} onClose={() => setCelebrate(false)} />
     </>
   );
 }

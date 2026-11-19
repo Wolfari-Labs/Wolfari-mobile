@@ -177,7 +177,7 @@ export default function PlacesScreen() {
       {data && (
         <>
           <TripNavigation id={id} active="places" />
-          <Notice>{sharedWrites ? "Lưu địa điểm cho cả nhóm để mọi thành viên cùng xem và gắn vào lịch trình. Chọn và ẩn trên thiết bị chỉ là bộ lọc riêng của bạn." : "Chọn và ẩn địa điểm chỉ lưu trên thiết bị theo tài khoản/chuyến đi, không đồng bộ với nhóm. Tìm kiếm trực tuyến phụ thuộc dịch vụ địa điểm của máy chủ."}</Notice>
+          <Text style={typography.footnote}>{sharedWrites ? "Địa điểm được chia sẻ với cả nhóm." : "Địa điểm riêng · Chỉ lưu trên thiết bị"}</Text>
           {command.error && <><Feedback message={command.error} /><Button label="Tải lại địa điểm của nhóm" variant="soft" onPress={() => { void resource.reload(); }} /></>}
           {draft.error && <Feedback message={draft.error} />}
           {draft.error && <Button label="Xóa dữ liệu địa điểm không đọc được" variant="soft" onPress={() => { void draft.clear(); }} />}

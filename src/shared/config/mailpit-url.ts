@@ -1,9 +1,6 @@
-import { getApiBaseUrl } from "./env";
-
-// Dev-only: Mailpit runs next to the local Gateway, so reuse the Gateway host the phone already reaches.
+// Opt-in developer tool. Real SMTP delivery must never be presented as a Mailpit flow.
 export function getMailpitUrl(): string | undefined {
   if (!__DEV__) return;
   const configured = process.env.EXPO_PUBLIC_MAILPIT_URL?.trim();
   if (configured) return configured.replace(/\/+$/, "");
-  try { return `http://${new URL(getApiBaseUrl()).hostname}:8025`; } catch { return; }
 }

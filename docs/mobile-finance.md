@@ -8,6 +8,8 @@ Contracts were read from the sibling backend Gateway and Finance source on
 ## Entry points
 
 Trip → Tools → **Quỹ nhóm** opens `/trip/[id]/fund`.
+The **Đợt góp** tab combines requests, allocation progress and each member's contribution actions. The overview **Góp quỹ** shortcut opens that tab; there is no separate flat contribution tab. It uses API079's complete nested allocations, preserving public history for closed funds and restricting writes to OPEN requests and funds.
+The contribution shortcut is available to Owners, Holders and ordinary members while the fund is OPEN. Owners allocate themselves a contribution when creating a request if they also need to pay. Closure is labelled **Chốt quỹ**, distinguishing settlement from contributing money; a CLOSED fund cannot accept further contributions.
 Members → **Xóa …** and Settings → **Rời chuyến đi** use the shared durable
 operation receipt flow. **Kiểm tra quỹ và nghĩa vụ** opens the fund after a blocker.
 The old local estimates remain at `/trip/[id]/fund-drafts` with their existing
@@ -33,12 +35,19 @@ permissions are unrelated to Finance permissions. UI gates provide guidance;
 the backend is authoritative for membership, available balances, versions and
 payment/closure locks. Closed/archived funds expose reads only.
 
+Outgoing QR scanning is available only to the current Holder of an OPEN fund in
+an active Trip, including a Holder whose Trip role is MEMBER. It is absent for
+ordinary members, non-Holder Owners, trips without a fund and private estimates.
+Members retain their own contribution QR, transfer report, contribution payment
+attempts, finance history and expense proposal permissions. The isolated QR
+sandbox API enforces Holder/open-fund access again on every request and retry.
+
 ## Monetary and operation safety
 
 - VND remains a decimal string up to PostgreSQL int64 max. Validation/formatting
   do not coerce to JavaScript Number or round amounts. Zero budget differs from
   no budget; contributions/expenses/refunds require positive amounts.
-- Every mutation has an explicit review/confirmation step, UUID Idempotency-Key
+- Contribution, expense, refund and handover actions use one sheet with visible context and an explicit action button. Closure confirmation submits directly from the viewed snapshot; cancellation still requires a reason. Setup, destination edits and new contribution/refund requests retain their field review. Every mutation still uses a UUID Idempotency-Key
   and the exact required entity/Finance revision. Closure confirmation uses the
   snapshot hash instead of inventing version fields.
 - One local operation lock spans Finance and membership for a Gateway/account/trip.
@@ -49,10 +58,11 @@ payment/closure locks. Closed/archived funds expose reads only.
 - A 202 Operation is pending, never success. Foreground/focused polling runs every
   five seconds and on resume; manual lookup remains available for NEEDS_REVIEW.
   Reminder `{accepted:true}` means queued in backend, not notification delivery.
+- Successful Finance operations automatically clear their completed lookup receipt and refresh the fund, with inline feedback. Completed receipts restored after restart follow the same path; no separate reload acknowledgement is needed. Rejected and uncertain operations keep the recovery controls.
 - An uncertain write can be retried with its identical frozen body and key while
   this app process lives. A denial during such replay cannot prove the original
-  write never committed. No new write is allowed until a terminal result is known
-  and the user acknowledges/reloads.
+  write never committed. No new write is allowed until a terminal result is known;
+  rejected operations and membership changes retain explicit acknowledgement/reload.
 - AsyncStorage contains only operation/trip IDs, action kind/title, optional
   target membership ID and server outcome. It contains **no** auth tokens, bank
   fields, money, reason text or file object keys. Scope includes Gateway + account.

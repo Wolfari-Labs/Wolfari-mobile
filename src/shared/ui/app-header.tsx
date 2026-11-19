@@ -12,12 +12,18 @@ import { DesignIcon } from "./design-icon";
 import { GlassSurface } from "./glass-surface";
 
 type Props = {
+  title?: string;
+  showGreeting?: boolean;
+  showAvatar?: boolean;
   onPressNotification?: () => void;
   onPressAdd?: () => void;
   hasUnreadNotifications?: boolean;
 };
 
 export function AppHeader({
+  title = 'Đi đâu tiếp nhỉ?',
+  showGreeting = true,
+  showAvatar = true,
   onPressNotification = () => router.push("/notifications"),
   onPressAdd,
   hasUnreadNotifications,
@@ -38,12 +44,12 @@ export function AppHeader({
   const name = profile?.full_name.trim().split(/\s+/).at(-1) ?? "bạn";
   return (
     <View style={styles.header}>
-      <Pressable accessibilityRole="button" accessibilityLabel="Mở tài khoản" onPress={() => router.navigate("/(tabs)/profile")} style={styles.avatar}>
+      {showAvatar && <Pressable accessibilityRole="button" accessibilityLabel="Mở tài khoản" onPress={() => router.navigate("/(tabs)/profile")} style={styles.avatar}>
         <ProfileAvatar profile={profile} size={42} />
-      </Pressable>
+      </Pressable>}
       <View style={styles.greeting}>
-        <Text style={typography.footnote}>Chào {name},</Text>
-        <Text accessibilityRole="header" style={styles.title}>Đi đâu tiếp nhỉ?</Text>
+        {showGreeting && <Text style={typography.footnote}>Chào {name},</Text>}
+        <Text accessibilityRole="header" style={styles.title}>{title}</Text>
       </View>
       <View style={styles.actions}>
         <HeaderButton

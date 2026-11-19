@@ -3,11 +3,9 @@ import { useSession } from "@/features/auth/session/session-provider";
 import { useResource } from "@/shared/hooks/use-resource";
 import { Text, View } from "react-native";
 import { typography } from "@/shared/theme/tokens";
-import { Heading, Progress, ResourceFeedback, Segments, ui } from "@/shared/ui/journal";
+import { Progress, ResourceFeedback, Segments, ui } from "@/shared/ui/journal";
 import { Screen } from "@/shared/ui/screen";
-import { Button } from "@/shared/ui/button";
 import { useTrip } from "../hooks/use-trip";
-import { PackingCompletion } from "../components/packing-completion";
 import { PackingList } from "../components/packing-list";
 import { DraftCollection } from "../components/draft-collection";
 import { packingError } from "../model/local-parity";
@@ -28,11 +26,8 @@ export default function PackingScreen() {
   const assignees = (members.data ?? []).filter(m => !m.left_at && m.id !== data?.trip.current_membership.id && m.user_id !== profile?.id);
   const [filter, setFilter] = useState<"all" | "mine" | "todo">("all");
   const [category, setCategory] = useState("all");
-  const [celebrate, setCelebrate] = useState(false);
-  const [completedCount, setCompletedCount] = useState(0);
   const categories = ["Quần áo", "Vệ sinh", "Giấy tờ", "Điện tử", "Y tế", "Khác"];
   return <Screen title="Hành lý" tab="trips" onRefresh={() => { void resource.reload(); }} refreshing={resource.loading && !!data}>
-    <Heading title="Sẵn sàng lên đường" subtitle={data?.plan.capabilities?.packing_write ? "Cùng chuẩn bị và theo dõi danh sách chung của nhóm." : "Danh sách chung lấy từ kế hoạch chuyến đi. Thay đổi của bạn được lưu thành bản nháp riêng trên máy."} />
     <ResourceFeedback {...resource} hasData={!!data} onRetry={() => { void resource.reload(); }} />
     {data && <>
       <Segments items={[{ value: "all", label: "Tất cả" }, { value: "mine", label: "Của tôi" }, { value: "todo", label: "Chưa xong" }]} value={filter} onChange={setFilter} />
@@ -62,14 +57,13 @@ export default function PackingScreen() {
           return <View style={ui.section}>
             <Text style={typography.headline}>Tiến độ danh sách đang xem</Text>
             <Text style={typography.largeTitle}>{done} / {rows.length}</Text><Progress done={done} total={rows.length} />
-            {!!rows.length && done === rows.length && <Button label="Danh sách đã sẵn sàng!" onPress={() => { setCompletedCount(rows.length); setCelebrate(true); }} />}
+            {!!rows.length && done === rows.length && <Text style={typography.footnote}>Đã chuẩn bị đủ hành lý.</Text>}
           </View>;
         }}
         render={row => <><Text style={typography.headline}>{row.name}</Text><Text style={typography.footnote}>{row.quantity} {row.unit} · {row.status === "COMPLETED" ? "Đã chuẩn bị" : "Chưa chuẩn bị"}</Text>
           <Text style={typography.footnote}>{row.assignee ? nameOf(row.assignee) : "Chưa phân công"}</Text>
           {!!row.due && <Text style={typography.footnote}>Hạn: {row.due}</Text>}{!!row.reminder && <Text style={typography.footnote}>Nhắc: {row.reminder}</Text>}{!!row.note && <Text style={typography.body}>{row.note}</Text>}
         </>} />}
-      <PackingCompletion visible={celebrate} count={completedCount} onClose={() => setCelebrate(false)} />
     </>}
   </Screen>;
 }

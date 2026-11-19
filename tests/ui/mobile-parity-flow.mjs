@@ -41,7 +41,9 @@ await context.addInitScript(() => {
 const tripId = "20000000-0000-4000-8000-000000000001";
 const secondId = "20000000-0000-4000-8000-000000000002";
 const userId = "10000000-0000-4000-8000-000000000001";
-let activeUser = userId, editable = true, version = 1;
+const fundId = "50000000-0000-4000-8000-000000000001";
+let fundPresent = true;
+let activeUser = userId, editable = true, version = 1, qrSandboxUnavailable = true, qrSandboxNotConfigured = false;
 const membership = { id: "30000000-0000-4000-8000-000000000001", trip_id: tripId, user_id: userId, role: "OWNER", joined_at: "2026-10-01T00:00:00Z", left_at: null };
 const trip = { id: tripId, name: "Đà Nẵng cùng nhau", description: null, public_description: null, start_at: "2026-11-11T17:00:00Z", end_at: "2026-11-14T16:59:00Z", timezone: "Asia/Ho_Chi_Minh", lifecycle: "UPCOMING", archived_at: null, plan_edit_policy: "ALL_MEMBERS", plan_version: 1, membership_revision: 1, export_revision: 1, current_membership: membership, permissions: { can_read: true, can_update: true } };
 const calls = [], errors = [];
@@ -53,6 +55,21 @@ await context.route("**/api/v1/**", async route => {
   calls.push({ pathname, method, body: req.postData() ? req.postDataJSON() : null });
   if (pathname === "/auth/csrf") return respond({ csrf_token: "fixture" });
   if (pathname === "/auth/refresh" || pathname === "/auth/login") return respond({ access_token: "fixture-access", token_type: "Bearer", expires_in: 900, profile: { id: activeUser, email: "fixture@example.test", full_name: "Người kiểm thử", avatar: null, system_role: "USER", status: "ACTIVE", email_verified_at: null, version: 1 } });
+  if (pathname === `/trips/${tripId}/fund` && fundPresent) return respond({
+    id: fundId, trip_id: tripId, holder_user_id: userId, currency: 'VND', status: 'OPEN',
+    budget_amount: null, current_balance: '0', reserved_refund: '0', available_balance: '0',
+    finance_version: 1, closed_at: null,
+  });
+  if (pathname === `/trips/${tripId}/members`) return respond({ items: [membership], next_cursor: null });
+  if (pathname === `/funds/${fundId}/destinations`) return respond([]);
+  if (pathname === `/trips/${tripId}/qr-payments/momo-sandbox` && method === 'POST') {
+    const body = req.postDataJSON();
+    assert.deepEqual(Object.keys(body).sort(), ['amount', 'note', 'request_id']);
+    assert.equal(req.headers()['idempotency-key'], body.request_id);
+    if (qrSandboxNotConfigured) return route.fulfill({ status: 503, headers, contentType: 'application/json', body: JSON.stringify({ error: { code: 'PAYMENT_PROVIDER_NOT_CONFIGURED', retryable: false }, meta: {} }) });
+    if (qrSandboxUnavailable) return route.fulfill({ status: 503, headers, contentType: 'application/json', body: JSON.stringify({ error: { code: 'SERVICE_UNAVAILABLE' }, meta: {} }) });
+    return respond({ request_id: body.request_id, order_id: 'wqr-' + 'a'.repeat(40), amount: body.amount, payment_url: 'https://test-payment.momo.vn/v2/gateway/pay?t=qr-fixture', environment: 'SANDBOX' });
+  }
   if (pathname === "/trips") {
     if (method === "POST") return respond({ ...trip, ...req.postDataJSON() });
     return respond(url.searchParams.has("cursor") ? { items: [{ ...trip, id: secondId, name: "Đà Lạt mùa đông" }], next_cursor: null } : { items: [trip], next_cursor: "second" });
@@ -69,6 +86,9 @@ await context.route("**/api/v1/**", async route => {
   return route.fulfill({ status: 404, headers, contentType: "application/json", body: JSON.stringify({ error: { code: "RESOURCE_NOT_FOUND", message: "Fixture unavailable" }, meta: {} }) });
 });
 const page = await context.newPage();
+// Only assert external handoff URLs. Never contact VietQR or MoMo from this suite.
+await context.route('https://dl.vietqr.io/**', route => route.fulfill({ status: 200, body: 'Bank handoff fixture' }));
+await context.route('https://test-payment.momo.vn/**', route => route.fulfill({ status: 200, body: 'MoMo handoff fixture' }));
 page.setDefaultTimeout(30_000);
 page.setDefaultNavigationTimeout(120_000);
 page.on("pageerror", error => errors.push(error.message));
@@ -132,6 +152,13 @@ try {
   await screenshot("dress-code");
 
   await goto(tripRoute("fund-drafts"));
+  assert.equal(await button('Quét QR thanh toán').count(), 0, 'Private estimates never offer fund payments.');
+  fundPresent = false;
+  await goto(tripRoute('fund'));
+  await page.getByText('Chuyến đi chưa có quỹ nhóm.', { exact: true }).waitFor();
+  assert.equal(await button('Quét QR thanh toán').count(), 0, 'A trip without a fund cannot offer fund payments.');
+  fundPresent = true;
+  await goto(tripRoute('fund'));
   assert.equal(await page.evaluate(() => qrFixture.requests), 0, "No camera before explicit entry");
   await button("Quét QR thanh toán").click();
   await button("Cho phép camera").click();
@@ -139,18 +166,76 @@ try {
   await field("Nội dung QR").fill("https://untrusted.example.test/pay");
   await button("Đọc thông tin QR").click();
   await page.getByText(/Chỉ hỗ trợ VietQR chuyển khoản/).waitFor();
-  assert.equal(page.url().endsWith(tripRoute("fund-drafts")), true, "QR URLs never navigate");
+  assert.equal(page.url().endsWith(tripRoute("fund")), true, "QR URLs never navigate");
   await button("Dán nội dung QR").click();
   await field("Nội dung QR").fill(dynamicQr);
   await button("Đọc thông tin QR").click();
-  await page.getByText("Kiểm tra thông tin chuyển khoản", { exact: true }).waitFor();
+  await page.getByText("Chuyển khoản", { exact: true }).waitFor();
   await page.getByText("0011012345678", { exact: true }).waitFor();
   await page.getByText("180.000 ₫", { exact: true }).waitFor();
-  await page.getByText("thanh toan don hang", { exact: true }).waitFor();
+  assert.equal(await field('Nội dung chuyển khoản').inputValue(), 'thanh toan don hang');
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await button("Sao chép số tài khoản").click();
   await page.getByText("Đã sao chép số tài khoản.", { exact: true }).waitFor();
   assert.equal(await page.evaluate(() => navigator.clipboard.readText()), "0011012345678");
+  await field('Số tiền chuyển (VND)').fill('0');
+  await button('Chọn ứng dụng thanh toán').click();
+  await page.getByText(/Nhập số tiền VND nguyên lớn hơn 0/).waitFor();
+  await field('Số tiền chuyển (VND)').fill('250000');
+  await field('Nội dung chuyển khoản').fill('Thanh toán bữa tối & nước');
+  await screenshot('payment-qr-transfer-input');
+  await button('Chọn ứng dụng thanh toán').click();
+  assert.equal(await page.getByRole('radio', { name: 'MoMo Test', exact: true }).getAttribute('aria-checked'), 'true');
+  assert.equal(await page.getByRole('radio', { name: 'Chọn MB Bank · Quân đội', exact: true }).count(), 0, 'Banks stay collapsed until requested.');
+  assert.equal(await button('Chuyển bằng ngân hàng').getAttribute('aria-expanded'), 'false');
+  await screenshot('payment-qr-momo-choice');
+  await button('Chuyển bằng ngân hàng').click();
+  assert.equal(await button('Chuyển bằng ngân hàng').getAttribute('aria-expanded'), 'true');
+  await page.getByRole('radio', { name: 'Chọn MB Bank · Quân đội', exact: true }).click();
+  assert.equal(await page.getByRole('radio', { name: 'MoMo Test', exact: true }).getAttribute('aria-checked'), 'false');
+  await screenshot('payment-qr-bank-choice');
+  const bankPopupPromise = context.waitForEvent('page');
+  await button('Mở ứng dụng ngân hàng').click();
+  const bankPopup = await bankPopupPromise;
+  await bankPopup.waitForLoadState();
+  const bankLink = new URL(bankPopup.url());
+  assert.equal(bankLink.origin, 'https://dl.vietqr.io');
+  assert.equal(bankLink.searchParams.get('app'), 'mb');
+  assert.equal(bankLink.searchParams.get('am'), '250000');
+  assert.equal(bankLink.searchParams.get('tn'), 'Thanh toán bữa tối & nước');
+  assert.match(bankLink.searchParams.get('ba'), /^0011012345678@/);
+  assert.equal(await bankPopup.evaluate(() => document.referrer), '');
+  await bankPopup.close();
+  await page.getByRole('radio', { name: 'MoMo Test', exact: true }).click();
+  await page.getByText(/không chuyển vào tài khoản QR hoặc cập nhật quỹ/).waitFor();
+  await button('Mở MoMo Test').click();
+  await page.getByText(/MoMo Test đang tạm gián đoạn/).waitFor();
+  qrSandboxUnavailable = false;
+  await button('Mở MoMo Test').click();
+  await button('Mở lại MoMo Test').waitFor();
+  const attempts = calls.filter(call => call.pathname.endsWith('/qr-payments/momo-sandbox'));
+  assert.equal(attempts.length, 2);
+  assert.deepEqual(attempts[0].body, attempts[1].body, 'Retry preserves the request key and reviewed fields');
+  assert.equal(attempts[0].body.amount, '250000');
+  assert.equal(JSON.stringify(attempts).includes('0011012345678'), false, 'Scanned bank account is not sent to the sandbox');
+  const momoPopupPromise = context.waitForEvent('page');
+  await button('Mở lại MoMo Test').click();
+  const momoPopup = await momoPopupPromise;
+  await momoPopup.waitForLoadState();
+  assert.equal(new URL(momoPopup.url()).hostname, 'test-payment.momo.vn');
+  await momoPopup.close();
+  await screenshot('payment-qr-sandbox-handoff');
+  await button('Sửa số tiền và nội dung').click();
+  await button('Chọn ứng dụng thanh toán').click();
+  qrSandboxNotConfigured = true;
+  await button('Mở MoMo Test').click();
+  await page.getByText('MoMo Test chưa được bật. Chọn ngân hàng để tiếp tục chuyển khoản.', { exact: true }).waitFor();
+  assert.equal(await page.getByRole('radio', { name: 'MoMo Test', exact: true }).isDisabled(), true);
+  assert.equal(await button('Mở MoMo Test').count(), 0, 'Missing configuration is not offered as a temporary retry.');
+  assert.equal(await button('Chuyển bằng ngân hàng').getAttribute('aria-expanded'), 'true');
+  await page.getByRole('radio', { name: 'Chọn MB Bank · Quân đội', exact: true }).click();
+  await button('Mở ứng dụng ngân hàng').waitFor();
+  await screenshot('payment-qr-momo-not-configured');
   await page.setViewportSize({ width: 360, height: 740 });
   await screenshot("payment-qr-review-small-phone");
   await button("Đóng").click();
@@ -182,6 +267,7 @@ try {
   await button("Đóng").click();
   await page.waitForFunction(() => qrFixture.streams.every(stream => stream.getTracks().every(track => track.readyState === "ended")));
   await page.setViewportSize({ width: 402, height: 874 });
+  await goto(tripRoute('fund-drafts'));
   await button("Thêm khoản dự kiến").click();
   await field("Nội dung khoản dự kiến").fill("Bữa tối dự kiến");
   await field("Số tiền dự kiến (VND)").fill("250000");
@@ -295,7 +381,7 @@ try {
   assert.deepEqual(Object.keys(create.body).sort(), ["client_request_id", "end_at", "name", "start_at", "timezone"]);
   assert.match(create.body.client_request_id, /^[0-9a-f-]{36}$/i);
   assert.equal(await page.evaluate(() => Object.keys(localStorage).some(key => key.includes(":new-trip:create"))), false);
-  const writes = calls.filter(call => call.pathname.startsWith("/trips") && call.method !== "GET");
+  const writes = calls.filter(call => call.pathname.startsWith("/trips") && call.method !== "GET" && !call.pathname.endsWith('/qr-payments/momo-sandbox'));
   assert.equal(writes.length, 1, "All parity edits except explicit Create Trip stay local");
   assert.deepEqual(errors, []);
   console.log("Mobile parity UI passed: eight feature groups, persistence, account/trip isolation, validation, permissions, stale plan guard, no unsupported writes, 360px layout.");

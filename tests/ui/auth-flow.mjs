@@ -133,6 +133,9 @@ try {
   await page.getByRole("button", { name: "Xác minh email", exact: true }).click();
   await page.waitForURL("**/verify-email");
   assert.equal(await page.getByRole("heading", { name: "Kiểm tra email của bạn" }).count(), 0, "Registration must not remain above verification.");
+  assert.equal(await page.getByLabel("Mã hoặc liên kết xác minh", { exact: true }).count(), 0, "Manual token entry is secondary.");
+  await page.screenshot({ path: path.join(output, 'verify-email-phone.png') });
+  await page.getByRole('button', { name: 'Nhập liên kết thủ công', exact: true }).click();
   await page.getByLabel("Mã hoặc liên kết xác minh", { exact: true }).fill("a".repeat(43));
   await page.getByRole("button", { name: "Xác nhận email", exact: true }).click();
   await page.getByText("Liên kết xác minh đã được xác nhận.", { exact: true }).waitFor();
