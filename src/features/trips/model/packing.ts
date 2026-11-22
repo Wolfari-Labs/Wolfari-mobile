@@ -77,3 +77,38 @@ export function quantityLabel(quantity: string, unit: string | null): string {
     : quantity;
   return unit?.trim() ? `${amount} ${unit.trim()}` : amount;
 }
+
+const CATEGORY_ICONS: Record<string, string> = {
+  "Quần áo": "👕",
+  "Vệ sinh": "🧴",
+  "Giấy tờ": "🪪",
+  "Điện tử": "🔌",
+  "Y tế": "💊",
+  "Ăn uống": "🥤",
+  Khác: "🎒",
+};
+export const CATEGORY_MAX = 40;
+export function categoryIcon(name: string) {
+  return CATEGORY_ICONS[name] ?? "🏷️";
+}
+/** Presets first (in their fixed order), then the trip's own categories A→Z. */
+export function categoryOrder(a: string, b: string) {
+  const rank = (value: string) => {
+    const index = PACKING_CATEGORIES.indexOf(value);
+    // "Khác" is the catch-all, so it always closes the list.
+    return value === "Khác" ? 2000 : index < 0 ? 1000 : index;
+  };
+  return rank(a) - rank(b) || a.localeCompare(b, "vi");
+}
+/** Categories offered in the form: presets plus anything the group already uses. */
+export function tripCategories(items: Pick<PackingItem, "category">[]) {
+  return [...new Set([...PACKING_CATEGORIES, ...items.map((item) => item.category || "Khác")])].sort(categoryOrder);
+}
+/** A typed category reuses an existing spelling ("quần áo" → "Quần áo") instead of forking a group. */
+export function normalizeCategory(value: string, known: readonly string[]) {
+  const clean = value.trim().replace(/\s+/g, " ");
+  if (!clean) throw Error("Nhập tên danh mục.");
+  if ([...clean].length > CATEGORY_MAX) throw Error(`Tên danh mục tối đa ${CATEGORY_MAX} ký tự.`);
+  const key = clean.toLocaleLowerCase("vi");
+  return known.find((name) => name.toLocaleLowerCase("vi") === key) ?? clean;
+}
