@@ -15,6 +15,7 @@ const available = [
   "finance-price-watch",
   "dress-code",
   "packing",
+  "places",
   "mobile-completion",
   "reliability",
   "mobile-parity",

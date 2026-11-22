@@ -489,6 +489,9 @@ try {
   assert.equal(dayOnly.scheduled_date, "2026-11-12");
   await screenshot("m09b-day-only.png");
   await page.getByRole("tab", { name: "Bản đồ", exact: true }).click();
+  await page.getByRole("tab", { name: "Tìm quanh đây", exact: true }).click();
+  // This fixture is an older server: nearby search is unavailable, text search still works.
+  await page.getByText(/chỉ hỗ trợ tìm theo tên/).waitFor();
   await page
     .getByLabel("Khám phá địa điểm", { exact: true })
     .fill("Mỹ Khê Đà Nẵng");
