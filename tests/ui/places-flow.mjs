@@ -46,10 +46,20 @@ const poi = (id, name, lat, lon, extra) => ({
   tier: 1, coord_verified: true, activity_type: "MUSEUM", dress_code_hint: "", province_name: "Đà Nẵng", ...extra,
 });
 const results = [
-  poi("cham", "Bảo tàng Điêu khắc Chăm", 16.0604, 108.2235, { typical_duration_min: 90, dress_code_hint: "kín đáo" }),
+  poi("cham", "Bảo tàng Điêu khắc Chăm", 16.0604, 108.2235, {
+    typical_duration_min: 90, dress_code_hint: "kín đáo",
+    hero_image: {
+      url: `/api/v1/travel/poi-images/${"d".repeat(64)}/1280.webp`, thumbnail_url: `/api/v1/travel/poi-images/${"d".repeat(64)}/640.webp`,
+      small_url: `/api/v1/travel/poi-images/${"d".repeat(64)}/320.webp`, width: 1280, height: 853, author: "Nguyễn An",
+      license: "CC-BY-SA-4.0", license_url: "https://creativecommons.org/licenses/by-sa/4.0", source_url: "https://commons.wikimedia.org/wiki/File:Cham_Museum.jpg",
+      attribution: "Ảnh: Nguyễn An · CC BY-SA 4.0 · Wikimedia Commons", source: "wikidata", is_placeholder: false,
+    },
+  }),
   poi("mykhe", "Bãi biển Mỹ Khê", 16.0544, 108.2472, { category: "beach", category_label: "Bãi biển", typical_duration_min: 120, activity_type: "BEACH" }),
 ];
-const searches = [], saves = [], routes = [], errors = [];
+const searches = [], saves = [], routes = [], errors = [], imageRequests = [];
+// 1×1 WebP so the photo actually renders in the fixture.
+const tinyWebp = Buffer.from("UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEADsD+JaQAA3AAAAAA", "base64");
 let routeFails = true;
 const cors = {
   "Access-Control-Allow-Origin": appUrl,
@@ -95,6 +105,10 @@ await context.route("**/api/v1/**", async (route) => {
     locations.push(row);
     return respond(row, 201);
   }
+  if (endpoint.startsWith("/travel/poi-images/")) {
+    imageRequests.push(endpoint);
+    return route.fulfill({ status: 200, headers: { ...cors, "Cache-Control": "public, max-age=31536000, immutable" }, contentType: "image/webp", body: tinyWebp });
+  }
   if (endpoint === "/travel/route" && method === "POST") {
     const body = req.postDataJSON();
     routes.push(body);
@@ -131,6 +145,13 @@ try {
   assert.ok(Math.abs(Number(searches[0].latitude) - 16.0644) < 0.001, "Centred on the group's places");
   await page.getByText("Bảo tàng · ~1 giờ 30 phút", { exact: true }).waitFor();
   await page.getByText("👗 Nên mặc: kín đáo", { exact: true }).waitFor();
+  // Licensed photo from our Gateway, always with its credit line.
+  // Photos load lazily: bring the card into view first.
+  await page.getByText("Bảo tàng · ~1 giờ 30 phút", { exact: true }).scrollIntoViewIfNeeded();
+  await page.getByAltText("Ảnh Bảo tàng Điêu khắc Chăm", { exact: true }).waitFor();
+  await shot("places-explore.png");
+  await page.getByText("ⓘ Ảnh: Nguyễn An · CC BY-SA 4.0 · Wikimedia Commons", { exact: true }).waitFor();
+  assert.equal(await page.getByAltText("Ảnh Bãi biển Mỹ Khê", { exact: true }).count(), 0, "No photo, no placeholder pretending to be one");
   await tab("Ăn uống").click();
   await page.getByText("Bãi biển Mỹ Khê", { exact: true }).waitFor();
   assert.equal(searches.at(-1).category, "restaurant");
@@ -138,7 +159,7 @@ try {
   await button("Tìm địa điểm").click();
   await page.getByText("Bảo tàng Điêu khắc Chăm", { exact: true }).waitFor({ state: "hidden" });
   assert.equal(searches.at(-1).q, "Mỹ Khê");
-  await shot("places-explore.png");
+  assert.ok(imageRequests.some((p) => p.endsWith("/640.webp")), "Cards load the 640 px variant");
 
   // Saving uses the server's token; the card then shows it is shared.
   await button("Lưu Bãi biển Mỹ Khê cho nhóm").click();

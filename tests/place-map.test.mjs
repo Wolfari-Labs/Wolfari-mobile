@@ -33,3 +33,12 @@ test("straight-line fallback sums the legs between stops", () => {
   assert.deepEqual(centerOf([a, b]), { latitude: (a.latitude + b.latitude) / 2, longitude: (a.longitude + b.longitude) / 2 });
   assert.equal(fitRegion([]).latitude, 16.0544);
 });
+
+test("POI photos load only from the Gateway image route", async () => {
+  const { poiImageUrl } = await import("../src/features/trips/model/place.ts");
+  const sha = "c".repeat(64);
+  assert.equal(poiImageUrl(`/api/v1/travel/poi-images/${sha}/640.webp`, "http://192.168.1.5:3001/api/v1"), `http://192.168.1.5:3001/api/v1/travel/poi-images/${sha}/640.webp`);
+  assert.equal(poiImageUrl("https://evil.example/x.webp", "http://localhost/api/v1"), undefined);
+  assert.equal(poiImageUrl(`/api/v1/travel/poi-images/${sha}/999.webp`, "http://localhost/api/v1"), undefined);
+  assert.equal(poiImageUrl(null, "http://localhost/api/v1"), undefined);
+});

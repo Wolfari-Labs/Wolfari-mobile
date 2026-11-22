@@ -94,3 +94,17 @@ export function centerOf(points: LatLng[]): LatLng | undefined {
     longitude: points.reduce((sum, p) => sum + p.longitude, 0) / points.length,
   };
 }
+
+const POI_IMAGE_PATH = /^\/api\/v1\/travel\/poi-images\/[0-9a-f]{64}\/(320|640|1280)\.webp$/;
+/**
+ * Absolute URL of a POI photo served by our Gateway. Only that exact route is accepted, so a
+ * response can never make the app load an arbitrary third-party URL.
+ */
+export function poiImageUrl(path: string | null | undefined, apiBase: string) {
+  if (!path || !POI_IMAGE_PATH.test(path)) return undefined;
+  try {
+    return new URL(path, apiBase).href;
+  } catch {
+    return undefined;
+  }
+}

@@ -1,3 +1,5 @@
+import { Image } from "expo-image";
+import { openURL } from "expo-linking";
 import type { ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
@@ -20,6 +22,8 @@ export type PlaceItem = {
   activityType?: string;
   dressHint?: string;
   verified?: boolean;
+  /** Licensed photo (absolute URL) and its mandatory credit line. */
+  photo?: { uri: string; attribution: string; sourceUrl: string };
   /** Where the data comes from, shown in small print. */
   source: string;
   attribution: { text: string; url: string }[];
@@ -39,6 +43,27 @@ export function PlaceCard({ place, tone, marker, selected, meta, onPress, childr
   const details = [place.categoryLabel, durationLabel(place.durationMin)].filter(Boolean).join(" · ");
   return (
     <View style={[styles.card, selected && styles.selected]}>
+      {place.photo && (
+        <View style={styles.photoBox}>
+          <Image
+            source={{ uri: place.photo.uri }}
+            contentFit="cover"
+            transition={150}
+            accessibilityLabel={`Ảnh ${place.name}`}
+            alt={`Ảnh ${place.name}`}
+            style={styles.photo}
+          />
+          <Pressable
+            cssInterop={false}
+            accessibilityRole="link"
+            accessibilityLabel={`Nguồn ảnh: ${place.photo.attribution}`}
+            onPress={() => { void openURL(place.photo!.sourceUrl).catch(() => {}); }}
+            style={({ pressed }) => [styles.credit, pressed && { opacity: 0.7 }]}
+          >
+            <Text style={styles.creditText} numberOfLines={1}>ⓘ {place.photo.attribution}</Text>
+          </Pressable>
+        </View>
+      )}
       <Pressable
         cssInterop={false}
         accessibilityRole="button"
@@ -70,6 +95,11 @@ export function PlaceCard({ place, tone, marker, selected, meta, onPress, childr
 const styles = StyleSheet.create({
   card: { gap: 10, padding: 14, borderRadius: radii.card, backgroundColor: colors.surface, borderWidth: 2, borderColor: "transparent", ...shadows.glass },
   selected: { borderColor: colors.sun },
+  photoBox: { marginTop: -14, marginHorizontal: -14, marginBottom: 2 },
+  // The card keeps its shadow (no overflow clipping), so the photo rounds its own top corners.
+  photo: { width: "100%", aspectRatio: 16 / 9, backgroundColor: colors.fill, borderTopLeftRadius: radii.card - 2, borderTopRightRadius: radii.card - 2 },
+  credit: { paddingHorizontal: 14, paddingTop: 6 },
+  creditText: { color: colors.muted, fontSize: 11 },
   head: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
   marker: { minWidth: 34, height: 34, paddingHorizontal: 6, borderRadius: 17, alignItems: "center", justifyContent: "center" },
   markerResult: { backgroundColor: colors.fill },
