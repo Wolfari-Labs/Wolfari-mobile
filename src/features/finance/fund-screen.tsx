@@ -33,24 +33,15 @@ import { userNamer } from "../trips/model/member-name";
 import { FinanceForm, type FinanceFormSpec } from "./components/finance-form";
 import { InstructionSheet } from "./components/instruction-sheet";
 import { MomoPaymentSheet } from "./components/momo-payment-sheet";
-import { QrImage } from "./components/qr-image";
-import { resolveVietQrBank } from "./vietqr-banks";
+import { DestinationCard } from "./components/destination-card";
 import { bankDisplayName } from "./bank-names";
 import { FundPaymentTools } from "@/features/payments/components/fund-payment-tools";
 import { historyTimeLabel as timeAt } from "./history-labels";
 import { PagedRecords } from "./components/paged-records";
 import { actionLabels, budgetForm, closureActionForm, closureForm, contributionForm, contributionRequestEditForm, contributionRequestForm, destinationForm, enableForm, expenseActionForm, expenseForm, handoverActionForm, handoverCreateForm, momoDestinationForm, refundActionForm, refundForm, refundVerifierForm } from "./forms";
 import { contributionActions, expenseActions, financeActor, money, refundActions, refundConfirmer, statusLabels, type RefundContext } from "./model";
-import type { Closure, Contribution, Destination, Fund, FinanceCollections, HolderHandover, PaymentAttempt } from "./types";
+import type { Closure, Contribution, Fund, FinanceCollections, HolderHandover, PaymentAttempt } from "./types";
 
-/** Receiving QR (no amount/reference) for a VietQR destination whose details the viewer can already see. */
-function destinationQrUrl(row: Destination): string | undefined {
-  const bin = row.bank_code ? resolveVietQrBank(row.bank_code)?.bin : undefined;
-  if (!bin || !row.account_number || !/^[\dA-Za-z]{1,19}$/.test(row.account_number)) return undefined;
-  const url = new URL(`https://img.vietqr.io/image/${bin}-${row.account_number}-compact2.svg`);
-  if (row.account_name) url.searchParams.set("accountName", row.account_name);
-  return url.href;
-}
 
 type Tab = "overview" | "handovers" | "bank-transfers" | Exclude<keyof FinanceCollections, "contributions">;
 const tabs: { value: Tab; label: string }[] = [
@@ -276,9 +267,6 @@ function FundOverview({ fund, trip, userId, locked, open }: Context) {
   const api = useApi();
   const actor = financeActor(fund, userId, trip.current_membership.role === "OWNER", trip.lifecycle === "ARCHIVED");
   const destinations = useResource(useCallback((signal: AbortSignal) => api.finance.destinations(fund.id, signal), [api, fund.id]));
-  const [qrId, setQrId] = useState<string>(), [qrConsent, setQrConsent] = useState(false), [qrFailed, setQrFailed] = useState(false);
-  // Consent covers one account's data only: opening another row asks again.
-  const showQr = (id?: string) => { setQrId(id); setQrConsent(false); setQrFailed(false); };
   return <FadeInView>
     {actor.owner && actor.writable && <View style={ui.actionRow}>
       <Button label="Cập nhật ngân sách" compact variant="soft" disabled={locked} onPress={() => open(budgetForm(fund))} />
@@ -287,35 +275,16 @@ function FundOverview({ fund, trip, userId, locked, open }: Context) {
     </View>}
     <Text accessibilityRole="header" style={typography.section}>Tài khoản nhận tiền</Text>
     <ResourceFeedback {...destinations} hasData={!!destinations.data} onRetry={() => { void destinations.reload(); }} />
-    {destinations.data?.map(row => { const qrUrl = row.destination_type === "VIETQR" && row.active ? destinationQrUrl(row) : undefined; return <View key={row.id} style={ui.record}>
-      <View style={ui.row}>
-        <IconTile icon="wallet" tone={row.destination_type === "VIETQR" ? colors.mint : colors.fill} />
-        <Text style={[typography.headline, ui.flex]}>{row.destination_type === "VIETQR" ? "VietQR" : "MoMo · SANDBOX"}{row.is_default ? " · Mặc định" : ""}</Text>
-      </View>
-      <View style={ui.recordHeader}>
-        <StatusBadge status={row.active && row.confirmed_by_holder_at ? "CONFIRMED" : row.active ? "PENDING" : "CLOSED"} label={`${row.active ? "Đang hoạt động" : "Đã tắt"} · ${row.confirmed_by_holder_at ? "Người giữ quỹ đã xác nhận" : "Chưa được người giữ quỹ xác nhận"}`} />
-      </View>
-      {row.account_number ? <>
-        <Text selectable style={typography.body}>{bankDisplayName(row.bank_code ?? '')} · {row.account_number}</Text>
-        <Text selectable style={typography.body}>{row.account_name}</Text>
-      </> : row.momo_phone ? <Text selectable style={typography.body}>{row.momo_phone}</Text> : <Text style={typography.footnote}>Số tài khoản có trong mã QR của khoản góp của bạn.</Text>}
-      {qrUrl && (qrId === row.id ? <>
-        {qrConsent ? <QrImage url={qrUrl} label={`Mã QR nhận tiền ${bankDisplayName(row.bank_code ?? '')} ${row.account_number ?? ""}`} onError={() => setQrFailed(true)} /> : <>
-          <Notice>Để tải ảnh QR nhận tiền, ngân hàng, số tài khoản và tên người nhận sẽ được gửi đến Casso (img.vietqr.io). Chỉ tiếp tục nếu bạn đồng ý.</Notice>
-          <Button label="Đồng ý tải ảnh QR" compact variant="soft" onPress={() => setQrConsent(true)} />
-        </>}
-        {qrFailed && <Feedback message="Không tải được ảnh QR. Kiểm tra mạng; thông tin tài khoản vẫn hiển thị ở trên." />}
-        {qrConsent && <Hint title="Mã này dùng khi nào?" points={["Mã không kèm số tiền hay nội dung; người chuyển tự nhập.", "Để khớp đúng khoản góp, mở Đợt góp và dùng QR của khoản đóng của bạn."]} />}
-        <Button label="Ẩn mã QR" compact variant="text" onPress={() => showQr(undefined)} />
-      </> : <Button label="Xem mã QR nhận tiền" compact accessibilityLabel={`Xem mã QR nhận tiền ${bankDisplayName(row.bank_code ?? '')} ${row.account_number ?? ""}`} variant="soft" onPress={() => showQr(row.id)} />)}
-      {actor.writable && !destinations.error && <View style={ui.actionRow}>
-        {actor.holder && row.active && !row.confirmed_by_holder_at && <Button label="Xác nhận tài khoản nhận" compact accessibilityLabel={`Xác nhận tài khoản ${row.bank_code ? bankDisplayName(row.bank_code) : "MoMo"} ${row.account_number ?? row.momo_phone ?? row.account_name ?? ""}`} disabled={locked || destinations.loading} onPress={() => open({ title: "Xác nhận tài khoản nhận", description: `${row.bank_code ? bankDisplayName(row.bank_code) : "MoMo"} · ${row.account_number ?? row.momo_phone ?? ""} · ${row.account_name ?? ""}. Tôi là người giữ quỹ và đã kiểm tra đúng thông tin. Xác nhận này không phải xác minh của ngân hàng.`, build: () => financeCommands.confirmDestination(fund, row) })} />}
-        {actor.owner && <>
-          {row.destination_type === "VIETQR" && <Button label="Sửa tài khoản nhận" compact variant="soft" disabled={locked || destinations.loading} onPress={() => open(destinationForm(fund, row))} />}
-          <Button label={row.active ? "Tắt tài khoản nhận" : "Bật lại tài khoản nhận"} compact variant="soft" disabled={locked || destinations.loading} onPress={() => open({ title: row.active ? "Tắt tài khoản nhận" : "Bật lại tài khoản nhận", description: "Không sửa tài khoản đã chốt trên các khoản góp cũ. Bật lại sẽ yêu cầu người giữ quỹ xác nhận lại.", build: () => financeCommands.destination(fund, { active: !row.active, is_default: false }, row) })} />
-        </>}
-      </View>}
-    </View>; })}
+    <View style={styles.destinations}>
+      {destinations.data?.map(row => <DestinationCard key={row.id} row={row}
+        canConfirm={actor.writable && !destinations.error && actor.holder && row.active && !row.confirmed_by_holder_at}
+        canManage={actor.writable && !destinations.error && actor.owner}
+        disabled={locked || destinations.loading}
+        onConfirm={() => open({ title: "Xác nhận tài khoản nhận", description: `${row.bank_code ? bankDisplayName(row.bank_code) : "MoMo"} · ${row.account_number ?? row.momo_phone ?? ""} · ${row.account_name ?? ""}. Tôi là người giữ quỹ và đã kiểm tra đúng thông tin. Xác nhận này không phải xác minh của ngân hàng.`, build: () => financeCommands.confirmDestination(fund, row) })}
+        onEdit={() => open(destinationForm(fund, row))}
+        onToggle={() => open({ title: row.active ? "Tắt tài khoản nhận" : "Bật lại tài khoản nhận", description: "Không sửa tài khoản đã chốt trên các khoản góp cũ. Bật lại sẽ yêu cầu người giữ quỹ xác nhận lại.", build: () => financeCommands.destination(fund, { active: !row.active, is_default: false }, row) })} />)}
+      {destinations.data && !destinations.data.length && <Notice>Chưa có tài khoản nhận tiền. {actor.owner ? "Bấm “Thêm tài khoản nhận” ở trên để bắt đầu thu quỹ." : "Chủ nhóm sẽ thêm tài khoản để cả nhóm chuyển khoản."}</Notice>}
+    </View>
   </FadeInView>;
 }
 
@@ -494,6 +463,7 @@ function FundRecords({ fund, trip, userId, locked, open, who, tab, members, onIn
 }
 
 const styles = StyleSheet.create({
+  destinations: { gap: 14 },
   heroCard: {
     padding: 20,
     borderRadius: radii.cardLarge,

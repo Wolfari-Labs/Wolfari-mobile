@@ -104,3 +104,18 @@ export function parsePaymentQr(input: string): PaymentQrResult {
     return { ok: false, message: invalid };
   }
 }
+
+/**
+ * Fallback when a QR cannot be scanned: the holder types the recipient. Same shape as a
+ * scanned QR without amount/note (those are entered on the transfer step), so the rest
+ * of the flow is shared. Nothing here proves the account exists or belongs to the name.
+ */
+export function manualPayment(input: { bankBin?: string; account: string; recipient: string }): PaymentQrResult {
+  if (!input.bankBin || !/^\d{6}$/.test(input.bankBin)) return { ok: false, message: "Chọn ngân hàng nhận." };
+  const account = input.account.replace(/[\s.-]+/g, "");
+  if (!account) return { ok: false, message: "Nhập số tài khoản người nhận." };
+  if (!/^[A-Za-z0-9]{1,19}$/.test(account)) return { ok: false, message: "Số tài khoản chỉ gồm chữ và số, tối đa 19 ký tự." };
+  const recipient = input.recipient.trim().replace(/\s+/g, " ");
+  if ([...recipient].length > 50) return { ok: false, message: "Tên người nhận tối đa 50 ký tự." };
+  return { ok: true, payment: { bankBin: input.bankBin, account, recipientLabel: recipient ? recipient.toUpperCase() : undefined } };
+}

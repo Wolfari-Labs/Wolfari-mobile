@@ -260,6 +260,10 @@ try {
   await action("Xác nhận tài khoản");
   assert.ok(destinations[0].confirmed_by_holder_at);
   await button("Quét QR thanh toán").waitFor();
+  // The receiving account is drawn as a bank card: grouped number, copy, status line.
+  await page.getByText("0012 345 678", { exact: true }).waitFor();
+  await page.getByText("Người giữ quỹ đã xác nhận", { exact: true }).scrollIntoViewIfNeeded();
+  await shot("00-destination-card.png");
   assert.equal(await button("Quét QR thanh toán").count(), 1, "The current Holder can scan while the fund is open.");
   // Keep the fixture within the app's 12-digit trip-budget input range while
   // still asserting that money stays a decimal string and is grouped exactly.
@@ -287,6 +291,22 @@ try {
   await action("Xác nhận đã nhận đủ"); assert.equal(fund.current_balance, "500000");
   // A simulated QR payment from the live workspace persists locally, with no Finance write.
   await tab('Tổng quan');
+  // No scannable QR: the Holder types the recipient and reaches the same transfer step.
+  await button('Quét QR thanh toán').click(); await button('Nhập thông tin thủ công').click();
+  await button('Tiếp tục').click();
+  await page.getByText('Chọn ngân hàng nhận.', { exact: true }).waitFor();
+  await page.getByRole('radio', { name: 'MB Bank · Quân đội', exact: true }).click();
+  await field('Số tài khoản người nhận').fill('0866 706 255');
+  await field('Tên người nhận (không bắt buộc)').fill('mai thanh tan');
+  await button('Tiếp tục').click();
+  await page.getByText('MAI THANH TAN', { exact: true }).waitFor();
+  await page.getByText('0866706255', { exact: true }).waitFor();
+  await page.getByText(/Thông tin nhập tay chưa được ngân hàng kiểm tra/).waitFor();
+  await field('Số tiền chuyển (VND)').waitFor();
+  await shot('08-manual-recipient.png');
+  await button('Sửa thông tin người nhận').click();
+  await field('Số tài khoản người nhận').waitFor();
+  await button('Đóng').click();
   const writesBeforeSimulation = calls.filter(call => call.method !== 'GET' && !call.p.startsWith('/auth/')).length;
   async function prepareSimulation(amount) {
     await button('Quét QR thanh toán').click(); await button('Dán nội dung QR').click();

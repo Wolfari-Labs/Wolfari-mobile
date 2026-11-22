@@ -220,7 +220,7 @@ try {
   await page.evaluate(codes => { qrFixture.codes = codes; }, [staticQr, dynamicQr]);
   await page.getByText("0099999999", { exact: true }).waitFor();
   assert.equal(await page.getByText("0011012345678", { exact: true }).count(), 0);
-  await page.getByText(/QR chưa có số tiền/).waitFor();
+  await page.getByText(/chưa có số tiền/).waitFor();
   await page.waitForFunction(() => qrFixture.streams.every(stream => stream.getTracks().every(track => track.readyState === "ended")));
   await button("Quét mã khác").click();
   await page.waitForFunction(() => !!document.querySelector("video")?.videoWidth);
