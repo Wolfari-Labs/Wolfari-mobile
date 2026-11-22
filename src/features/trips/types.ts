@@ -43,3 +43,23 @@ export type InvitationResult = { invitation: Invitation; one_time_link?: string;
 export type InvitationPreview = { id: string; trip_name: string; inviter_display_name: string; status: Invitation["status"]; expires_at: string };
 export type TravelPlace = { id: string; name: string; address: string; coordinates: { latitude: number; longitude: number }; opening_hours: { weekday: number; opens_at: string; closes_at: string }[] };
 export type TravelMeta = { status: "SUCCESS" | "NO_RESULT" | "ERROR"; provider: string; fetched_at: string; stale: boolean; is_mock: boolean; warnings: string[]; attribution: { text: string; url: string }[] };
+
+/** POI search (GET /trips/{id}/places/search): curated Wolfari data, optionally Geoapify. */
+export type PoiPlace = {
+  id: string; name: string; address?: string; coordinates: { latitude: number; longitude: number };
+  selection_token: string; attribution: string; provider: "WOLFARI" | "GEOAPIFY";
+  category: string; category_label: string; tier: 1 | 2 | 3 | 9; coord_verified: boolean;
+  typical_duration_min?: number; activity_type: string; dress_code_hint: string;
+  province_name?: string | null;
+  /** Search group of `category` (tourism, restaurant, cafe…); null when unknown. */
+  category_group?: string | null;
+};
+export type PoiMeta = {
+  provider: string; status: "SUCCESS" | "NO_RESULT" | "ERROR"; stale: boolean; is_mock: boolean;
+  fetched_at?: string | null; warnings?: string[]; bbox_truncated?: boolean;
+};
+export type PoiCategory = "tourism" | "restaurant" | "cafe" | "accommodation" | "nightlife" | "shopping" | "entertainment" | "wellness" | "transport" | "services" | "other" | "all";
+export type PoiQuery = { q?: string; latitude?: number; longitude?: number; radius_m?: number; category?: PoiCategory; bbox?: string; limit?: number };
+export type RouteMode = "DRIVING" | "WALKING";
+export type TravelRoute = { distance_m: number; duration_seconds: number; geometry: { latitude: number; longitude: number }[] } | null;
+export type TravelRouteMeta = { status: "SUCCESS" | "NO_RESULT"; provider: string; stale: boolean; warnings: string[] };

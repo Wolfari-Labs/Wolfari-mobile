@@ -1,6 +1,6 @@
 export type OrderFrame = { y: number; height: number };
-export const ORDER_ROW_GAP = 10;
-export const ORDER_LIST_PADDING = 3;
+export const ORDER_ROW_GAP = 12;
+export const ORDER_LIST_PADDING = 0;
 export const ORDER_HOLD_MS = 250;
 
 /** Rebuild positions after every reorder; keyed rows may not emit a new layout. */
@@ -37,4 +37,20 @@ export function dragScrollOffset(offset: number, pointerY: number, viewportHeigh
   const edge = Math.min(52, viewportHeight / 3);
   const speed = pointerY < edge ? -9 : pointerY > viewportHeight - edge ? 9 : 0;
   return Math.max(0, Math.min(Math.max(0, contentHeight - viewportHeight), offset + speed));
+}
+
+/** Distance the dragged row travels to sit exactly in its drop slot (variable heights). */
+export function settleOffset(ids: string[], frames: ReadonlyMap<string, OrderFrame>, from: number, to: number) {
+  const origin = frames.get(ids[from]), target = frames.get(ids[to]);
+  if (!origin || !target || from === to) return 0;
+  return to > from ? target.y + target.height - origin.y - origin.height : target.y - origin.y;
+}
+
+/** How far a resting row slides to make room while another row is dragged over it. */
+export function shiftFor(index: number, from: number, to: number, gap: number) {
+  "worklet"; // Runs inside an animated style on the UI thread.
+  if (from < 0 || index === from) return 0;
+  if (from < to && index > from && index <= to) return -gap;
+  if (from > to && index < from && index >= to) return gap;
+  return 0;
 }

@@ -98,3 +98,16 @@ test("native plugins allow scanning without microphone or image-picker camera bl
   assert.equal(picker.cameraPermission, camera.cameraPermission);
   assert.equal(picker.microphonePermission, false);
 });
+
+test("manual entry builds the same payment shape as a scanned QR", async () => {
+  const { manualPayment } = await import("../src/features/payments/model/payment-qr.ts");
+  assert.deepEqual(manualPayment({ bankBin: "970422", account: " 0866 706-255 ", recipient: "  mai  thanh tan " }),
+    { ok: true, payment: { bankBin: "970422", account: "0866706255", recipientLabel: "MAI THANH TAN" } });
+  assert.deepEqual(manualPayment({ bankBin: "970422", account: "123", recipient: "" }),
+    { ok: true, payment: { bankBin: "970422", account: "123", recipientLabel: undefined } });
+  assert.match(manualPayment({ account: "123", recipient: "" }).message, /Chọn ngân hàng/);
+  assert.match(manualPayment({ bankBin: "970422", account: "", recipient: "" }).message, /Nhập số tài khoản/);
+  assert.match(manualPayment({ bankBin: "970422", account: "12#4", recipient: "" }).message, /chữ và số/);
+  assert.match(manualPayment({ bankBin: "970422", account: "1".repeat(20), recipient: "" }).message, /tối đa 19/);
+  assert.match(manualPayment({ bankBin: "970422", account: "1", recipient: "x".repeat(51) }).message, /tối đa 50/);
+});

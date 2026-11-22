@@ -178,16 +178,30 @@ try {
   await button("Lưu cho cả nhóm").click();
   await button("Tải kế hoạch mới nhất").click();
   await button("Sửa Nước uống").waitFor();
-  await button("Xóa Nước uống").click();
+  // Delete lives inside the edit sheet, so rows stay uncluttered.
+  await button("Sửa Nước uống").click();
+  await button("Xóa vật dụng này").click();
   await button("Xóa vật dụng").click();
   await page.getByText("Nước uống", { exact: true }).waitFor({ state: "hidden" });
+  // A custom category: typed once, then offered as a chip like the presets.
+  await button("Thêm vật dụng").click();
+  await field("Tên vật dụng").fill("Kem chống nắng");
+  await button("Thêm danh mục mới").click();
+  await field("Tên danh mục mới").fill("  Đồ   đi biển ");
+  await button("Lưu cho cả nhóm").click();
+  await page.getByText("Đã lưu vật dụng cho cả nhóm.", { exact: true }).waitFor();
+  assert.equal(writes.at(-1).body.category, "Đồ đi biển");
+  await page.getByRole("button", { name: "Đồ đi biển, đã chuẩn bị 0/1 món", exact: true }).waitFor();
+  await page.screenshot({ path: ".cache/visual/packing-custom-category.png" });
+  await button("Sửa Kem chống nắng").click();
+  await button("Chọn Đồ đi biển").waitFor();
   editable = false;
   await open();
   assert.equal(await button("Thêm vật dụng").count(), 0);
   assert.deepEqual(errors, []);
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
   console.log(
-    "PASS shared packing UI: validation, create, completion, reload, version conflict, delete, viewer permissions. HTTP fixtures only.",
+    "PASS shared packing UI: validation, create, completion, reload, version conflict, delete from edit sheet, custom category, viewer permissions. HTTP fixtures only.",
   );
 } catch (error) {
   console.error(

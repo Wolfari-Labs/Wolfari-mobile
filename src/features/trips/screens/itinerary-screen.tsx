@@ -1,87 +1,82 @@
 import { router } from "expo-router";
 import { useState } from "react";
-import { Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { useCommand } from "@/shared/hooks/use-command";
-import { typography } from "@/shared/theme/tokens";
+import { colors, fonts, radii, typography } from "@/shared/theme/tokens";
 import { Button } from "@/shared/ui/button";
+import { DesignIcon } from "@/shared/ui/design-icon";
 import { Feedback } from "@/shared/ui/feedback";
-import {
-  EmptyState,
-  IconButton,
-  ResourceFeedback,
-  Segments,
-  ui,
-} from "@/shared/ui/journal";
+import { EmptyState, IconButton, ResourceFeedback, Segments, ui } from "@/shared/ui/journal";
 import { Screen } from "@/shared/ui/screen";
 import { Sheet } from "@/shared/ui/sheet";
+import { ActivityOrderList, type DragStatus } from "../components/activity-order-list";
 import { ActivityRow } from "../components/activity-row";
+import { ActivityScheduleSheet } from "../components/activity-schedule-sheet";
 import { TripNavigation } from "../components/trip-navigation";
-import { ItineraryOrderEditor } from "../components/itinerary-order-editor";
+import { useItineraryEditor } from "../hooks/use-itinerary-editor";
 import { useTrip } from "../hooks/use-trip";
-import type { Activity } from "../types";
-import {
-  activityDay,
-  calendarLabel,
-  dateLabel,
-  sortedActivities,
-  timeLabel,
-  tripDays,
-} from "../utils";
+import type { Activity, Plan, Trip } from "../types";
+import { activityDay, calendarLabel, dateLabel, sortedActivities, timeLabel, tripDays } from "../utils";
+
+/** Open on the first day that has plans, so a fresh trip never looks empty. */
+function firstBusyDay(trip: Trip, plan: Plan, days: string[]) {
+  const used = new Set(plan.activities.map((a) => activityDay(a, trip.timezone) ?? "unscheduled"));
+  return days.find((day) => used.has(day)) ?? (used.has("unscheduled") ? "unscheduled" : days[0]);
+}
 
 export default function ItineraryScreen() {
-  const [reordering, setReordering] = useState(false);
-  // The inline editor polls its own plan session.
-  const resource = useTrip(reordering),
+  const [editing, setEditing] = useState(false);
+  // While editing, the editor's own versioned session owns the plan.
+  const resource = useTrip(editing),
     command = useCommand();
   const { data, api, id } = resource;
   const [day, setDay] = useState<string>();
   const [selectedId, setSelectedId] = useState<string>();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [orderSaved, setOrderSaved] = useState<string>();
+  const [dragStatus, setDragStatus] = useState<DragStatus>();
   const trip = data?.trip,
     plan = data?.plan;
   const days = trip ? tripDays(trip) : [];
-  const activeDay = day ?? days[0];
+  const activeDay = day ?? (trip && plan ? firstBusyDay(trip, plan, days) : undefined) ?? "unscheduled";
+  const editor = useItineraryEditor({
+    tripId: id,
+    trip,
+    plan,
+    active: editing,
+    day: activeDay,
+    onDay: setDay,
+    onExit: async (saved) => {
+      if (saved) {
+        await resource.reload();
+        setOrderSaved(saved);
+      }
+      setDragStatus(undefined);
+      setEditing(false);
+    },
+  });
   const activities =
     plan && trip
       ? sortedActivities(
           plan.activities.filter((a) =>
-            activeDay === "unscheduled"
-              ? !activityDay(a, trip.timezone)
-              : activityDay(a, trip.timezone) === activeDay,
+            activeDay === "unscheduled" ? !activityDay(a, trip.timezone) : activityDay(a, trip.timezone) === activeDay,
           ),
         )
       : [];
-  const selected = plan?.activities.find((a) => a.id === selectedId);
-  function openOrderEditor() {
-    if (command.busy || !plan?.permissions.can_edit || activities.length < 2) return;
+  const selected = editing ? undefined : plan?.activities.find((a) => a.id === selectedId);
+  const canArrange = !!plan?.permissions.can_edit && plan.activities.length > 0;
+  function startEditing() {
+    if (command.busy || !canArrange || editing) return;
     setSelectedId(undefined);
     setOrderSaved(undefined);
-    setReordering(true);
+    editor.start();
+    setEditing(true);
   }
-  if (reordering && trip)
-    return (
-      <ItineraryOrderEditor
-        trip={trip}
-        initialDay={activeDay ?? "unscheduled"}
-        onClose={() => setReordering(false)}
-        onSaved={(message) => {
-          setReordering(false);
-          setOrderSaved(message);
-          void resource.reload();
-        }}
-      />
-    );
   async function complete(activity: Activity) {
     if (!plan) return;
     const result = await command.run(
-      {
-        action: "completion",
-        id: activity.id,
-        version: plan.plan_version,
-        status: activity.status,
-      },
+      { action: "completion", id: activity.id, version: plan.plan_version, status: activity.status },
       (key) => api.trips.complete(id, activity, plan.plan_version, key),
     );
     if (result) {
@@ -93,8 +88,7 @@ export default function ItineraryScreen() {
     if (!plan) return;
     const result = await command.run(
       { action: "delete", id: activity.id, version: plan.plan_version },
-      (key) =>
-        api.trips.removeActivity(id, activity.id, plan.plan_version, key),
+      (key) => api.trips.removeActivity(id, activity.id, plan.plan_version, key),
     );
     if (result) {
       setSelectedId(undefined);
@@ -102,14 +96,50 @@ export default function ItineraryScreen() {
       await resource.reload();
     }
   }
+  const dayLabel = activeDay === "unscheduled" ? "mục Chưa xếp lịch" : `ngày ${activeDay.slice(8)}/${activeDay.slice(5, 7)}`;
+  const draft = editor.state;
+  const editFooter = editor.discard ? (
+    <>
+      <Text style={[typography.headline, { textAlign: "center" }]}>Bỏ các thay đổi?</Text>
+      <Text style={[typography.footnote, { textAlign: "center" }]}>
+        {draft.uncertain
+          ? "Yêu cầu lưu có thể đã tới máy chủ. Khi mở lại, app sẽ tải trạng thái mới nhất; hãy kiểm tra trước khi sửa tiếp."
+          : "Thứ tự và giờ chưa lưu sẽ bị bỏ. Kế hoạch của nhóm không thay đổi."}
+      </Text>
+      <View style={styles.actions}>
+        <Button label="Tiếp tục sắp xếp" variant="soft" compact style={styles.action} onPress={editor.keepEditing} />
+        <Button label="Bỏ thay đổi" variant="destructive" compact style={styles.action} onPress={editor.discardDraft} />
+      </View>
+    </>
+  ) : (
+    <View style={styles.actions}>
+      <Button label="Hủy" variant="soft" disabled={editor.busy || editor.isDragging} style={styles.cancel} onPress={editor.close} />
+      <Button
+        label={draft.uncertain ? "Thử lưu lại" : "Lưu thứ tự cho nhóm"}
+        loading={editor.busy}
+        disabled={editor.isDragging || draft.loading || draft.conflict || !draft.plan?.permissions.can_edit || !editor.dirty}
+        style={styles.action}
+        onPress={() => {
+          void editor.save();
+        }}
+      />
+    </View>
+  );
   return (
     <Screen
       title={trip?.name ?? "Lịch trình"}
-      tab="trips"
-      refreshing={resource.loading && !!data}
-      onRefresh={() => {
-        void resource.reload();
-      }}
+      tab={editing ? undefined : "trips"}
+      onBack={editing ? editor.close : undefined}
+      footer={editing ? editFooter : undefined}
+      scrollEnabled={!editor.isDragging}
+      refreshing={!editing && resource.loading && !!data}
+      onRefresh={
+        editing
+          ? undefined
+          : () => {
+              void resource.reload();
+            }
+      }
     >
       <ResourceFeedback
         {...resource}
@@ -120,7 +150,23 @@ export default function ItineraryScreen() {
       />
       {trip && plan && (
         <>
-          <TripNavigation id={id} active="itinerary" />
+          {editing ? (
+            <View style={styles.editBar}>
+              <View style={styles.editIcon}>
+                <DesignIcon name="edit" size={18} tintColor={colors.teal} />
+              </View>
+              <Text style={[typography.headline, { flex: 1 }]} numberOfLines={2}>
+                Đang sắp xếp {dayLabel}
+              </Text>
+              <View style={[styles.status, editor.dirty && styles.statusDirty]}>
+                <Text style={[styles.statusText, editor.dirty && styles.statusDirtyText]}>
+                  {draft.plan ? (editor.dirty ? "Chưa lưu" : "Đã đồng bộ") : "Đang tải"}
+                </Text>
+              </View>
+            </View>
+          ) : (
+            <TripNavigation id={id} active="itinerary" />
+          )}
           <Segments
             scroll
             items={[
@@ -130,77 +176,135 @@ export default function ItineraryScreen() {
               })),
               { value: "unscheduled", label: "Chưa xếp lịch" },
             ]}
-            value={activeDay ?? "unscheduled"}
-            onChange={setDay}
+            value={activeDay}
+            onChange={(value) => {
+              if (!editor.isDragging) setDay(value);
+            }}
           />
-          <View style={[ui.row, { justifyContent: "space-between" }]}>
-            <Text style={typography.footnote}>
-              {activities.length} hoạt động · Giờ {trip.timezone}
-            </Text>
-            {plan.permissions.can_edit && (
-              <IconButton
-                icon="plus"
-                label="Thêm hoạt động"
-                onPress={() =>
-                  router.push({
-                    pathname: "/trip/[id]/activity",
-                    params: { id, day: activeDay },
-                  })
-                }
-              />
+          <View style={[ui.row, styles.toolbar]}>
+            {editing ? (
+              <Text accessibilityLiveRegion="polite" style={[typography.footnote, { flex: 1 }]}>
+                {dragStatus
+                  ? `Thả vào vị trí ${dragStatus.position} / ${dragStatus.total} · Chưa lưu`
+                  : "Giữ thẻ để kéo · Chạm giờ để đổi lịch"}
+              </Text>
+            ) : (
+              <>
+                <Text style={[typography.footnote, { flex: 1 }]}>
+                  {activities.length} hoạt động · Giờ {trip.timezone}
+                </Text>
+                {canArrange && (
+                  <Pressable
+                    cssInterop={false}
+                    accessibilityRole="button"
+                    accessibilityLabel="Sắp xếp lịch trình"
+                    disabled={command.busy}
+                    onPress={startEditing}
+                    style={({ pressed }) => [styles.arrange, pressed && { opacity: 0.7 }]}
+                  >
+                    <DesignIcon name="edit" size={16} tintColor={colors.teal} />
+                    <Text style={styles.arrangeText}>Sắp xếp</Text>
+                  </Pressable>
+                )}
+                {plan.permissions.can_edit && (
+                  <IconButton
+                    icon="plus"
+                    label="Thêm hoạt động"
+                    onPress={() => router.push({ pathname: "/trip/[id]/activity", params: { id, day: activeDay } })}
+                  />
+                )}
+              </>
             )}
           </View>
-          {plan.permissions.can_edit && activities.length > 1 && (
-            <Button
-              label="Sắp xếp lịch trình"
-              variant="soft"
-              compact
-              disabled={command.busy}
-              onPress={openOrderEditor}
-            />
+          {!editing && orderSaved && <Feedback success={!orderSaved.includes("Chưa lưu được")} message={orderSaved} />}
+          {editing ? (
+            <>
+              {draft.plan && !draft.plan.permissions.can_edit && (
+                <Feedback message="Bạn chỉ có quyền xem. Người tổ chức quản lý quyền chỉnh sửa của nhóm." />
+              )}
+              {editor.activities.length ? (
+                <ActivityOrderList
+                  activities={editor.activities}
+                  timezone={trip.timezone}
+                  clearedTimeIds={editor.clearedTimeIds}
+                  changedTimeIds={editor.changedTimeIds}
+                  disabled={editor.locked}
+                  onEditTime={(activity) => editor.setScheduleTarget(activity)}
+                  onDragging={editor.onDragging}
+                  onStatus={setDragStatus}
+                  onChange={editor.reorderDay}
+                />
+              ) : (
+                <EmptyState
+                  title="Ngày này đang trống"
+                  message={`Chạm vào giờ của một hoạt động ở ngày khác để chuyển nó sang ${dayLabel}.`}
+                  icon="calendar"
+                />
+              )}
+              {editor.clearedTimeIds.size > 0 && (
+                <Text accessibilityLiveRegion="polite" style={typography.footnote}>
+                  Giờ gạch ngang sẽ bị bỏ khi lưu vì không còn đúng thứ tự ({editor.clearedTimeIds.size} hoạt động, vẫn giữ
+                  ngày). Chạm vào giờ để đặt lại.
+                </Text>
+              )}
+              {editor.timeError && <Feedback message={editor.timeError} />}
+              {draft.error && <Feedback message={draft.error} />}
+              {(draft.conflict || (draft.error && !draft.uncertain)) && (
+                <Button
+                  label="Bỏ bản nháp, tải bản mới"
+                  variant="soft"
+                  compact
+                  disabled={editor.busy || draft.loading || editor.isDragging}
+                  onPress={editor.reloadLatest}
+                />
+              )}
+            </>
+          ) : (
+            <View>
+              {activities.map((activity) => (
+                <ActivityRow
+                  key={activity.id}
+                  activity={activity}
+                  timezone={trip.timezone}
+                  onLongPress={canArrange && !command.busy ? startEditing : undefined}
+                  onPress={() => {
+                    command.clearError();
+                    setConfirmDelete(false);
+                    setSelectedId(activity.id);
+                  }}
+                />
+              ))}
+              {!activities.length && (
+                <EmptyState
+                  title="Chừa chỗ cho điều thú vị"
+                  message={
+                    activeDay === "unscheduled"
+                      ? "Các hoạt động chưa chọn giờ sẽ xuất hiện ở đây."
+                      : "Ngày này chưa có hoạt động. Cùng nhóm thêm một trải nghiệm nhé."
+                  }
+                  icon="calendar"
+                />
+              )}
+            </View>
           )}
-          {plan.permissions.can_edit && activities.length > 1 && (
-            <Text style={typography.footnote}>Nhấn giữ một hoạt động để sắp xếp và đổi giờ ngay trên lịch trình.</Text>
-          )}
-          {orderSaved && <Feedback success={!orderSaved.includes("Chưa lưu được")} message={orderSaved} />}
-          {activities.map((activity) => (
-            <ActivityRow
-              key={activity.id}
-              activity={activity}
-              timezone={trip.timezone}
-              onLongPress={plan.permissions.can_edit && activities.length > 1 && !command.busy ? openOrderEditor : undefined}
-              onPress={() => {
-                command.clearError();
-                setConfirmDelete(false);
-                setSelectedId(activity.id);
-              }}
-            />
-          ))}
-          {!activities.length && (
-            <EmptyState
-              title="Chừa chỗ cho điều thú vị"
-              message={
-                activeDay === "unscheduled"
-                  ? "Các hoạt động chưa chọn giờ sẽ xuất hiện ở đây."
-                  : "Ngày này chưa có hoạt động. Cùng nhóm thêm một trải nghiệm nhé."
-              }
-              icon="calendar"
-            />
-          )}
-          {!plan.permissions.can_edit && (
+          {!plan.permissions.can_edit && !editing && (
             <Text style={typography.footnote}>
-              Bạn có thể xem kế hoạch. Người tổ chức quản lý quyền chỉnh sửa của
-              nhóm.
+              Bạn có thể xem kế hoạch. Người tổ chức quản lý quyền chỉnh sửa của nhóm.
             </Text>
+          )}
+          {editing && editor.scheduleTarget && (
+            <ActivityScheduleSheet
+              key={editor.scheduleTarget.id}
+              activity={editor.scheduleTarget}
+              trip={trip}
+              onApply={(value) => editor.applySchedule(editor.scheduleTarget!, value)}
+              onClose={() => editor.setScheduleTarget(undefined)}
+            />
           )}
           <Sheet
             dismissible={!command.busy}
             visible={!!selected}
-            title={
-              confirmDelete
-                ? "Xóa hoạt động?"
-                : (selected?.title ?? "Hoạt động")
-            }
+            title={confirmDelete ? "Xóa hoạt động?" : (selected?.title ?? "Hoạt động")}
             onClose={() => {
               if (!command.busy) setSelectedId(undefined);
             }}
@@ -221,14 +325,9 @@ export default function ItineraryScreen() {
                       : selected.scheduled_date
                         ? "Cả ngày"
                         : "Chưa xếp"}
-                    {selected.ends_at
-                      ? ` – ${timeLabel(selected.ends_at, trip.timezone)}`
-                      : ""}
+                    {selected.ends_at ? ` – ${timeLabel(selected.ends_at, trip.timezone)}` : ""}
                   </Text>
-                  <Text style={typography.body}>
-                    {selected.description ||
-                      "Chưa có ghi chú cho hoạt động này."}
-                  </Text>
+                  <Text style={typography.body}>{selected.description || "Chưa có ghi chú cho hoạt động này."}</Text>
                 </View>
                 {command.error && (
                   <>
@@ -245,9 +344,7 @@ export default function ItineraryScreen() {
                 )}
                 {confirmDelete ? (
                   <>
-                    <Text style={typography.body}>
-                      Hoạt động sẽ được gỡ khỏi lịch trình của cả nhóm.
-                    </Text>
+                    <Text style={typography.body}>Hoạt động sẽ được gỡ khỏi lịch trình của cả nhóm.</Text>
                     <Button
                       label="Xác nhận xóa hoạt động"
                       variant="destructive"
@@ -256,22 +353,13 @@ export default function ItineraryScreen() {
                         void remove(selected);
                       }}
                     />
-                    <Button
-                      label="Giữ lại"
-                      variant="soft"
-                      disabled={command.busy}
-                      onPress={() => setConfirmDelete(false)}
-                    />
+                    <Button label="Giữ lại" variant="soft" disabled={command.busy} onPress={() => setConfirmDelete(false)} />
                   </>
                 ) : (
                   <>
                     {plan.permissions.can_complete && (
                       <Button
-                        label={
-                          selected.status === "COMPLETED"
-                            ? "Đánh dấu chưa hoàn thành"
-                            : "Đánh dấu hoàn thành"
-                        }
+                        label={selected.status === "COMPLETED" ? "Đánh dấu chưa hoàn thành" : "Đánh dấu hoàn thành"}
                         loading={command.busy}
                         onPress={() => {
                           void complete(selected);
@@ -286,10 +374,7 @@ export default function ItineraryScreen() {
                           disabled={command.busy}
                           onPress={() => {
                             setSelectedId(undefined);
-                            router.push({
-                              pathname: "/trip/[id]/activity",
-                              params: { id, activityId: selected.id },
-                            });
+                            router.push({ pathname: "/trip/[id]/activity", params: { id, activityId: selected.id } });
                           }}
                         />
                         <Button
@@ -310,3 +395,41 @@ export default function ItineraryScreen() {
     </Screen>
   );
 }
+
+const styles = StyleSheet.create({
+  toolbar: { justifyContent: "space-between", gap: 10, minHeight: 48 },
+  arrange: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    minHeight: 44,
+    paddingHorizontal: 14,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surface,
+  },
+  arrangeText: { color: colors.teal, fontFamily: fonts.bold, fontSize: 14 },
+  editBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    minHeight: 56,
+    paddingHorizontal: 10,
+    borderRadius: radii.pill,
+    backgroundColor: colors.tealSoft,
+  },
+  editIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.surface,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  status: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: radii.pill, backgroundColor: colors.surface },
+  statusDirty: { backgroundColor: colors.lilac },
+  statusText: { color: colors.teal, fontSize: 12, fontFamily: fonts.bold },
+  statusDirtyText: { color: colors.violet },
+  actions: { flexDirection: "row", gap: 10 },
+  action: { flex: 1 },
+  cancel: { minWidth: 96 },
+});

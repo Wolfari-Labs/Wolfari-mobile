@@ -19,6 +19,12 @@ import type {
   PlanPolicySettings,
   TravelMeta,
   TravelPlace,
+  PoiMeta,
+  PoiPlace,
+  PoiQuery,
+  RouteMode,
+  TravelRoute,
+  TravelRouteMeta,
   SelectedLocation,
   Trip,
 } from "../types";
@@ -260,6 +266,17 @@ export function createTripsApi(client: ApiClient) {
         `/invitations/${action}`,
         write("POST", invitationBody(secret), key),
       ),
+    /** Map search: by text, around a point, or inside the visible map frame (bbox). */
+    poiSearch: (tripId: string, query: PoiQuery, signal?: AbortSignal) => {
+      const params = new URLSearchParams();
+      for (const [key, value] of Object.entries(query)) if (value !== undefined && value !== "") params.set(key, String(value));
+      return client.requestWithMeta<PoiPlace[], PoiMeta>(`/trips/${id(tripId)}/places/search?${params}`, { signal });
+    },
+    /** Saves a search result by its server-issued token; the server fills name, coordinates and attribution. */
+    saveLocationToken: (tripId: string, input: { selection_token: string; expected_plan_version: number }, key: string) =>
+      client.request<SelectedLocation>(`/trips/${id(tripId)}/selected-locations`, write("POST", input, key)),
+    route: (coordinates: { latitude: number; longitude: number }[], mode: RouteMode, signal?: AbortSignal) =>
+      client.requestWithMeta<TravelRoute, TravelRouteMeta>("/travel/route", { method: "POST", body: { coordinates, mode }, signal }),
     searchPlaces: (tripId: string, q: string, signal?: AbortSignal) =>
       client.requestWithMeta<TravelPlace[], TravelMeta>(
         `/travel/places?${new URLSearchParams({ trip_id: tripId, q: q.trim() })}`,

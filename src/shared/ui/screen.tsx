@@ -172,6 +172,7 @@ function ScreenInner({
             <ScrollView
               ref={keyboardScroll?.scrollRef}
               onScroll={keyboardScroll?.onScroll}
+              onContentSizeChange={keyboardScroll?.onContentSizeChange}
               scrollEventThrottle={16}
               scrollEnabled={scrollEnabled}
               contentContainerStyle={[

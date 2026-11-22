@@ -79,6 +79,12 @@ const button = name => page.getByRole("button", { name, exact: true });
 const field = name => page.getByLabel(name, { exact: true });
 const tab = name => page.getByRole("tab", { name, exact: true });
 const text = value => page.getByText(value, { exact: true });
+/** Cards open the editor; the cover photo on top opens the viewer, so tap the text area. */
+async function editCard(name) {
+  const card = button(`Sửa ${name}`);
+  const box = await card.boundingBox();
+  await card.click({ position: { x: 24, y: box.height - 24 } });
+}
 const goto = async route => { await page.goto(appUrl + route, { waitUntil: "networkidle" }); };
 const output = path.resolve(".cache/visual/dress-code");
 await mkdir(output, { recursive: true });
@@ -118,7 +124,7 @@ try {
   assert.match(writes()[0].key, /^[0-9a-f-]{36}$/i);
 
   // Edit: move it to an activity; the day reference is cleared explicitly.
-  await button("Sửa Trắng bên biển").click();
+  await editCard("Trắng bên biển");
   await tab("Hoạt động").last().click();
   await button("Lưu thay đổi").click();
   await text("Đã lưu thay đổi cho cả nhóm.").waitFor();
@@ -147,13 +153,17 @@ try {
 
   // A stale Plan shows the server message and offers the latest Plan; nothing is lost silently.
   server.conflictNext = true;
-  await button("Xóa Thoải mái").click();
+  // Delete sits inside the edit sheet; the card itself opens the editor.
+  await button("Sửa Thoải mái").click();
+  await button("Xóa dress code này").click();
   await button("Xóa dress code").click();
   await button("Tải kế hoạch mới nhất").waitFor();
   await screenshot("conflict");
   await button("Tải kế hoạch mới nhất").click();
   await text("Thoải mái").waitFor();
-  await button("Xóa Thoải mái").click();
+  // Delete sits inside the edit sheet; the card itself opens the editor.
+  await button("Sửa Thoải mái").click();
+  await button("Xóa dress code này").click();
   await button("Xóa dress code").click();
   await text("Đã xóa dress code.").waitFor();
   await text("Thoải mái").waitFor({ state: "hidden" });
@@ -165,14 +175,20 @@ try {
   await text("Trắng bên biển").waitFor();
   assert.equal(await button("Thêm dress code").count(), 0);
   assert.equal(await button("Sửa Trắng bên biển").count(), 0);
-  await button('Xem ảnh tham khảo Trắng bên biển').click();
+  // The photo is shown on the card itself; tapping it opens a full-screen viewer.
   await page.getByRole('img', { name: 'Ảnh tham khảo Trắng bên biển', exact: true }).waitFor();
   await screenshot("viewer");
+  await button('Xem ảnh tham khảo Trắng bên biển').click();
+  await page.getByRole('img', { name: 'Trắng bên biển, ảnh phóng to', exact: true }).waitFor();
+  await page.waitForTimeout(400); // let the fade-in finish before the screenshot
+  await page.screenshot({ path: path.join(output, "viewer-zoom.png") });
+  await button('Đóng ảnh').click();
+  await page.getByRole('img', { name: 'Trắng bên biển, ảnh phóng to', exact: true }).waitFor({ state: 'hidden' });
 
   // Replace, then remove the server attachment; a reload must preserve the final state.
   server.editable = true;
   await goto('/trip/' + tripId + '/dress-code');
-  await button('Sửa Trắng bên biển').click();
+  await editCard('Trắng bên biển');
   const replacement = page.waitForEvent('filechooser');
   await button('Đổi ảnh tham khảo').click();
   await (await replacement).setFiles({ ...photo, name: 'replacement.jpg' });
@@ -180,7 +196,7 @@ try {
   await button('Lưu thay đổi').click();
   await text('Đã lưu thay đổi cho cả nhóm.').waitFor();
   assert.equal(writes().at(-1).body.reference_image_id, imageId);
-  await button('Sửa Trắng bên biển').click();
+  await editCard('Trắng bên biển');
   await button('Bỏ ảnh tham khảo').click();
   await button('Lưu thay đổi').click();
   await text('Đã lưu thay đổi cho cả nhóm.').waitFor();
@@ -189,7 +205,7 @@ try {
   assert.equal(await button('Xem ảnh tham khảo Trắng bên biển').count(), 0);
   imageCapability = false;
   await goto('/trip/' + tripId + '/dress-code');
-  await button('Sửa Trắng bên biển').click();
+  await editCard('Trắng bên biển');
   assert.equal(await button('Chọn ảnh tham khảo').count(), 0);
   await button('Đóng').click();
 

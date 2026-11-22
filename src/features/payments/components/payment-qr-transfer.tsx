@@ -86,7 +86,7 @@ export function PaymentQrTransfer({ payment, tripId, simulationOnly = false, onS
 
   return <View style={ui.stack}>
     {!prepared ? <>
-      {!payment.amount && <Text style={typography.footnote}>QR chưa có số tiền. Nhập số tiền bạn muốn chuyển.</Text>}
+      {!payment.amount && <Text style={typography.footnote}>Nhập số tiền bạn muốn chuyển (mã QR hoặc thông tin nhập tay chưa có số tiền).</Text>}
       <MoneyField label="Số tiền chuyển (VND)" value={amount} onChangeText={value => { setAmount(value); setMessage(undefined); }} maxDigits={13} placeholder="Ví dụ: 150.000" />
       {/^[1-9]\d{0,12}$/.test(amount) && <Text style={typography.headline}>{money(amount)}</Text>}
       <FormField icon="edit" label="Nội dung chuyển khoản" value={note} onChangeText={value => { setNote(value); setMessage(undefined); }} maxLength={150} placeholder="Ví dụ: Thanh toan bua toi" />

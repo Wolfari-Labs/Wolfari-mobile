@@ -97,12 +97,18 @@ function ActivityForm({
     title: initialTitle,
     note,
     locationId,
+    activityType,
+    duration,
   } = useLocalSearchParams<{
     day?: string;
     title?: string;
     note?: string;
     locationId?: string;
+    /** From a map place: suggested type and visit length in minutes. */
+    activityType?: string;
+    duration?: string;
   }>();
+  const visitMinutes = Number(duration);
   const command = useCommand();
   const [publicDescription, setPublicDescription] = useState(activity?.public_description ?? "");
   const [selectedLocation, setSelectedLocation] = useState(activity?.selected_location_id ?? plan.selected_locations.find(location => location.id === locationId)?.id ?? "");
@@ -110,7 +116,7 @@ function ActivityForm({
   const [description, setDescription] = useState(
     activity?.description ?? note ?? "",
   );
-  const [type, setType] = useState(activity?.activity_type ?? "SIGHTSEEING");
+  const [type, setType] = useState(activity?.activity_type ?? (activityType && /^[A-Z_]{1,40}$/.test(activityType) ? activityType : "SIGHTSEEING"));
   const [mode, setMode] = useState<ActivitySchedule>(
     activity ? activitySchedule(activity) : day === "unscheduled" ? "unscheduled" : "timed",
   );
@@ -127,7 +133,11 @@ function ActivityForm({
       : "08:00",
   );
   const [end, setEnd] = useState(
-    activity?.ends_at ? timeLabel(activity.ends_at, trip.timezone) : "09:00",
+    activity?.ends_at
+      ? timeLabel(activity.ends_at, trip.timezone)
+      : Number.isInteger(visitMinutes) && visitMinutes > 0 && visitMinutes < 16 * 60
+        ? `${String(8 + Math.floor(visitMinutes / 60)).padStart(2, "0")}:${String(visitMinutes % 60).padStart(2, "0")}`
+        : "09:00",
   );
   const [endDate, setEndDate] = useState(
     dateLabel(activity?.ends_at ?? initialDay, trip.timezone),
