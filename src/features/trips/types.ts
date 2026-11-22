@@ -53,6 +53,13 @@ export type PoiPlace = {
   province_name?: string | null;
   /** Search group of `category` (tourism, restaurant, cafe…); null when unknown. */
   category_group?: string | null;
+  /** Licensed photo stored by Wolfari (POI-IMAGES); null/absent when none. */
+  hero_image?: PoiImage | null;
+};
+/** Gateway-relative WebP URLs and the credit line that must be shown with the photo. */
+export type PoiImage = {
+  url: string; thumbnail_url: string; small_url: string; width: number | null; height: number | null;
+  author: string | null; license: string; license_url: string | null; source_url: string; attribution: string;
 };
 export type PoiMeta = {
   provider: string; status: "SUCCESS" | "NO_RESULT" | "ERROR"; stale: boolean; is_mock: boolean;

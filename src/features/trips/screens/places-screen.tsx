@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { ApiError } from "@/shared/api/api-client";
+import { getApiBaseUrl } from "@/shared/config/env";
 import { errorMessage } from "@/shared/api/errors";
 import { useCommand } from "@/shared/hooks/use-command";
 import { colors, fonts, radii, typography } from "@/shared/theme/tokens";
@@ -24,6 +25,7 @@ import {
   distanceLabel,
   durationLabel,
   formActivityType,
+  poiImageUrl,
   regionBbox,
   straightLine,
   validCoordinates,
@@ -42,7 +44,10 @@ const travelWarnings: Record<string, string> = {
 };
 
 function fromPoi(place: PoiPlace): PlaceItem {
+  const image = place.hero_image;
+  const uri = image ? poiImageUrl(image.thumbnail_url, getApiBaseUrl()) : undefined;
   return {
+    ...(uri && image?.attribution && image.source_url ? { photo: { uri, attribution: image.attribution, sourceUrl: image.source_url } } : {}),
     id: "poi:" + place.id,
     name: place.name,
     address: place.address ?? place.province_name ?? "",
