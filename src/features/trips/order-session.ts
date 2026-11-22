@@ -209,6 +209,14 @@ export function createOrderSession(deps: Dependencies) {
         update({ busy: false });
       }
     },
+    /** Start a fresh edit from a plan already on screen; any old draft or retry is dropped. */
+    reset(plan: Plan) {
+      if (state.busy) return;
+      read?.abort();
+      pending = undefined;
+      adopt(plan);
+      update({ loading: false });
+    },
     dispose() {
       disposed = true;
       read?.abort();

@@ -1,26 +1,41 @@
-import { useCallback, useEffect, useRef, useState, type PropsWithChildren } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type PropsWithChildren } from "react";
 import { useIsFocused } from "expo-router";
 import {
   AccessibilityInfo,
   AppState,
   Pressable,
-  ScrollView,
   StyleSheet,
-  Text,
   View,
   useWindowDimensions,
   type LayoutChangeEvent,
-  type ScrollViewInstance,
-  type ViewInstance,
 } from "react-native";
-import Animated, { useAnimatedStyle, useSharedValue, type SharedValue } from "react-native-reanimated";
+import Animated, {
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withTiming,
+  type SharedValue,
+} from "react-native-reanimated";
 
-import { colors, typography } from "@/shared/theme/tokens";
+import { colors } from "@/shared/theme/tokens";
+import { useKeyboardScroll } from "@/shared/ui/keyboard-scroll";
 import type { Activity } from "../types";
 import { moveItem } from "../order-session";
 import { activityTimeLabel } from "../utils";
-import { ActivityDragHandle } from "./activity-drag-handle";
-import { dragPosition, dragScrollOffset, orderFrames, ORDER_LIST_PADDING, ORDER_ROW_GAP, type OrderFrame } from "../model/order-drag";
+import { ActivityCardBody, ActivityTime, activityCard } from "./activity-row";
+import { ActivityDragHandle, ActivityHoldArea } from "./activity-drag-handle";
+import {
+  dragPosition,
+  dragScrollOffset,
+  orderFrames,
+  settleOffset,
+  shiftFor,
+  ORDER_LIST_PADDING,
+  ORDER_ROW_GAP,
+  type OrderFrame,
+} from "../model/order-drag";
+
+export type DragStatus = { position: number; total: number } | undefined;
 
 type Props = {
   activities: Activity[];
@@ -31,25 +46,50 @@ type Props = {
   disabled: boolean;
   onChange: (ids: string[]) => void;
   onDragging: (dragging: boolean) => void;
+  /** Live drop position while dragging, for the screen's status line. */
+  onStatus?: (status: DragStatus) => void;
 };
 
-function OrderRow({ id, active, target, translation, onLayout, children }: PropsWithChildren<{
+const SHIFT_MS = 170;
+const SETTLE_MS = 150;
+
+function OrderRow({
+  id,
+  index,
+  activeIndex,
+  targetIndex,
+  shiftSize,
+  translation,
+  lifted,
+  onLayout,
+  children,
+}: PropsWithChildren<{
   id: string;
-  active: boolean;
-  target: boolean;
+  index: number;
+  activeIndex: SharedValue<number>;
+  targetIndex: SharedValue<number>;
+  shiftSize: SharedValue<number>;
   translation: SharedValue<number>;
+  lifted: boolean;
   onLayout: (event: LayoutChangeEvent) => void;
 }>) {
-  // Keep an animated style attached to each row and explicitly reset inactive rows.
+  const reduceMotion = useReducedMotion();
+  // Every row keeps one animated style and is explicitly reset when no drag is active.
   // Removing a Reanimated style does not undo its last native transform.
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: active ? translation.get() : 0 }],
-  }));
+  const animatedStyle = useAnimatedStyle(() => {
+    const from = activeIndex.get();
+    if (from < 0) return { transform: [{ translateY: 0 }, { scale: 1 }] };
+    if (index === from) {
+      return { transform: [{ translateY: translation.get() }, { scale: withTiming(1.02, { duration: reduceMotion ? 0 : 120 }) }] };
+    }
+    const shift = shiftFor(index, from, targetIndex.get(), shiftSize.get());
+    return { transform: [{ translateY: withTiming(shift, { duration: reduceMotion ? 0 : SHIFT_MS }) }, { scale: 1 }] };
+  });
   return (
     <Animated.View
       testID={`order-row-${id}`}
       onLayout={onLayout}
-      style={[styles.row, target && styles.target, active && styles.dragging, animatedStyle]}
+      style={[activityCard, styles.row, lifted && styles.lifted, animatedStyle]}
     >
       {children}
     </Animated.View>
@@ -65,16 +105,15 @@ export function ActivityOrderList({
   disabled,
   onChange,
   onDragging,
+  onStatus,
 }: Props) {
   const { height, width, fontScale } = useWindowDimensions();
   const focused = useIsFocused();
+  const reduceMotion = useReducedMotion();
+  const page = useKeyboardScroll();
   const [foreground, setForeground] = useState(AppState.currentState === "active");
-  const scroll = useRef<ScrollViewInstance>(null);
-  const viewport = useRef<ViewInstance>(null);
   const frames = useRef(new Map<string, OrderFrame>());
-  const offset = useRef(0);
-  const contentHeight = useRef(0);
-  const bounds = useRef({ top: 0, height: 0 });
+  const viewportTop = useRef(0);
   const drag = useRef<{
     id: string;
     from: number;
@@ -84,309 +123,261 @@ export function ActivityOrderList({
     pageY: number;
     items: Activity[];
     frames: Map<string, OrderFrame>;
+    settling?: boolean;
   } | null>(null);
   const timer = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
+  const settle = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const pendingReset = useRef(false);
   const [activeId, setActiveId] = useState<string>();
-  const [targetId, setTargetId] = useState<string>();
   const [measuredIds, setMeasuredIds] = useState<string[]>([]);
+  const activeIndex = useSharedValue(-1);
+  const targetIndex = useSharedValue(-1);
+  const shiftSize = useSharedValue(0);
   const translation = useSharedValue(0);
   const locked = disabled || !foreground || !focused;
-  const callbacks = useRef({ onChange, onDragging });
+  const callbacks = useRef({ onChange, onDragging, onStatus });
   useEffect(() => {
-    callbacks.current = { onChange, onDragging };
-  }, [onChange, onDragging]);
+    callbacks.current = { onChange, onDragging, onStatus };
+  }, [onChange, onDragging, onStatus]);
 
+  const resetMotion = useCallback(() => {
+    pendingReset.current = false;
+    activeIndex.set(-1);
+    targetIndex.set(-1);
+    translation.set(0);
+  }, [activeIndex, targetIndex, translation]);
+
+  /** Ends a drag. A commit glides the card into its slot first, then applies the order. */
   const finish = useCallback(
     (commit: boolean) => {
       const current = drag.current;
-      if (!current) return;
-      drag.current = null;
+      if (!current || current.settling) return;
       clearInterval(timer.current);
-      setActiveId(undefined);
-      setTargetId(undefined);
-      translation.set(0);
-      callbacks.current.onDragging(false);
-      if (commit && current.to !== current.from) {
-        const next = moveItem(current.items, current.from, current.to);
-        callbacks.current.onChange(next.map((item) => item.id));
-        AccessibilityInfo.announceForAccessibility(
-          `Đã chuyển ${current.items[current.from].title} tới vị trí ${current.to + 1}. Chưa lưu cho nhóm.`,
-        );
+      const moved = commit && current.to !== current.from;
+      const done = () => {
+        drag.current = null;
+        setActiveId(undefined);
+        callbacks.current.onStatus?.(undefined);
+        callbacks.current.onDragging(false);
+        if (moved) {
+          // Keep the shifted layout until the reordered rows render, so nothing flickers.
+          pendingReset.current = true;
+          callbacks.current.onChange(moveItem(current.items, current.from, current.to).map((item) => item.id));
+          AccessibilityInfo.announceForAccessibility(
+            `Đã chuyển ${current.items[current.from].title} tới vị trí ${current.to + 1}. Chưa lưu cho nhóm.`,
+          );
+          setTimeout(() => {
+            if (pendingReset.current) resetMotion();
+          }, 120);
+        } else resetMotion();
+      };
+      if (!commit) {
+        done();
+        return;
       }
+      current.settling = true;
+      const ids = current.items.map((item) => item.id);
+      const target = moved ? settleOffset(ids, current.frames, current.from, current.to) : 0;
+      const duration = reduceMotion ? 0 : SETTLE_MS;
+      translation.set(withTiming(target, { duration }));
+      if (!duration) done();
+      else settle.current = setTimeout(done, duration);
     },
-    [translation],
+    [reduceMotion, resetMotion, translation],
   );
+  const itemKey = activities.map((item) => item.id).join(",");
+  useLayoutEffect(() => {
+    if (pendingReset.current) resetMotion();
+  }, [itemKey, resetMotion]);
+  const cancel = useCallback(() => {
+    const current = drag.current;
+    if (!current) return;
+    clearTimeout(settle.current);
+    current.settling = false;
+    finish(false);
+  }, [finish]);
   useEffect(() => {
-    if (locked) finish(false);
-  }, [locked, finish]);
-  const itemKey = activities.map(item => item.id).join(",");
-  useEffect(() => { finish(false); }, [height, width, fontScale, itemKey, finish]);
+    if (locked) cancel();
+  }, [locked, cancel]);
   useEffect(() => {
-    const subscription = AppState.addEventListener("change", state => {
-      if (state !== "active") finish(false);
+    cancel();
+  }, [height, width, fontScale, itemKey, cancel]);
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state !== "active") cancel();
       setForeground(state === "active");
     });
     return () => subscription.remove();
-  }, [finish]);
+  }, [cancel]);
   useEffect(
     () => () => {
       clearInterval(timer.current);
+      clearTimeout(settle.current);
       callbacks.current.onDragging(false);
     },
     [],
   );
 
+  const offset = () => page?.metrics.current.offset ?? 0;
   function update() {
     const current = drag.current;
-    if (!current) return;
-    const delta = current.dy + offset.current - current.startOffset;
-    const position = dragPosition(current.items.map(item => item.id), current.frames, current.id, delta);
+    if (!current || current.settling) return;
+    const delta = current.dy + offset() - current.startOffset;
+    const position = dragPosition(current.items.map((item) => item.id), current.frames, current.id, delta);
     if (!position) return;
-    const nearest = position.index;
-    if (current.to !== nearest) {
-      current.to = nearest;
-      setTargetId(current.items[nearest].id);
+    if (current.to !== position.index) {
+      current.to = position.index;
+      targetIndex.set(position.index);
+      callbacks.current.onStatus?.({ position: position.index + 1, total: current.items.length });
     }
     translation.set(position.translation);
   }
   function begin(id: string, pageY: number) {
     if (locked || drag.current || AppState.currentState !== "active") return false;
     const from = activities.findIndex((item) => item.id === id);
-    const orderedFrames = orderFrames(activities.map(item => item.id), frames.current);
-    if (from < 0 || !orderedFrames) return false;
-    // A keyed row can move without another size/layout event on web. Rebuild
+    // A keyed row can move without another layout event on web. Rebuild
     // positions from the current order and measured heights before EVERY drag.
-    bounds.current = { top: 0, height: 0 };
-    viewport.current?.measureInWindow((_x, y, _width, h) => {
-      bounds.current = { top: y, height: h };
+    const orderedFrames = orderFrames(activities.map((item) => item.id), frames.current);
+    if (from < 0 || !orderedFrames) return false;
+    const scroll = page?.scrollRef.current as { measureInWindow?: (cb: (x: number, y: number) => void) => void } | null;
+    scroll?.measureInWindow?.((_x, y) => {
+      viewportTop.current = y;
     });
     drag.current = {
       id,
       from,
       to: from,
-      startOffset: offset.current,
+      startOffset: offset(),
       dy: 0,
       pageY,
       items: [...activities],
       frames: orderedFrames,
     };
+    shiftSize.set((orderedFrames.get(id)?.height ?? 0) + ORDER_ROW_GAP);
+    targetIndex.set(from);
+    translation.set(0);
+    activeIndex.set(from);
     setActiveId(id);
-    setTargetId(id);
+    callbacks.current.onStatus?.({ position: from + 1, total: activities.length });
     callbacks.current.onDragging(true);
     timer.current = setInterval(() => {
       const current = drag.current;
-      if (!current || !bounds.current.height || Math.abs(current.dy) < 3) return;
-      const local = current.pageY - bounds.current.top;
-      const next = dragScrollOffset(offset.current, local, bounds.current.height, contentHeight.current);
-      if (next !== offset.current) {
-        offset.current = next;
-        scroll.current?.scrollTo({ y: next, animated: false });
+      const metrics = page?.metrics.current;
+      if (!current || current.settling || !metrics?.viewportHeight || Math.abs(current.dy) < 3) return;
+      const local = current.pageY - viewportTop.current;
+      const next = dragScrollOffset(metrics.offset, local, metrics.viewportHeight, metrics.contentHeight);
+      if (next !== metrics.offset) {
+        metrics.offset = next;
+        page?.scrollRef.current?.scrollTo({ y: next, animated: false });
         update();
       }
     }, 32);
     return true;
   }
+  function step(index: number, direction: -1 | 1) {
+    if (locked || drag.current) return;
+    onChange(moveItem(activities, index, index + direction).map((item) => item.id));
+    AccessibilityInfo.announceForAccessibility(
+      `Đã chuyển ${activities[index].title} tới vị trí ${index + direction + 1}. Chưa lưu cho nhóm.`,
+    );
+  }
+
+  const ready = activities.every((item) => measuredIds.includes(item.id));
   return (
-    <>
-    <Text accessibilityLiveRegion="polite" style={[typography.footnote, { minHeight: 36 * fontScale }]}>
-      {activeId ? `Thả vào vị trí ${activities.findIndex(item => item.id === targetId) + 1} / ${activities.length} · Chưa lưu` : "Nhấn giữ ☰ rồi kéo · Vuốt phần tên để cuộn"}
-    </Text>
-    <View
-      ref={viewport}
-      testID="activity-order-list"
-      style={{ maxHeight: Math.max(220, height * 0.56), flexShrink: 1 }}
-    >
-      <ScrollView
-        ref={scroll}
-        scrollEnabled={!activeId}
-        nestedScrollEnabled
-        bounces={false}
-        overScrollMode="never"
-        scrollEventThrottle={16}
-        onScroll={(event) => {
-          offset.current = event.nativeEvent.contentOffset.y;
-        }}
-        onContentSizeChange={(_width, h) => {
-          contentHeight.current = h;
-        }}
-        contentContainerStyle={styles.list}
-      >
-        {activities.map((activity, index) => (
+    <View testID="activity-order-list" style={styles.list}>
+      {activities.map((activity, index) => {
+        const lifted = activeId === activity.id;
+        const otherActive = !!activeId && !lifted;
+        const cleared = clearedTimeIds.has(activity.id);
+        const changed = changedTimeIds?.has(activity.id);
+        const timeLabel = activityTimeLabel(activity, timezone);
+        const dragProps = {
+          disabled: locked || otherActive || !ready,
+          onBegin: (pageY: number) => begin(activity.id, pageY),
+          onMove: (dy: number, pageY: number) => {
+            if (drag.current && !drag.current.settling) {
+              drag.current.dy = dy;
+              drag.current.pageY = pageY;
+              update();
+            }
+          },
+          onEnd: finish,
+        };
+        const time = <ActivityTime label={timeLabel} tone={cleared ? "cleared" : changed ? "changed" : "default"} />;
+        return (
           <OrderRow
             key={activity.id}
             id={activity.id}
-            active={activeId === activity.id}
-            target={targetId === activity.id && activeId !== activity.id}
+            index={index}
+            activeIndex={activeIndex}
+            targetIndex={targetIndex}
+            shiftSize={shiftSize}
             translation={translation}
+            lifted={lifted}
             onLayout={(event) => {
               const previous = frames.current.get(activity.id);
-              if (drag.current && previous && previous.height !== event.nativeEvent.layout.height) finish(false);
+              if (drag.current && previous && previous.height !== event.nativeEvent.layout.height) cancel();
               frames.current.set(activity.id, event.nativeEvent.layout);
-              setMeasuredIds((ids) =>
-                ids.includes(activity.id) ? ids : [...ids, activity.id],
-              );
+              setMeasuredIds((ids) => (ids.includes(activity.id) ? ids : [...ids, activity.id]));
             }}
           >
-            <View style={styles.copy}>
-              <View style={styles.meta}>
-                <Text style={styles.index}>{index + 1}</Text>
-                {onEditTime ? (
-                  <Pressable
-                    cssInterop={false}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Đổi lịch ${activity.title}, ${activityTimeLabel(activity, timezone)}`}
-                    disabled={locked || !!activeId}
-                    accessibilityState={{ disabled: locked || !!activeId }}
-                    onPress={() => onEditTime(activity)}
-                    style={({ pressed }) => [
-                      styles.timePill,
-                      changedTimeIds?.has(activity.id) && styles.timeChanged,
-                      pressed && { opacity: 0.6 },
-                    ]}
-                  >
-                    <Text style={[styles.time, changedTimeIds?.has(activity.id) && styles.timeChangedText]}>
-                      {clearedTimeIds.has(activity.id)
-                        ? `Chưa chốt giờ · bỏ ${activityTimeLabel(activity, timezone)} khi lưu`
-                        : activityTimeLabel(activity, timezone)}
-                      {" ✎"}
-                    </Text>
-                  </Pressable>
-                ) : (
-                  <Text style={styles.time}>
-                    {clearedTimeIds.has(activity.id)
-                      ? `Chưa chốt giờ · bỏ ${activityTimeLabel(activity, timezone)} khi lưu`
-                      : activityTimeLabel(activity, timezone)}
-                  </Text>
-                )}
-              </View>
-              <Text style={typography.headline}>{activity.title}</Text>
-            </View>
-            <View>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`Đưa ${activity.title} lên`}
-                disabled={locked || !!activeId || index === 0}
-                accessibilityState={{
-                  disabled: locked || !!activeId || index === 0,
-                }}
-                style={styles.arrow}
-                onPress={() =>
-                  onChange(
-                    moveItem(activities, index, index - 1).map(
-                      (item) => item.id,
-                    ),
+            <ActivityHoldArea {...dragProps}>
+              <ActivityCardBody
+                activity={activity}
+                time={
+                  onEditTime ? (
+                    <Pressable
+                      cssInterop={false}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Đổi lịch ${activity.title}, ${timeLabel}${cleared ? ", giờ sẽ bị bỏ khi lưu" : ""}`}
+                      disabled={locked || !!activeId}
+                      accessibilityState={{ disabled: locked || !!activeId }}
+                      hitSlop={6}
+                      onPress={() => onEditTime(activity)}
+                      style={({ pressed }) => [styles.timeButton, pressed && { opacity: 0.6 }]}
+                    >
+                      {time}
+                      <View style={styles.editDot} />
+                    </Pressable>
+                  ) : (
+                    time
                   )
                 }
-              >
-                <Text
-                  style={{
-                    color: index === 0 || locked ? colors.line : colors.teal,
-                  }}
-                >
-                  ▲
-                </Text>
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`Đưa ${activity.title} xuống`}
-                disabled={
-                  locked || !!activeId || index === activities.length - 1
-                }
-                accessibilityState={{
-                  disabled:
-                    locked || !!activeId || index === activities.length - 1,
-                }}
-                style={styles.arrow}
-                onPress={() =>
-                  onChange(
-                    moveItem(activities, index, index + 1).map(
-                      (item) => item.id,
-                    ),
-                  )
-                }
-              >
-                <Text
-                  style={{
-                    color:
-                      index === activities.length - 1 || locked
-                        ? colors.line
-                        : colors.teal,
-                  }}
-                >
-                  ▼
-                </Text>
-              </Pressable>
-            </View>
+              />
+            </ActivityHoldArea>
             <ActivityDragHandle
               label={activity.title}
-              active={activeId === activity.id}
-              disabled={
-                locked || (!!activeId && activeId !== activity.id) ||
-                activities.some((item) => !measuredIds.includes(item.id))
-              }
-              onBegin={(pageY) => begin(activity.id, pageY)}
-              onMove={(dy, pageY) => {
-                if (drag.current) {
-                  drag.current.dy = dy;
-                  drag.current.pageY = pageY;
-                  update();
-                }
-              }}
-              onEnd={finish}
+              active={lifted}
+              canMoveUp={index > 0}
+              canMoveDown={index < activities.length - 1}
+              onStep={(direction) => step(index, direction)}
+              {...dragProps}
             />
           </OrderRow>
-        ))}
-      </ScrollView>
+        );
+      })}
     </View>
-    </>
   );
 }
+
 const styles = StyleSheet.create({
-  list: { gap: ORDER_ROW_GAP, padding: ORDER_LIST_PADDING },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingLeft: 12,
-    backgroundColor: colors.surface,
-    borderRadius: 18,
-    borderWidth: 2,
-    borderColor: "transparent",
-  },
-  copy: { flex: 1, minWidth: 0, paddingVertical: 14, gap: 4 },
-  meta: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
-  index: {
-    minWidth: 22,
-    height: 22,
-    borderRadius: 11,
-    overflow: "hidden",
-    textAlign: "center",
-    lineHeight: 22,
-    fontSize: 12,
-    fontWeight: "800",
-    color: colors.ink,
-    backgroundColor: colors.fill,
-  },
-  timePill: {
-    minHeight: 32,
-    justifyContent: "center",
-    paddingHorizontal: 10,
-    borderRadius: 16,
-    backgroundColor: colors.tealSoft,
-  },
-  timeChanged: { backgroundColor: colors.lilac },
-  timeChangedText: { color: colors.violet },
-  time: { color: colors.teal, fontSize: 12, fontWeight: "600" },
-  arrow: {
-    width: 44,
-    minHeight: 44,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  target: { borderColor: colors.teal, backgroundColor: colors.tealSoft },
-  dragging: {
+  list: { gap: ORDER_ROW_GAP, padding: ORDER_LIST_PADDING, marginVertical: 6 },
+  row: { paddingRight: 4, gap: 4 },
+  lifted: {
     zIndex: 10,
-    elevation: 8,
-    borderColor: colors.teal,
-    boxShadow: "0 8px 20px rgba(0,50,70,0.18)",
+    elevation: 10,
+    boxShadow: "0 14px 28px rgba(23,63,99,0.22)",
+  },
+  timeButton: { position: "relative" },
+  editDot: {
+    position: "absolute",
+    right: -2,
+    top: -2,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    borderWidth: 2,
+    borderColor: colors.surface,
+    backgroundColor: colors.teal,
   },
 });

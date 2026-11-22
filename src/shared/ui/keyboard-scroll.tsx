@@ -24,6 +24,9 @@ type KeyboardScrollContextValue = {
   onScroll: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
   onViewportLayout: (height: number, pageY?: number) => void;
   scrollToField: (fieldNode: ViewInstance | null) => void;
+  /** Live page scroll metrics, e.g. for edge auto-scroll while dragging. */
+  metrics: RefObject<{ offset: number; contentHeight: number; viewportHeight: number }>;
+  onContentSizeChange: (width: number, height: number) => void;
 };
 
 const KeyboardScrollContext = createContext<KeyboardScrollContextValue | null>(null);
@@ -59,13 +62,20 @@ export function KeyboardScrollProvider({ children }: PropsWithChildren) {
   const viewportHeight = useRef(0);
   const viewportTop = useRef(0);
   const focusedNode = useRef<ViewInstance | null>(null);
+  const metrics = useRef({ offset: 0, contentHeight: 0, viewportHeight: 0 });
 
   const onScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     scrollOffset.current = event.nativeEvent.contentOffset.y;
+    metrics.current.offset = event.nativeEvent.contentOffset.y;
+  }, []);
+
+  const onContentSizeChange = useCallback((_width: number, height: number) => {
+    metrics.current.contentHeight = height;
   }, []);
 
   const onViewportLayout = useCallback((height: number, pageY = 0) => {
     viewportHeight.current = height;
+    metrics.current.viewportHeight = height;
     if (pageY > 0) viewportTop.current = pageY;
   }, []);
 
@@ -122,8 +132,10 @@ export function KeyboardScrollProvider({ children }: PropsWithChildren) {
       onScroll,
       onViewportLayout,
       scrollToField,
+      metrics,
+      onContentSizeChange,
     }),
-    [keyboardHeight, onScroll, onViewportLayout, scrollToField],
+    [keyboardHeight, onScroll, onViewportLayout, scrollToField, onContentSizeChange],
   );
 
   return (

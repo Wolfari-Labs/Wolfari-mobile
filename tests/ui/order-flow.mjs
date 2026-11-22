@@ -204,6 +204,14 @@ page.setDefaultTimeout(20_000);
 page.setDefaultNavigationTimeout(90_000);
 page.on("pageerror", (error) => errors.push(error.message));
 const button = (name) => page.getByRole("button", { name, exact: true });
+const grip = (title, on = page) => on.getByLabel(`Kéo để di chuyển ${title}`, { exact: true });
+const gripDisabled = async (title) => (await grip(title).getAttribute("aria-disabled")) === "true";
+/** Keyboard alternative to dragging (also what screen readers expose as actions). */
+async function step(title, key = "ArrowDown", on = page) {
+  await grip(title, on).and(on.locator(':not([aria-disabled="true"])')).waitFor();
+  await grip(title, on).press(key);
+}
+const IDLE = "Giữ thẻ để kéo · Chạm giờ để đổi lịch";
 async function openEditor() {
   await page.bringToFront(); // The collaboration scenario also opens a peer tab.
   await button("Sắp xếp lịch trình").click();
@@ -227,8 +235,8 @@ async function dragTo(title, targetTitle) {
   assert.ok(from && to);
   await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
   await page.mouse.down();
-  // The hold timer and render can be delayed on a busy CI runner.
-  // Wait for activation before sending any drag movement.
+  // The grip lifts as soon as the pointer moves; wait for activation before the long move.
+  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2 + 4);
   await handle.and(page.locator('[aria-selected="true"]')).waitFor();
   await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, {
     steps: 12,
@@ -238,18 +246,20 @@ async function dragTo(title, targetTitle) {
 
 async function checkTouchGestures() {
   const cdp = await context.newCDPSession(page);
-  const grip = page.getByLabel("Kéo để di chuyển Ăn sáng", { exact: true });
-  const idle = page.getByText("Nhấn giữ ☰ rồi kéo · Vuốt phần tên để cuộn", { exact: true });
+  const handle = grip("Ăn sáng");
+  const idle = page.getByText(IDLE, { exact: true });
   const save = button("Lưu thứ tự cho nhóm");
   const start = async () => {
-    await grip.and(page.locator(':not([aria-disabled="true"])')).waitFor();
-    await grip.scrollIntoViewIfNeeded();
-    const from = await grip.boundingBox();
+    await handle.and(page.locator(':not([aria-disabled="true"])')).waitFor();
+    await handle.scrollIntoViewIfNeeded();
+    const from = await handle.boundingBox();
     const to = await page.getByLabel("Kéo để di chuyển Tham quan", { exact: true }).boundingBox();
     assert.ok(from && to);
     const point = { id: 1, x: from.x + from.width / 2, y: from.y + from.height / 2 };
     await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [point] });
-    await grip.and(page.locator('[aria-selected="true"]')).waitFor();
+    point.y += 4;
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [point] });
+    await handle.and(page.locator('[aria-selected="true"]')).waitFor();
     const startY = point.y;
     for (let step = 1; step <= 8; step++) {
       point.y = startY + (to.y + to.height / 2 - startY) * step / 8;
@@ -257,7 +267,7 @@ async function checkTouchGestures() {
     }
     await page.getByText("Thả vào vị trí 2 / 3 · Chưa lưu", { exact: true }).waitFor();
     assert.equal(await save.isDisabled(), true);
-    assert.equal(await button("Đóng").isDisabled(), true);
+    assert.equal(await button("Hủy").isDisabled(), true);
     return point;
   };
   for (const reason of ["cancel", "second-finger", "background", "resize"]) {
@@ -267,7 +277,7 @@ async function checkTouchGestures() {
     } else if (reason === "second-finger") {
       await cdp.send("Input.dispatchTouchEvent", {
         type: "touchStart",
-        touchPoints: [point, { ...point, id: 2, x: point.x - 20 }],
+        touchPoints: [point, { ...point, id: 2, x: point.x - 6 }],
       });
     } else if (reason === "background") {
       // Simulate the web AppState lifecycle, without changing actual device state.
@@ -295,7 +305,7 @@ async function checkTouchGestures() {
     }
     if (reason === "resize") await page.setViewportSize({ width: 402, height: 874 });
     assert.equal(await save.isDisabled(), true, `${reason} must not reorder`);
-    assert.equal(await button("Đưa Ăn sáng lên").isDisabled(), true);
+    assert.equal(await handle.getAttribute("aria-selected"), "false");
     assert.equal(writes.length, 0, "Dragging must not write before explicit Save");
   }
   // A normal touch release does commit the local draft; a reverse drag restores it.
@@ -304,34 +314,52 @@ async function checkTouchGestures() {
   await idle.waitFor();
   assert.equal(await save.isDisabled(), false);
   assert.equal(writes.length, 0);
-  await page.getByText("Chưa chốt giờ · bỏ 08:00 khi lưu", { exact: false }).waitFor();
+  await button("Đổi lịch Ăn sáng, 08:00, giờ sẽ bị bỏ khi lưu").waitFor();
   assert.equal(activities.find(a => a.title === "Ăn sáng").starts_at, "2026-11-12T01:00:00Z");
   await dragTo("Ăn sáng", "Tham quan");
   assert.equal(await save.isDisabled(), true);
-  assert.equal(await page.getByText(/Khi lưu sẽ bỏ giờ bắt đầu/).count(), 0);
+  assert.equal(await page.getByText(/Giờ gạch ngang sẽ bị bỏ khi lưu/).count(), 0);
   await cdp.detach();
 }
 try {
   await page.goto(`${appUrl}/trip/${tripId}/itinerary`, {
     waitUntil: "networkidle",
   });
-  // Long-press on a timeline card opens the editor, while a tap still opens details.
+  // Long-press on a timeline card switches this same page into edit mode,
+  // while a tap still opens details.
   await button("Ăn sáng, 08:00").click();
   await page.getByRole("button", { name: "Chỉnh sửa hoạt động", exact: true }).waitFor();
   await button("Đóng").click();
   const card = await button("Ăn sáng, 08:00").boundingBox();
   await page.mouse.move(card.x + card.width / 2, card.y + card.height / 2);
   await page.mouse.down();
-  await page.getByLabel("Kéo để di chuyển Ăn sáng", { exact: true }).waitFor();
+  await grip("Ăn sáng").waitFor();
   await page.mouse.up();
-  await button("Đóng").click();
+  // Same screen: day tabs and title stay, the trip sections are swapped for the edit bar.
+  await page.getByText("Đang sắp xếp ngày 12/11", { exact: true }).waitFor();
+  await page.screenshot({ path: path.join(output, "itinerary-edit-mode.png") });
+  await button("Hủy").click();
+  await button("Sắp xếp lịch trình").waitFor();
   await openEditor();
-  // A quick swipe before the hold delay does not accidentally reorder.
-  const quickFrom = await page.getByLabel("Kéo để di chuyển Ăn sáng", { exact: true }).boundingBox();
-  await page.mouse.move(quickFrom.x + quickFrom.width / 2, quickFrom.y + quickFrom.height / 2);
+  // A quick swipe on the card body (before the hold delay) does not reorder.
+  const body = await page.getByText("Ăn sáng", { exact: true }).boundingBox();
+  await page.mouse.move(body.x + body.width / 2, body.y + body.height / 2);
   await page.mouse.down();
-  await page.mouse.move(quickFrom.x + quickFrom.width / 2, quickFrom.y + quickFrom.height / 2 + 90);
+  await page.mouse.move(body.x + body.width / 2, body.y + body.height / 2 + 90);
   await page.mouse.up();
+  assert.equal(await button("Lưu thứ tự cho nhóm").isDisabled(), true);
+  // Press-and-hold anywhere on the card lifts it; dropping on the next card swaps them.
+  const tour = await page.getByText("Tham quan", { exact: true }).boundingBox();
+  await page.mouse.move(body.x + body.width / 2, body.y + body.height / 2);
+  await page.mouse.down();
+  await grip("Ăn sáng").and(page.locator('[aria-selected="true"]')).waitFor();
+  await page.mouse.move(body.x + body.width / 2, tour.y + tour.height / 2 + 20, { steps: 12 });
+  await page.screenshot({ path: path.join(output, "itinerary-dragging.png") });
+  await page.mouse.up();
+  await page.getByText(IDLE, { exact: true }).waitFor();
+  assert.equal(await button("Lưu thứ tự cho nhóm").isDisabled(), false);
+  // Keyboard reorder restores it.
+  await step("Ăn sáng", "ArrowUp");
   assert.equal(await button("Lưu thứ tự cho nhóm").isDisabled(), true);
   await checkTouchGestures();
   // Actual pointer drag, not just the accessible arrow fallback.
@@ -372,7 +400,7 @@ try {
 
   // Two editors hold the same version; the second cannot overwrite the first.
   await openEditor();
-  await button("Đưa Ăn sáng xuống").click();
+  await step("Ăn sáng");
   const peer = await context.newPage();
   peer.on("pageerror", (e) => errors.push(e.message));
   await peer.goto(`${appUrl}/trip/${tripId}/itinerary`, {
@@ -381,9 +409,7 @@ try {
   await peer
     .getByRole("button", { name: "Sắp xếp lịch trình", exact: true })
     .click();
-  await peer
-    .getByRole("button", { name: "Đưa Tham quan xuống", exact: true })
-    .click();
+  await step("Tham quan", "ArrowDown", peer);
   await peer
     .getByRole("button", { name: "Lưu thứ tự cho nhóm", exact: true })
     .click();
@@ -408,12 +434,12 @@ try {
   await page.getByText("Đã đồng bộ").waitFor();
 
   // A committed write with a lost reply is retried with exactly the same intent.
-  await button("Đưa Ăn sáng xuống").click();
+  await step("Ăn sáng");
   failNext = true;
   const before = commits;
   await button("Lưu thứ tự cho nhóm").click();
   await button("Thử lưu lại").waitFor();
-  assert.equal(await button("Đưa Ăn sáng xuống").isDisabled(), true);
+  assert.equal(await gripDisabled("Ăn sáng"), true);
   await button("Thử lưu lại").click();
   await page
     .getByText(
@@ -426,8 +452,8 @@ try {
   // Revoked permissions, discard confirmation, and small-screen layout.
   await page.setViewportSize({ width: 320, height: 640 });
   await openEditor();
-  await button("Đưa Ăn sáng xuống").click();
-  await button("Đóng").click();
+  await step("Ăn sáng");
+  await button("Hủy").click();
   await button("Tiếp tục sắp xếp").click();
   revokeOnNextWrite = true;
   const beforeRevocation = commits;
@@ -446,10 +472,10 @@ try {
   });
   await button("Bỏ bản nháp, tải bản mới").click();
   await page.getByText(/Bạn chỉ có quyền xem/).waitFor();
-  assert.equal(await button("Đưa Ăn sáng xuống").isDisabled(), true);
+  assert.equal(await gripDisabled("Ăn sáng"), true);
 
-  // A long, variable-height day auto-scrolls while dragging near the edge.
-  await button("Đóng").click();
+  // A long, variable-height day auto-scrolls the page while dragging near the edge.
+  await button("Hủy").click();
   editable = true;
   activities.push(
     ...Array.from({ length: 9 }, (_, index) => ({
@@ -465,27 +491,23 @@ try {
   await page.reload({ waitUntil: "networkidle" });
   await openEditor();
   const firstTitle = activities[0].title;
-  const handle = await page
-    .getByLabel(`Kéo để di chuyển ${firstTitle}`, { exact: true })
-    .boundingBox();
-  const viewport = await page.getByTestId("activity-order-list").boundingBox();
-  assert.ok(handle && viewport);
+  const handle = await grip(firstTitle).boundingBox();
+  const footer = await button("Hủy").boundingBox();
+  assert.ok(handle && footer);
   await page.mouse.move(
     handle.x + handle.width / 2,
     handle.y + handle.height / 2,
   );
   await page.mouse.down();
-  await page.getByLabel(`Kéo để di chuyển ${firstTitle}`, { exact: true })
-    .and(page.locator('[aria-selected="true"]')).waitFor();
+  await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2 + 4);
+  await grip(firstTitle).and(page.locator('[aria-selected="true"]')).waitFor();
   await page.mouse.move(
     handle.x + handle.width / 2,
-    viewport.y + viewport.height - 15,
+    footer.y - 30,
     { steps: 12 },
   );
   await page.waitForFunction(() =>
-    [
-      ...document.querySelectorAll('[data-testid="activity-order-list"] *'),
-    ].some((el) => el.scrollTop > 350),
+    [...document.querySelectorAll("div")].some((el) => el.scrollTop > 350),
   );
   await page.mouse.up();
   await button("Lưu thứ tự cho nhóm").click();
@@ -550,7 +572,7 @@ try {
   await peer.close();
   assert.deepEqual(errors, []);
   console.log(
-    "PASS card long-press, touch drag/drop, cancel/multitouch/background/resize guards, hold-to-drag, quick-swipe guard, repeated drag/drop, long-list auto-scroll, atomic full order, two-editor conflict, lost-response idempotency, revoked permissions, discard and 320px layout (API fixtures only).",
+    "PASS same-page edit mode, card long-press, card hold-to-drag, keyboard reorder, touch drag/drop, cancel/multitouch/background/resize guards, quick-swipe guard, repeated drag/drop, long-list auto-scroll, atomic full order, two-editor conflict, lost-response idempotency, revoked permissions, discard and 320px layout (API fixtures only).",
   );
 } catch (error) {
   console.error(error);
