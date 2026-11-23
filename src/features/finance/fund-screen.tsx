@@ -18,6 +18,7 @@ import { colors, radii, shadows, typography } from "@/shared/theme/tokens";
 import { Button } from "@/shared/ui/button";
 import { Details } from "@/shared/ui/details";
 import { Feedback } from "@/shared/ui/feedback";
+import { Snackbar } from "@/shared/ui/toast";
 import { FadeInView, Heading, Notice, Progress, ResourceFeedback, SectionLink, Segments, StatusBadge, ui } from "@/shared/ui/journal";
 import { Hint } from "@/shared/ui/hint";
 import { Wolfi } from "@/shared/ui/carto/wolfi";
@@ -162,7 +163,7 @@ function FundWorkspace({ tripId, userId }: { tripId: string; userId: string }) {
     })();
   }, [completed, operationBusy, acknowledge, reload, operation.result]);
   async function finish() {
-    if (operation.pending?.kind === "leave" && operationCommitted(operation.pending)) router.replace("/(tabs)/trips");
+    if (operation.pending?.kind === "leave" && operationCommitted(operation.pending)) router.dismissTo("/(tabs)/trips");
     else await reload();
   }
   async function actOnClosure(row: Closure, action: "confirm" | "cancel" | "remind") {
@@ -198,7 +199,7 @@ function FundWorkspace({ tripId, userId }: { tripId: string; userId: string }) {
   return <Screen title="Quỹ nhóm" tab="trips" onRefresh={() => { void reload(); }} refreshing={resource.loading && !!resource.data}>
     <Heading title="Quỹ của chuyến đi" subtitle={trip?.name ?? "Thu chi minh bạch, cùng nhau đối chiếu"} aside={<PastelIcon icon="wallet" tone="mint" />} />
     <OperationFeedback operation={operation} onFinish={finish} finishLabel="Tải lại quỹ" />
-    {saved && <Feedback success message={saved} />}
+    <Snackbar message={saved} />
     <ResourceFeedback {...resource} hasData={!!resource.data} onRetry={() => { void resource.reload(); }} />
     {momoError && <Feedback message={momoError} />}
     {trip && <>

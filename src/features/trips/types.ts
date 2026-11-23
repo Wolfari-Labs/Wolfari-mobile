@@ -67,6 +67,7 @@ export type PoiMeta = {
 };
 export type PoiCategory = "tourism" | "restaurant" | "cafe" | "accommodation" | "nightlife" | "shopping" | "entertainment" | "wellness" | "transport" | "services" | "other" | "all";
 export type PoiQuery = { q?: string; latitude?: number; longitude?: number; radius_m?: number; category?: PoiCategory; bbox?: string; limit?: number };
-export type RouteMode = "DRIVING" | "WALKING";
+export type RouteMode = "DRIVING" | "WALKING" | "CYCLING";
 export type TravelRoute = { distance_m: number; duration_seconds: number; geometry: { latitude: number; longitude: number }[] } | null;
-export type TravelRouteMeta = { status: "SUCCESS" | "NO_RESULT"; provider: string; stale: boolean; warnings: string[] };
+/** `attribution` (OpenStreetMap credit + fix-the-map link) must be shown with the route. */
+export type TravelRouteMeta = { status: "SUCCESS" | "NO_RESULT"; provider: string; stale: boolean; warnings: string[]; attribution?: { text: string; url: string | null }[] };

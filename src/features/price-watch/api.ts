@@ -3,7 +3,8 @@ import { decodeRow, object, pageQuery, validateMoney } from '../finance/api.ts';
 import { money, type Page } from '../finance/extended-model.ts';
 import { calendarLabel, dateKey, localTimestamp, parseDate, timeLabel } from '../trips/utils.ts';
 export type WatchInput = {
-  provider: 'MOCK_FLIGHT';
+  /** Omitted on create: the server fills its configured source (TRAVELPAYOUTS_CACHE or MOCK_FLIGHT). */
+  provider?: string;
   origin: string;
   destination: string;
   departure_date: string;
@@ -27,7 +28,7 @@ export type Watch = {
   expires_at: string;
   last_alert_price: string | null;
   last_alert_at: string | null;
-  normalized_query: Omit<WatchInput, 'threshold_price'> & { transport_type: 'FLIGHT' };
+  normalized_query: Omit<WatchInput, 'threshold_price' | 'provider'> & { provider: string; transport_type: 'FLIGHT' };
 };
 export type Observation = {
   id: string;
@@ -36,6 +37,8 @@ export type Observation = {
   provider: string;
   observed_at: string;
   fetched_at: string;
+  /** Real sources: data_kind CACHED_REFERENCE, source_freshness FRESH_REFERENCE | STALE | UNKNOWN, provider_found_at. */
+  fare_metadata?: Record<string, string | null> | null;
 };
 export type Observations = Page<Observation> & { stale: boolean; last_error: string | null };
 /** Airports offered as one-tap chips; any other 3-letter IATA code can still be typed. */
@@ -108,7 +111,6 @@ export function watchInput(values: Record<string, string>, now = Date.now()): Wa
   if (round && (!validDate(values.return_date) || values.return_date < date))
     throw Error('Ngày về phải hợp lệ và không trước ngày đi.');
   return {
-    provider: 'MOCK_FLIGHT',
     origin,
     destination,
     departure_date: date,

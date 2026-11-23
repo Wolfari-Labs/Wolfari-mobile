@@ -3,11 +3,13 @@ import { Stack } from "expo-router";
 import { useFonts } from "expo-font";
 
 import { SessionProvider } from "@/features/auth/session/session-provider";
+import { NotificationBanner } from "@/features/notifications/notification-banner";
 import { PushRegistration } from "@/features/notifications/push-registration";
 import { useAccessibilityPreferences } from "@/shared/hooks/use-accessibility-preferences";
 import { colors } from "@/shared/theme/tokens";
 import { AppLaunch } from "@/shared/ui/launch/app-launch";
 import { prepareNativeSplash } from "@/shared/ui/launch/native-splash";
+import { ToastHost } from "@/shared/ui/toast";
 
 prepareNativeSplash();
 
@@ -21,6 +23,7 @@ export default function RootLayout() {
   return (
     <SessionProvider>
       <PushRegistration />
+      <NotificationBanner />
       <AppLaunch assetsReady={fontsLoaded || !!fontError}>
         <Stack
           screenOptions={{
@@ -35,6 +38,7 @@ export default function RootLayout() {
           <Stack.Screen name="sign-in" />
           <Stack.Screen name="sign-up" />
         </Stack>
+        <ToastHost />
       </AppLaunch>
     </SessionProvider>
   );

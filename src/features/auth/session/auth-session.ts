@@ -176,5 +176,7 @@ export function createAuthSession({ storage, login, refresh, logout, web = false
     },
     // Password reset/change and an already-revoked session only need local cleanup.
     clearLocalSession,
+    /** Server row of this device's session (login/refresh return it), to mark "this device". */
+    currentSessionId: () => tokens?.session_id ?? null,
   };
 }

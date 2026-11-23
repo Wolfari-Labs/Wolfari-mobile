@@ -107,7 +107,7 @@ export function ActivityScheduleSheet({
           <Segments
             items={[
               { value: "timed", label: "Có giờ" },
-              { value: "day", label: "Cả ngày" },
+              { value: "day", label: "Chưa định giờ" },
             ]}
             value={mode}
             onChange={(value) => {

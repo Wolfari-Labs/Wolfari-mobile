@@ -36,5 +36,6 @@ export function useSession() {
     refreshAccessToken: session.refreshAccessToken,
     updateProfile: session.updateProfile,
     getSessionSnapshot: session.getSnapshot,
+    currentSessionId: session.currentSessionId,
   };
 }

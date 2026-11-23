@@ -25,6 +25,10 @@ export function TripMap({ points, selectedId, onSelect, route, onUserMove, fitKe
   const host = useRef<ViewInstance>(null);
   const map = useRef<L.Map | null>(null);
   const layer = useRef<L.LayerGroup | null>(null);
+  // Markers are diffed by id: unchanged pins stay, moved/relabelled ones are updated in
+  // place, so a re-render (typing in the search box, a new selection) never rebuilds all.
+  const markers = useRef(new Map<string, { marker: L.Marker; key: string }>());
+  const line = useRef<{ layer: L.Polyline; key: string } | null>(null);
   const framing = useRef(false);
   // Until the user pans, keep the frame on the points (also after late size changes).
   const userMoved = useRef(false);
@@ -63,8 +67,11 @@ export function TripMap({ points, selectedId, onSelect, route, onUserMove, fitKe
   useEffect(() => {
     const element = host.current as unknown as HTMLElement | null;
     if (!element) return;
+    const cache = markers.current;
     const start = fitRegion([]);
-    const instance = L.map(element, { zoomControl: true, attributionControl: true }).setView([start.latitude, start.longitude], 13);
+    const instance = L.map(element, { zoomControl: false, attributionControl: true }).setView([start.latitude, start.longitude], 13);
+    // Zoom sits bottom-right: the top edge belongs to the floating mode switch.
+    L.control.zoom({ position: "bottomright" }).addTo(instance);
     L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
@@ -98,34 +105,56 @@ export function TripMap({ points, selectedId, onSelect, route, onUserMove, fitKe
       instance.remove();
       map.current = null;
       layer.current = null;
+      cache.clear();
+      line.current = null;
     };
   }, []);
 
   useEffect(() => {
     const group = layer.current;
     if (!group) return;
-    group.clearLayers();
-    if (route && route.geometry.length > 1) {
-      L.polyline(route.geometry.map((p) => [p.latitude, p.longitude] as [number, number]), {
-        color: "#245CB8",
-        weight: 4,
-        opacity: 0.9,
-        dashArray: route.estimated ? "10 8" : undefined,
-      }).addTo(group);
+    const routeKey = route && route.geometry.length > 1 ? `${route.estimated}|${route.geometry.length}|${route.geometry[0].latitude},${route.geometry[0].longitude}|${route.geometry.at(-1)!.latitude}` : "";
+    if (line.current?.key !== routeKey) {
+      line.current?.layer.remove();
+      line.current = route && routeKey
+        ? {
+            key: routeKey,
+            layer: L.polyline(route.geometry.map((p) => [p.latitude, p.longitude] as [number, number]), {
+              color: route.estimated ? "#5B8CFF" : "#245CB8",
+              weight: 5,
+              opacity: 0.9,
+              lineCap: "round",
+              lineJoin: "round",
+              dashArray: route.estimated ? "10 8" : undefined,
+            }).addTo(group),
+          }
+        : null;
     }
+    const seen = new Set<string>();
     for (const point of points) {
+      seen.add(point.id);
       const tone = MAP_TONES[point.tone ?? "saved"],
         selected = point.id === selectedId,
         size = selected ? 34 : 28;
-      L.marker([point.latitude, point.longitude], {
-        title: point.name,
-        alt: point.name,
-        keyboard: true,
-        zIndexOffset: selected ? 1000 : 0,
-        icon: L.divIcon({ html: pinHtml(point.label ?? "•", tone.fill, tone.text, size, selected), className: "", iconSize: [size, size], iconAnchor: [size / 2, size / 2] }),
-      })
-        .on("click", () => handlers.current.onSelect(point.id))
+      const key = `${point.latitude},${point.longitude}|${point.label ?? ""}|${point.tone ?? ""}|${selected}`;
+      const existing = markers.current.get(point.id);
+      if (existing?.key === key) continue;
+      const icon = L.divIcon({ html: pinHtml(point.label ?? "•", tone.fill, tone.text, size, selected), className: "", iconSize: [size, size], iconAnchor: [size / 2, size / 2] });
+      if (existing) {
+        existing.marker.setLatLng([point.latitude, point.longitude]).setIcon(icon).setZIndexOffset(selected ? 1000 : 0);
+        existing.key = key;
+        continue;
+      }
+      const id = point.id;
+      const marker = L.marker([point.latitude, point.longitude], { title: point.name, alt: point.name, keyboard: true, zIndexOffset: selected ? 1000 : 0, icon })
+        .on("click", () => handlers.current.onSelect(id))
         .addTo(group);
+      markers.current.set(id, { marker, key });
+    }
+    for (const [id, entry] of markers.current) {
+      if (seen.has(id)) continue;
+      entry.marker.remove();
+      markers.current.delete(id);
     }
   }, [points, route, selectedId]);
 

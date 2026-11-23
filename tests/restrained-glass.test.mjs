@@ -4,13 +4,16 @@ import test from "node:test";
 
 const source = path => readFile(new URL(`../src/${path}`, import.meta.url), "utf8");
 
-test("reading summaries and floating chrome stay on opaque clay surfaces", async () => {
+test("reading summaries stay on clay; floating glass keeps a legible veil", async () => {
   const intro = await source("shared/ui/page-intro.tsx");
   assert.doesNotMatch(intro, /GlassSurface/);
   assert.match(intro, /backgroundColor: colors.surface/);
   const glass = await source("shared/ui/glass-surface.tsx");
   assert.match(glass, /interactive && styles.interactive/);
-  assert.doesNotMatch(glass, /rgba\(255, ?255, ?255, ?0\.[0-6]/, "no translucent white glass tints");
+  // Light blur ("blur nhẹ"), never a bare transparent pane: every blur has a white veil,
+  // and Android without a blur source is nearly opaque.
+  assert.match(glass, /androidSolid: "rgba\(255,255,255,0\.9\d\)"/);
+  assert.match(glass, /backgroundColor: veil/);
   const screen = await source("shared/ui/screen.tsx");
   assert.match(screen, /variant="prominent"\s+blurTarget=\{blurTarget\}/);
 });
@@ -28,7 +31,7 @@ test("frequent controls have bounded press feedback, not bouncing or staggered n
   const tabs = await source("shared/ui/bottom-tab-bar.tsx");
   assert.match(tabs, /if \(reduceMotion \|\| lastIndex === activeIndex\)/);
   assert.doesNotMatch(tabs, /withRepeat/);
-  assert.match(tabs, /router\.navigate\(tab\.route\)/);
+  assert.match(tabs, /openTab\(tab\.route, page\)/);
   assert.doesNotMatch(await source("features/trips/screens/my-trips-screen.tsx"), /MotionReveal/);
 });
 

@@ -7,6 +7,8 @@ import { createOrderSession } from "../order-session";
 import type { Activity, Plan, Trip } from "../types";
 import { sortedActivities } from "../utils";
 import { conflictingOrderTimes } from "../model/order-times";
+import { pathKm, planDay, shortestOrder } from "../model/auto-schedule";
+import type { LatLng } from "../model/place";
 import {
   placeInDay,
   sameSchedule,
@@ -157,6 +159,58 @@ export function useItineraryEditor({
   }
 
   /**
+   * Fills the active day with time slots in its current order (or first in the shortest
+   * route order). Only staged as drafts: nothing reaches the group until Save.
+   * Returns a sentence for the confirmation toast, or an error sentence.
+   */
+  function autoArrange(kind: "times" | "route"): { ok: boolean; message: string } {
+    if (!state.plan || !trip) return { ok: false, message: "Kế hoạch đang tải, thử lại sau giây lát." };
+    if (locked) return { ok: false, message: "Chưa xếp được lúc này: kế hoạch đang tải hoặc vừa thay đổi." };
+    if (day === UNSCHEDULED) return { ok: false, message: "Chọn một ngày trước khi tự xếp giờ." };
+    const places = new Map<string, LatLng>();
+    for (const item of state.plan.selected_locations) {
+      const latitude = Number(item.latitude), longitude = Number(item.longitude);
+      if (item.latitude !== null && item.longitude !== null && Number.isFinite(latitude) && Number.isFinite(longitude)) places.set(item.id, { latitude, longitude });
+    }
+    const placeOf = (id: string | null) => (id ? places.get(id) : undefined);
+    let dayItems = activities;
+    if (dayItems.length < 1) return { ok: false, message: "Ngày này chưa có hoạt động." };
+    let saved = 0;
+    if (kind === "route") {
+      const next = shortestOrder(dayItems, placeOf);
+      saved = pathKm(dayItems, placeOf) - pathKm(next, placeOf);
+      if (next.some((item, index) => item.id !== dayItems[index].id)) session.reorder(dayItems.map((item) => item.id), next.map((item) => item.id));
+      dayItems = next;
+    }
+    const result = planDay({ day, timezone, activities: dayItems, placeOf });
+    const next = { ...drafts };
+    for (const slot of result.slots) {
+      const original = state.plan.activities.find((item) => item.id === slot.id);
+      if (!original) continue;
+      const draft: ScheduleDraft = { kind: "timed", starts_at: slot.starts_at, ends_at: slot.ends_at };
+      if (sameSchedule(original, draft)) delete next[slot.id];
+      else next[slot.id] = draft;
+    }
+    for (const id of result.overflow) {
+      const original = state.plan.activities.find((item) => item.id === id);
+      if (!original) continue;
+      const draft: ScheduleDraft = { kind: "day", date: day };
+      if (sameSchedule(original, draft)) delete next[id];
+      else next[id] = draft;
+    }
+    setDrafts(next);
+    setTimeError(undefined);
+    const parts = [
+      kind === "route" ? (saved >= 0.3 ? `Lộ trình ngắn hơn khoảng ${saved.toFixed(1).replace(".", ",")} km.` : "Thứ tự hiện tại đã gần như ngắn nhất.") : "",
+      `Đã xếp giờ ${result.slots.length} hoạt động.`,
+      result.lunch ? `Chừa nghỉ trưa ${result.lunch.starts}–${result.lunch.ends}.` : "",
+      result.overflow.length ? `${result.overflow.length} hoạt động quá 22:00 nên để chưa định giờ.` : "",
+      "Kiểm tra rồi bấm Lưu.",
+    ];
+    return { ok: true, message: parts.filter(Boolean).join(" ") };
+  }
+
+  /**
    * Schedules first, then order: the server drops times that run backwards using the
    * stored values, so saving the order before the new times would wipe neighbours.
    */
@@ -229,6 +283,7 @@ export function useItineraryEditor({
 
   return {
     start,
+    autoArrange,
     state,
     activities,
     clearedTimeIds,

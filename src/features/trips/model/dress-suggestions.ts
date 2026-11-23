@@ -270,11 +270,18 @@ export function dressSuggestionText(suggestion: DressSuggestion): string {
   return `Tông màu: ${suggestion.colors.map((item) => item.name).join(', ')}. ${suggestion.advice}`;
 }
 
+const sand = color('cát', '#E3CFA4'),
+  pink = color('hồng', '#F29CB2'),
+  green = color('xanh lá', '#3FA34D'),
+  mint = color('xanh mint', '#A8E6CF');
 const knownColors = new Map(
-  [white, beige, sky, sea, navy, grey, brown, moss, wine, cream, yellow, purple, orange, red, black, pastel, denim].map(
+  [white, beige, sky, sea, navy, grey, brown, moss, wine, cream, yellow, purple, orange, red, black, pastel, denim, sand, pink, green, mint].map(
     (item) => [plainText(item.name), item] as const,
   ),
 );
+// Everyday synonyms people type for the same swatches.
+for (const [alias, item] of [['xanh duong', sea], ['xanh da troi', sky], ['ghi', grey], ['bo', brown], ['den', black], ['hong nhat', pastel], ['xanh la cay', green], ['xanh ngoc', mint]] as const)
+  knownColors.set(plainText(alias), item);
 
 /**
  * Reads back the palette written by dressSuggestionText ("Tông màu: a, b. …").
@@ -282,13 +289,20 @@ const knownColors = new Map(
  */
 export function dressPalette(description: string | null | undefined): { colors: DressColor[]; rest: string } {
   const text = description ?? '';
-  const match = /^\s*Tông màu:\s*([^.\n]+)[.\n]?\s*/i.exec(text);
+  // The palette sentence may open the description (suggestions) or follow what people wrote.
+  const match = /(^|[.\n]\s*)Tông màu:\s*([^.\n]+)[.\n]?\s*/i.exec(text);
   if (!match) return { colors: [], rest: text };
-  const colors = match[1]
-    .split(/[,·/]/)
+  const seen = new Set<string>();
+  const colors = match[2]
+    .split(/[,·/]|\s+và\s+/)
     .flatMap((name) => {
       const found = knownColors.get(plainText(name));
-      return found ? [found] : [];
+      if (!found || seen.has(found.hex)) return [];
+      seen.add(found.hex);
+      return [found];
     });
-  return colors.length ? { colors, rest: text.slice(match[0].length).trim() } : { colors: [], rest: text };
+  if (!colors.length) return { colors: [], rest: text };
+  const before = text.slice(0, match.index + match[1].length).trim();
+  const after = text.slice(match.index + match[0].length).trim();
+  return { colors, rest: [before, after].filter(Boolean).join(' ') };
 }

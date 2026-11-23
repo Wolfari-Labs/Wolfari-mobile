@@ -1,5 +1,5 @@
 import { router } from "expo-router";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { useCommand } from "@/shared/hooks/use-command";
@@ -10,6 +10,7 @@ import { Feedback } from "@/shared/ui/feedback";
 import { EmptyState, IconButton, ResourceFeedback, Segments, ui } from "@/shared/ui/journal";
 import { Screen } from "@/shared/ui/screen";
 import { Sheet } from "@/shared/ui/sheet";
+import { Snackbar, toast } from "@/shared/ui/toast";
 import { ActivityOrderList, type DragStatus } from "../components/activity-order-list";
 import { ActivityRow } from "../components/activity-row";
 import { ActivityScheduleSheet } from "../components/activity-schedule-sheet";
@@ -36,6 +37,8 @@ export default function ItineraryScreen() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [orderSaved, setOrderSaved] = useState<string>();
   const [dragStatus, setDragStatus] = useState<DragStatus>();
+  // Auto-arrange asked for from view mode; applied once the editor session holds the plan.
+  const pendingAuto = useRef<"times" | "route">(undefined);
   const trip = data?.trip,
     plan = data?.plan;
   const days = trip ? tripDays(trip) : [];
@@ -66,7 +69,19 @@ export default function ItineraryScreen() {
       : [];
   const selected = editing ? undefined : plan?.activities.find((a) => a.id === selectedId);
   const canArrange = !!plan?.permissions.can_edit && plan.activities.length > 0;
-  function startEditing() {
+  function arrange(kind: "times" | "route") {
+    const result = editor.autoArrange(kind);
+    if (result.ok) toast.info(result.message, { title: kind === "route" ? "Đã tối ưu lộ trình" : "Đã xếp khung giờ" });
+    else toast.error(result.message);
+  }
+  useEffect(() => {
+    const kind = pendingAuto.current;
+    if (!editing || !kind || !editor.state.plan || editor.locked) return;
+    pendingAuto.current = undefined;
+    arrange(kind);
+  });
+  function startEditing(auto?: "times" | "route") {
+    if (auto) pendingAuto.current = auto;
     if (command.busy || !canArrange || editing) return;
     setSelectedId(undefined);
     setOrderSaved(undefined);
@@ -183,23 +198,50 @@ export default function ItineraryScreen() {
           />
           <View style={[ui.row, styles.toolbar]}>
             {editing ? (
-              <Text accessibilityLiveRegion="polite" style={[typography.footnote, { flex: 1 }]}>
-                {dragStatus
-                  ? `Thả vào vị trí ${dragStatus.position} / ${dragStatus.total} · Chưa lưu`
-                  : "Giữ thẻ để kéo · Chạm giờ để đổi lịch"}
-              </Text>
+              <View style={{ flex: 1, gap: 8 }}>
+                <Text accessibilityLiveRegion="polite" style={typography.footnote}>
+                  {dragStatus
+                    ? `Thả vào vị trí ${dragStatus.position} / ${dragStatus.total} · Chưa lưu`
+                    : "Giữ thẻ để kéo · Chạm giờ để đổi lịch"}
+                </Text>
+                {activeDay !== "unscheduled" && editor.activities.length > 0 && (
+                  <View style={styles.helpers}>
+                    <Pressable cssInterop={false} accessibilityRole="button" accessibilityLabel="Tự xếp giờ cho ngày này" disabled={editor.locked || editor.isDragging}
+                      onPress={() => arrange("times")} style={({ pressed }) => [styles.helper, pressed && { opacity: 0.7 }]}>
+                      <Text style={styles.helperText}>✨ Tự xếp giờ</Text>
+                    </Pressable>
+                    {editor.activities.length > 2 && <Pressable cssInterop={false} accessibilityRole="button" accessibilityLabel="Sắp theo lộ trình ngắn nhất" disabled={editor.locked || editor.isDragging}
+                      onPress={() => arrange("route")} style={({ pressed }) => [styles.helper, pressed && { opacity: 0.7 }]}>
+                      <Text style={styles.helperText}>🧭 Lộ trình ngắn nhất</Text>
+                    </Pressable>}
+                  </View>
+                )}
+              </View>
             ) : (
               <>
-                <Text style={[typography.footnote, { flex: 1 }]}>
-                  {activities.length} hoạt động · Giờ {trip.timezone}
+                <Text style={[typography.footnote, { flex: 1 }]} accessibilityLabel={`${activities.length} hoạt động, giờ theo ${trip.timezone}`}>
+                  {activities.length} hoạt động
                 </Text>
+                {canArrange && activeDay !== "unscheduled" && activities.length > 0 && (
+                  <Pressable
+                    cssInterop={false}
+                    accessibilityRole="button"
+                    accessibilityLabel="Tự xếp giờ"
+                    accessibilityHint="Mở chế độ sắp xếp với khung giờ gợi ý; chỉ lưu khi bạn bấm Lưu"
+                    disabled={command.busy}
+                    onPress={() => startEditing("times")}
+                    style={({ pressed }) => [styles.arrange, pressed && { opacity: 0.7 }]}
+                  >
+                    <Text style={styles.arrangeText}>✨ Tự xếp</Text>
+                  </Pressable>
+                )}
                 {canArrange && (
                   <Pressable
                     cssInterop={false}
                     accessibilityRole="button"
                     accessibilityLabel="Sắp xếp lịch trình"
                     disabled={command.busy}
-                    onPress={startEditing}
+                    onPress={() => startEditing()}
                     style={({ pressed }) => [styles.arrange, pressed && { opacity: 0.7 }]}
                   >
                     <DesignIcon name="edit" size={16} tintColor={colors.teal} />
@@ -216,7 +258,8 @@ export default function ItineraryScreen() {
               </>
             )}
           </View>
-          {!editing && orderSaved && <Feedback success={!orderSaved.includes("Chưa lưu được")} message={orderSaved} />}
+          {!editing && orderSaved && orderSaved.includes("Chưa lưu được") && <Feedback message={orderSaved} />}
+          <Snackbar message={!editing && orderSaved && !orderSaved.includes("Chưa lưu được") ? orderSaved : undefined} />
           {editing ? (
             <>
               {draft.plan && !draft.plan.permissions.can_edit && (
@@ -261,12 +304,12 @@ export default function ItineraryScreen() {
             </>
           ) : (
             <View>
-              {activities.map((activity) => (
+              {activities.filter((activity) => activeDay === "unscheduled" || activity.starts_at).map((activity) => (
                 <ActivityRow
                   key={activity.id}
                   activity={activity}
                   timezone={trip.timezone}
-                  onLongPress={canArrange && !command.busy ? startEditing : undefined}
+                  onLongPress={canArrange && !command.busy ? () => startEditing() : undefined}
                   onPress={() => {
                     command.clearError();
                     setConfirmDelete(false);
@@ -274,6 +317,28 @@ export default function ItineraryScreen() {
                   }}
                 />
               ))}
+              {activeDay !== "unscheduled" && activities.some((activity) => !activity.starts_at) && (
+                <View style={styles.flexible}>
+                  <View style={styles.flexibleHead}>
+                    <Text style={[typography.headline, { flex: 1 }]}>Linh hoạt trong ngày</Text>
+                    <Text style={typography.footnote}>chưa định giờ</Text>
+                  </View>
+                  {activities.filter((activity) => !activity.starts_at).map((activity) => (
+                    <ActivityRow
+                      key={activity.id}
+                      activity={activity}
+                      timezone={trip.timezone}
+                      onLongPress={canArrange && !command.busy ? () => startEditing() : undefined}
+                      onPress={() => {
+                        command.clearError();
+                        setConfirmDelete(false);
+                        setSelectedId(activity.id);
+                      }}
+                    />
+                  ))}
+                  {canArrange && <Text style={typography.footnote}>Bấm “✨ Tự xếp” để gợi ý giờ theo thứ tự, thời gian di chuyển và nghỉ trưa.</Text>}
+                </View>
+              )}
               {!activities.length && (
                 <EmptyState
                   title="Chừa chỗ cho điều thú vị"
@@ -287,6 +352,7 @@ export default function ItineraryScreen() {
               )}
             </View>
           )}
+          {!editing && activities.length > 0 && <Text style={[typography.footnote, { textAlign: "center" }]}>Giờ theo múi giờ chuyến đi ({trip.timezone}).</Text>}
           {!plan.permissions.can_edit && !editing && (
             <Text style={typography.footnote}>
               Bạn có thể xem kế hoạch. Người tổ chức quản lý quyền chỉnh sửa của nhóm.
@@ -315,7 +381,7 @@ export default function ItineraryScreen() {
                   {selected.starts_at
                     ? dateLabel(selected.starts_at, trip.timezone)
                     : selected.scheduled_date
-                      ? `${calendarLabel(selected.scheduled_date)} · Cả ngày, chưa chốt giờ`
+                      ? `${calendarLabel(selected.scheduled_date)} · Trong ngày, chưa định giờ`
                       : "Chưa xếp lịch"}
                 </Text>
                 <View style={ui.card}>
@@ -323,7 +389,7 @@ export default function ItineraryScreen() {
                     {selected.starts_at
                       ? timeLabel(selected.starts_at, trip.timezone)
                       : selected.scheduled_date
-                        ? "Cả ngày"
+                        ? "Chưa định giờ"
                         : "Chưa xếp"}
                     {selected.ends_at ? ` – ${timeLabel(selected.ends_at, trip.timezone)}` : ""}
                   </Text>
@@ -408,6 +474,11 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   arrangeText: { color: colors.teal, fontFamily: fonts.bold, fontSize: 14 },
+  helpers: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  helper: { minHeight: 40, justifyContent: "center", paddingHorizontal: 14, borderRadius: radii.pill, backgroundColor: colors.surface },
+  helperText: { color: colors.teal, fontFamily: fonts.bold, fontSize: 13 },
+  flexible: { marginTop: 10, padding: 12, gap: 2, borderRadius: radii.card, borderWidth: 1.5, borderStyle: "dashed", borderColor: colors.line, backgroundColor: "rgba(255,255,255,0.45)" },
+  flexibleHead: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 4 },
   editBar: {
     flexDirection: "row",
     alignItems: "center",

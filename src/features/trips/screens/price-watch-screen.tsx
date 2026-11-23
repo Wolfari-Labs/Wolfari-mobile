@@ -32,7 +32,7 @@ import {
   type Watch,
   type Observations,
 } from '../../price-watch/api';
-import { priceProviderLabel, watchStatusReason } from '../../price-watch/labels';
+import { freshnessLabel, priceKind, priceKindLabel, priceProviderLabel, watchStatusReason } from '../../price-watch/labels';
 
 const cabins = [
   { value: 'ECONOMY', label: 'Phổ thông' },
@@ -133,11 +133,18 @@ function WatchWorkspace({ id, userId }: { id: string; userId: string }) {
     !trip.error &&
     !list.error &&
     !list.loading;
+  // Which source the server uses, from the watches it already normalised.
+  const kinds = new Set((list.data?.items ?? []).map((w) => priceKind(w.normalized_query.provider)));
+  const sourceNote = kinds.has('real')
+    ? 'Giá vé thật từ dữ liệu tìm kiếm Aviasales (Travelpayouts), là giá tham khảo và có thể đổi khi đặt.'
+    : kinds.has('mock')
+      ? 'Máy chủ đang dùng giá mô phỏng vì chưa cấu hình nguồn giá vé thật.'
+      : 'Máy chủ tự chọn nguồn giá: giá vé thật khi đã cấu hình, nếu không là giá mô phỏng.';
   function edit(w?: Watch) {
     setForm({
       title: w ? 'Sửa theo dõi giá' : 'Tạo theo dõi giá',
       message:
-        'Nguồn hiện tại mô phỏng giá, không phải giá vé để đặt mua. Ngưỡng là riêng cho bạn. Ngày và giờ bay nhập theo giờ Việt Nam.',
+        'Máy chủ chọn nguồn giá: giá vé thật (dữ liệu tìm kiếm Aviasales, chỉ vé một chiều, phổ thông, 1 người lớn) hoặc giá mô phỏng khi chưa cấu hình. Ngưỡng là riêng cho bạn. Ngày và giờ bay theo giờ Việt Nam.',
       fields: watchFields(w),
       submit: async (values) => {
         const input = watchInput(localWatchValues(values));
@@ -145,7 +152,8 @@ function WatchWorkspace({ id, userId }: { id: string; userId: string }) {
           label: w ? 'Sửa theo dõi giá' : 'Tạo theo dõi giá',
           method: w ? 'PATCH' : 'POST',
           path: w ? `/price-watches/${w.id}` : `/trips/${id}/price-watches`,
-          body: { ...input, ...(w ? { expected_version: w.version } : {}) },
+          // An edit keeps the source the watch was created with; a new watch lets the server choose.
+          body: { ...input, ...(w ? { provider: w.normalized_query.provider, expected_version: w.version } : {}) },
         });
         return true;
       },
@@ -238,7 +246,7 @@ function WatchWorkspace({ id, userId }: { id: string; userId: string }) {
       <Hint
         title="Về giá hiển thị"
         points={[
-          'Giá hiện là dữ liệu mô phỏng, chưa phải giá vé thật.',
+          sourceNote,
           'Mỗi người tự đặt ngưỡng riêng.',
           'Giá chạm ngưỡng là hệ thống tự báo, không cần mở màn hình này.',
         ]}
@@ -424,7 +432,7 @@ function WatchHistory({ watch }: { watch: Watch }) {
           {source?.last_error && <Notice>Nguồn giá tạm lỗi; có thể thử tải lại sau.</Notice>}
           {latest && (
             <Line>
-              {source?.stale ? 'Giá cũ gần nhất' : 'Giá mô phỏng gần nhất'}:{' '}
+              {source?.stale ? 'Giá cũ gần nhất' : `${priceKindLabel(latest.provider)} gần nhất`}:{' '}
               {moneyLabel(latest.price)}
               {!source?.stale && BigInt(latest.price) < BigInt(watch.threshold_price)
                 ? ' · Dưới ngưỡng riêng'
@@ -436,7 +444,7 @@ function WatchHistory({ watch }: { watch: Watch }) {
           )}
           {source?.items.map((o) => (
             <Line key={o.id}>
-              {moneyLabel(o.price)} · {priceProviderLabel(o.provider)} · Quan sát: {historyTimeLabel(o.observed_at)} · Thu thập:{' '}
+              {moneyLabel(o.price)} · {priceProviderLabel(o.provider)}{freshnessLabel(o.fare_metadata) ? ` · ${freshnessLabel(o.fare_metadata)}` : ''} · Quan sát: {historyTimeLabel(o.observed_at)} · Thu thập:{' '}
               {historyTimeLabel(o.fetched_at)}
             </Line>
           ))}

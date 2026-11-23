@@ -28,7 +28,8 @@ test("day-only activities group by their calendar string, not a UTC instant", ()
   assert.equal(activityDay({ starts_at: null, scheduled_date: "2026-11-02" }, "Pacific/Honolulu"), "2026-11-02");
   assert.equal(activityDay({ starts_at: "2026-10-31T18:00:00Z", scheduled_date: null }, trip.timezone), "2026-11-01");
   assert.equal(activityDay({ starts_at: null, scheduled_date: null }, trip.timezone), undefined);
-  assert.equal(activityTimeLabel({ starts_at: null, scheduled_date: "2026-11-02" }, trip.timezone), "Cả ngày");
+  // A day without a time is "not timed yet", not an all-day event.
+  assert.equal(activityTimeLabel({ starts_at: null, scheduled_date: "2026-11-02" }, trip.timezone), "Chưa định giờ");
   assert.equal(activityTimeLabel({ starts_at: null, scheduled_date: null }, trip.timezone), "Chưa xếp");
   assert.equal(calendarLabel("2026-11-02"), "02/11/2026");
 });

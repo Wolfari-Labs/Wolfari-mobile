@@ -9,10 +9,11 @@ import { useCommand } from "@/shared/hooks/use-command";
 import { colors, fonts, pastelTones, radii, shadows, typography } from "@/shared/theme/tokens";
 import { Button } from "@/shared/ui/button";
 import { Feedback } from "@/shared/ui/feedback";
+import { Snackbar } from "@/shared/ui/toast";
 import { FormField } from "@/shared/ui/form-field";
 import type { DesignIconName } from "@/shared/ui/design-assets";
 import { DesignIcon } from "@/shared/ui/design-icon";
-import { EmptyState, IconButton, Notice, Segments, ui } from "@/shared/ui/journal";
+import { EmptyState, Notice, Segments, ui } from "@/shared/ui/journal";
 import type { PastelTone } from "@/shared/ui/pastel";
 import { Sheet } from "@/shared/ui/sheet";
 import type { useTrip } from "../hooks/use-trip";
@@ -163,11 +164,18 @@ export function DressCodeList({ api, trip, plan, days, reload }: Props) {
           </Text>
         </Pressable>)}
       </ScrollView>
-      {editable && <IconButton icon="plus" label="Thêm dress code" disabled={busy} onPress={() => open()} />}
+      {editable && <Button label="Thêm" accessibilityLabel="Thêm dress code" icon="plus" variant="soft" compact disabled={busy} onPress={() => open()} />}
     </View>
     {!editable && <Notice>Bạn có quyền xem. Quyền chỉnh sửa do người tổ chức quản lý.</Notice>}
-    {saved && <Feedback success message={saved} />}
+    <Snackbar message={saved} />
     {!form && !deleting && failure}
+    {plan.dress_codes.length > 0 && <View style={styles.weatherCard} accessibilityLabel={`Thời tiết thường gặp: ${weatherLabel(guessedWeather)}. ${weatherAdvice(guessedWeather)}`}>
+      <Text style={styles.weatherEmoji}>{weatherIcon[guessedWeather]}</Text>
+      <View style={ui.flex}>
+        <Text style={typography.headline}>Thời tiết tháng {Number(dateKey(trip.start_at, trip.timezone).slice(5, 7))}: {weatherLabel(guessedWeather).toLowerCase()}</Text>
+        <Text style={typography.footnote} numberOfLines={3}>{weatherAdvice(guessedWeather)}</Text>
+      </View>
+    </View>}
 
     {sections.map(section => <View key={section.scope} style={styles.section}>
       {scope === "ALL" && <View style={styles.sectionHeader}>
@@ -180,12 +188,8 @@ export function DressCodeList({ api, trip, plan, days, reload }: Props) {
       {section.rows.map(code => {
         const palette = dressPalette(code.description);
         const body = <>
-          {code.reference_image_available
-            ? <>
-              <DressReferenceImage key={`${code.id}:${plan.plan_version}`} api={api} tripId={tripId} dressCodeId={code.id} label={code.label} />
-              {!!palette.colors.length && <View style={styles.strip}><Swatches colors={palette.colors} tone={section.tone} icon={section.icon} /></View>}
-            </>
-            : <Swatches colors={palette.colors} tone={section.tone} icon={section.icon} />}
+          {code.reference_image_available && <DressReferenceImage key={`${code.id}:${plan.plan_version}`} api={api} tripId={tripId} dressCodeId={code.id} label={code.label} />}
+          {code.reference_image_available && !!palette.colors.length && <View style={styles.strip}><Swatches colors={palette.colors} tone={section.tone} icon={section.icon} /></View>}
           <View style={styles.cardBody}>
             <View style={styles.cardTop}>
               <View style={[styles.scopeChip, { backgroundColor: pastelTones[section.tone].surface }]}>
@@ -194,9 +198,14 @@ export function DressCodeList({ api, trip, plan, days, reload }: Props) {
               </View>
               {editable && <DesignIcon name="edit" size={16} tintColor={colors.muted} />}
             </View>
-            <Text accessibilityRole="header" style={typography.section}>{code.label}</Text>
-            {!!palette.colors.length && <Text style={styles.colorNames}>{palette.colors.map(item => item.name).join(" · ")}</Text>}
-            {!!palette.rest && <Text style={[typography.body, { color: colors.muted }]}>{palette.rest}</Text>}
+            <Text accessibilityRole="header" style={styles.cardTitle}>{code.label}</Text>
+            {!!palette.colors.length && <View style={styles.swatchRow} accessibilityLabel={`Tông màu: ${palette.colors.map(item => item.name).join(", ")}`}>
+              {palette.colors.map(item => <View key={item.hex} style={styles.swatchItem}>
+                <View style={[styles.swatchDot, { backgroundColor: item.hex }]} />
+                <Text style={styles.swatchName}>{item.name}</Text>
+              </View>)}
+            </View>}
+            {!!palette.rest && <Text style={[typography.body, { color: colors.muted }]} numberOfLines={4}>{palette.rest}</Text>}
           </View>
         </>;
         return editable
@@ -281,6 +290,8 @@ const filters = [
   { value: "ACTIVITY", label: "Hoạt động" },
 ];
 const weatherIcon: Record<DressWeather, string> = { HOT: "☀️", RAINY: "🌧️", COOL: "🍃", COLD: "❄️" };
+const weatherLabel = (value: DressWeather) => dressWeatherOptions.find(option => option.value === value)?.label ?? "";
+const weatherAdvice = (value: DressWeather) => dressSuggestions(value, [])[0]?.advice ?? "";
 
 /** The palette as one bold colour band — the card's "look" at a glance. */
 function Swatches({ colors: palette, tone, icon, compact = false }: { colors: readonly DressColor[]; tone: PastelTone; icon: DesignIconName; compact?: boolean }) {
@@ -329,6 +340,13 @@ const styles = StyleSheet.create({
   bandEmpty: { height: 44, alignItems: "center", justifyContent: "center" },
   bandColor: { flex: 1 },
   cardBody: { gap: 8, padding: 16 },
+  cardTitle: { ...typography.section, fontSize: 19, lineHeight: 25 },
+  swatchRow: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  swatchItem: { flexDirection: "row", alignItems: "center", gap: 6 },
+  swatchDot: { width: 18, height: 18, borderRadius: 9, borderWidth: 1.5, borderColor: colors.line },
+  swatchName: { color: colors.ink, fontSize: 13, fontFamily: fonts.bold },
+  weatherCard: { flexDirection: "row", alignItems: "center", gap: 12, padding: 14, borderRadius: radii.card, backgroundColor: colors.surface, ...shadows.glass },
+  weatherEmoji: { fontSize: 30, lineHeight: 36 },
   cardTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
   scopeChip: { flexShrink: 1, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 10, paddingVertical: 4, borderRadius: radii.pill },
   scopeText: { flexShrink: 1, color: colors.ink, fontFamily: fonts.bold, fontSize: 12 },
@@ -349,7 +367,7 @@ const styles = StyleSheet.create({
   suggestionUse: { color: colors.teal, fontSize: 13, fontFamily: fonts.bold },
   previewRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   previewBand: { flexShrink: 0 },
-  strip: { height: 10, overflow: "hidden" },
+  strip: { height: 8, overflow: "hidden" },
   photoRow: { flexDirection: "row", alignItems: "center", gap: 14 },
   photo: { width: 88, height: 88, borderRadius: 16 },
   photoEmpty: { alignItems: "center", justifyContent: "center", backgroundColor: colors.fill, borderWidth: 1.5, borderStyle: "dashed", borderColor: colors.line },

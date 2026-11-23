@@ -1,4 +1,5 @@
-import { writeFile } from "node:fs/promises";
+import { readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import imageUtils from "@expo/image-utils";
@@ -22,8 +23,21 @@ async function resizeLogo(size, options = {}) {
 }
 
 // Export platform sizes only; never crop, redraw, or overwrite the supplied logo.
-// iOS requires a square, opaque PNG. Use mint instead of restoring a white border.
-const appIcon = await resizeLogo(iconSize, { backgroundColor, removeTransparency: true });
+// iOS requires a square, opaque PNG. The logo sits on its own sky-to-meadow gradient
+// (wolfari-icon-background.png, sampled from the logo's edges), so the artwork reaches
+// the tile edges and the OS mask is the only rounding: no mint frame, no double corner.
+const fullBleed = await compositeImagesAsync({
+  foreground: await resizeLogo(iconSize),
+  background: await readFile(join(assetsDirectory, "wolfari-icon-background.png")),
+  x: 0,
+  y: 0,
+});
+const flatPath = join(tmpdir(), `wolfari-app-icon-${process.pid}.png`);
+await writeFile(flatPath, fullBleed);
+const { source: appIcon } = await generateImageAsync({ projectRoot }, {
+  src: flatPath, width: iconSize, height: iconSize, resizeMode: "cover", backgroundColor, removeTransparency: true,
+});
+await rm(flatPath, { force: true });
 const splashIcon = await resizeLogo(iconSize);
 
 // The entire rounded-square logo fits inside Android's central 66/108 safe circle.

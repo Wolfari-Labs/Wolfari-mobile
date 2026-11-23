@@ -381,10 +381,12 @@ try {
     path: path.join(output, "glass-itinerary-order.png"),
   });
   await button("Lưu thứ tự cho nhóm").click();
+  await button("Sắp xếp lịch trình").waitFor();
   await page
     .getByText(
       "Đã lưu thứ tự cho cả nhóm. Các giờ bị lệch thứ tự đã được bỏ, vẫn giữ nguyên ngày.",
     )
+    .first()
     .waitFor();
   assert.deepEqual(
     activities.map((a) => a.title),
@@ -394,9 +396,9 @@ try {
   assert.equal(breakfast.starts_at, null);
   assert.equal(breakfast.ends_at, null);
   assert.equal(breakfast.scheduled_date, "2026-11-12");
-  await button("Ăn sáng, Cả ngày").waitFor();
+  await button("Ăn sáng, Chưa định giờ").waitFor();
   await page.reload({ waitUntil: "networkidle" });
-  await button("Ăn sáng, Cả ngày").waitFor();
+  await button("Ăn sáng, Chưa định giờ").waitFor();
 
   // Two editors hold the same version; the second cannot overwrite the first.
   await openEditor();
@@ -511,10 +513,12 @@ try {
   );
   await page.mouse.up();
   await button("Lưu thứ tự cho nhóm").click();
+  await button("Sắp xếp lịch trình").waitFor();
   await page
     .getByText(
       "Đã lưu thứ tự cho cả nhóm. Các giờ bị lệch thứ tự đã được bỏ, vẫn giữ nguyên ngày.",
     )
+    .first()
     .waitFor();
   assert.ok(activities.findIndex((a) => a.title === firstTitle) > 3);
   assert.equal(activities[3].title, "Ngày khác");
@@ -539,7 +543,8 @@ try {
   ]);
   let patchesBefore = patches.length;
   await button("Lưu thứ tự cho nhóm").click();
-  await page.getByText("Đã lưu thứ tự và lịch mới cho cả nhóm.").waitFor();
+  await button("Sắp xếp lịch trình").waitFor();
+  await page.getByText("Đã lưu thứ tự và lịch mới cho cả nhóm.").first().waitFor();
   assert.deepEqual(
     activities.filter((a) => a.title !== "Ngày khác").map((a) => a.title),
     ["Ăn trưa", "Ăn sáng", "Tham quan"],
@@ -552,13 +557,14 @@ try {
   await openEditor();
   await button("Đổi lịch Tham quan, 09:00").click();
   await button("Chuyển sang Ngày 2, 13/11").click();
-  await page.getByText("Cả ngày", { exact: true }).last().click();
+  await page.getByText("Chưa định giờ", { exact: true }).last().click();
   await button("Áp dụng").click();
   await page.getByText("Đang sắp xếp ngày 13/11").waitFor();
-  await button("Đổi lịch Tham quan, Cả ngày").waitFor();
+  await button("Đổi lịch Tham quan, Chưa định giờ").waitFor();
   patchesBefore = patches.length;
   await button("Lưu thứ tự cho nhóm").click();
-  await page.getByText("Đã lưu thứ tự và lịch mới cho cả nhóm.").waitFor();
+  await button("Sắp xếp lịch trình").waitFor();
+  await page.getByText("Đã lưu thứ tự và lịch mới cho cả nhóm.").first().waitFor();
   assert.equal(patches.length, patchesBefore + 1);
   assert.equal(patches.at(-1).starts_at, null);
   assert.equal(patches.at(-1).ends_at, null);

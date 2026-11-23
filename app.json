@@ -39,12 +39,12 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#073B49",
+          "backgroundColor": "#E6EEFF",
           "image": "./assets/figma/mascot.png",
           "imageWidth": 176,
           "resizeMode": "contain",
           "dark": {
-            "backgroundColor": "#073B49",
+            "backgroundColor": "#E6EEFF",
             "image": "./assets/figma/mascot.png"
           }
         }

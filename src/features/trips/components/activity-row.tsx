@@ -36,7 +36,7 @@ export function ActivityCardBody({ activity, time }: { activity: Activity; time:
   );
 }
 
-export function ActivityTime({ label, tone = "default" }: { label: string; tone?: "default" | "changed" | "cleared" }) {
+export function ActivityTime({ label, tone = "default" }: { label: string; tone?: "default" | "changed" | "cleared" | "untimed" }) {
   return (
     <Text
       style={[
@@ -44,6 +44,7 @@ export function ActivityTime({ label, tone = "default" }: { label: string; tone?
         styles.time,
         tone === "changed" && styles.timeChanged,
         tone === "cleared" && styles.timeCleared,
+        tone === "untimed" && styles.timeUntimed,
       ]}
     >
       {label}
@@ -76,7 +77,7 @@ export function ActivityRow({
       accessibilityHint={onLongPress ? "Chạm để xem. Nhấn giữ để sắp xếp lịch trình." : undefined}
       style={({ pressed }) => [activityCard, styles.spaced, style, pressed && { opacity: 0.7 }]}
     >
-      <ActivityCardBody activity={activity} time={<ActivityTime label={activityTimeLabel(activity, timezone)} />} />
+      <ActivityCardBody activity={activity} time={<ActivityTime label={activityTimeLabel(activity, timezone)} tone={activity.starts_at ? "default" : "untimed"} />} />
     </Pressable>
   );
 }
@@ -108,6 +109,7 @@ const styles = StyleSheet.create({
   },
   timeChanged: { backgroundColor: colors.mint, color: colors.pinGreen },
   timeCleared: { backgroundColor: colors.butter, color: colors.amber, textDecorationLine: "line-through" },
+  timeUntimed: { maxWidth: 72, fontSize: 11, lineHeight: 14, backgroundColor: colors.surface, color: colors.muted, borderWidth: 1.5, borderStyle: "dashed", borderColor: colors.line },
   icon: {
     width: 38,
     height: 38,

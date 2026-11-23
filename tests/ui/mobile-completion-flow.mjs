@@ -84,8 +84,8 @@ try {
   await button("Xác nhận thay đổi chuyến đi").click();
   await page.getByText(/Cần chốt quỹ trước/).waitFor();
   await button("Tải lại dữ liệu").click();
-  await page.getByRole("tab", { name: "Chuyển chủ", exact: true }).click();
-  await button("Bạn đồng hành").click();
+  await page.getByRole("radio", { name: "Chuyển chủ", exact: true }).click();
+  await page.getByRole("radio", { name: "Bạn đồng hành", exact: true }).click();
   await button("Chuyển chủ nhóm").click();
   await button("Xác nhận thay đổi chuyến đi").click();
   await assertPublicText(page);
@@ -99,7 +99,7 @@ try {
   await page.getByText("Chỉ chủ nhóm hiện tại được thực hiện các thao tác này.", { exact: true }).waitFor();
   owner = true; fundClosed = true;
   await open(`/trip/${tripId}/manage`);
-  await page.getByRole("tab", { name: "Xóa", exact: true }).click();
+  await page.getByRole("radio", { name: "Xóa", exact: true }).click();
   await field("Lý do thay đổi").fill("Đã lưu bản PDF");
   await field("Nhập đúng tên chuyến đi để xóa").fill("Sai tên");
   assert.equal(await button("Xóa chuyến đi").isDisabled(), true);

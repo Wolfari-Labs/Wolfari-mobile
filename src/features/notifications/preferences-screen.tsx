@@ -7,6 +7,7 @@ import { useResource } from "@/shared/hooks/use-resource";
 import { colors, typography } from "@/shared/theme/tokens";
 import { Button } from "@/shared/ui/button";
 import { Feedback } from "@/shared/ui/feedback";
+import { Snackbar } from "@/shared/ui/toast";
 import { Heading, Notice, ResourceFeedback, ui } from "@/shared/ui/journal";
 import { Screen } from "@/shared/ui/screen";
 import { notificationGroups, type GroupOverride, type NotificationGroup, type NotificationPreferences } from "./api";
@@ -68,7 +69,7 @@ export default function NotificationPreferencesScreen() {
     <Heading title="Cài đặt thông báo" subtitle="Chọn loại thông báo bạn muốn nhận qua thông báo đẩy và email." />
     <ResourceFeedback {...resource} hasData={!!resource.data} onRetry={() => { void resource.reload(); }} />
     {error && <Feedback message={error} />}
-    {saved && <Feedback success message="Đã lưu cài đặt thông báo." />}
+    <Snackbar message={saved ? "Đã lưu cài đặt thông báo." : undefined} />
     {draft && <>
       <Toggle label="Thông báo đẩy trên điện thoại" value={draft.push_enabled} disabled={busy} onChange={value => change({ push_enabled: value })} />
       <Toggle label="Thông báo qua email" value={draft.email_enabled} disabled={busy} onChange={value => change({ email_enabled: value })} />

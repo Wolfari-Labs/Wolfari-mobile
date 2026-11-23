@@ -3,6 +3,8 @@ export class ApiError extends Error {
   readonly status: number;
   readonly retryable: boolean;
   readonly correlationId?: string;
+  /** `error.details.reason` when the server gives one (e.g. PROVIDER_QUERY_UNSUPPORTED). */
+  readonly reason?: string;
 
   constructor(
     code: string,
@@ -10,6 +12,7 @@ export class ApiError extends Error {
     status = 0,
     retryable = false,
     correlationId?: string,
+    reason?: string,
   ) {
     super(message);
     this.name = "ApiError";
@@ -17,6 +20,7 @@ export class ApiError extends Error {
     this.status = status;
     this.retryable = retryable;
     this.correlationId = correlationId;
+    this.reason = reason;
   }
 }
 
@@ -92,12 +96,14 @@ export function createApiClient({
 
         if (!response.ok) {
           const error = record(envelope?.error);
+          const reason = record(error?.details)?.reason;
           throw new ApiError(
             typeof error?.code === "string" ? error.code : "REQUEST_FAILED",
             typeof error?.message === "string" ? error.message : "Không thể hoàn tất yêu cầu.",
             response.status,
             error?.retryable === true,
             correlationId,
+            typeof reason === "string" && /^[A-Z][A-Z_]{1,63}$/.test(reason) ? reason : undefined,
           );
         }
         if (!envelope || !Object.hasOwn(envelope, "data")) {

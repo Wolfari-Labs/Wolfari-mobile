@@ -472,7 +472,7 @@ try {
   // PLAN-03: timed → day-only sends both timestamps null with the calendar date.
   await click("Mỹ Khê lúc bình minh, 08:00, đã hoàn thành");
   await click("Chỉnh sửa hoạt động");
-  await page.getByRole("tab", { name: "Cả ngày", exact: true }).click();
+  await page.getByRole("tab", { name: "Chưa định giờ", exact: true }).click();
   await page.getByLabel("Ngày", { exact: true }).fill("13/12/2026");
   await click("Lưu thay đổi");
   await page
@@ -480,7 +480,7 @@ try {
     .waitFor();
   await page.getByLabel("Ngày", { exact: true }).fill("12/11/2026");
   await click("Lưu thay đổi");
-  await button("Mỹ Khê lúc bình minh, Cả ngày, đã hoàn thành").waitFor();
+  await button("Mỹ Khê lúc bình minh, Chưa định giờ, đã hoàn thành").waitFor();
   const dayOnly = requests
     .filter((r) => /\/activities\/.+$/.test(r.pathname) && r.method === "PATCH")
     .at(-1).body;
@@ -518,7 +518,7 @@ try {
   await click("Xem bạn đồng hành");
   await page.getByText("friend@example.test", { exact: true }).waitFor();
   await click("Quyền của nhóm");
-  await page.getByRole("tab", { name: "Cả nhóm", exact: true }).click();
+  await page.getByRole("radio", { name: "Cả nhóm", exact: true }).click();
   await click("Lưu quyền của nhóm");
   await page
     .getByText("Đã cập nhật quyền chỉnh sửa của nhóm.", { exact: true })
@@ -541,11 +541,13 @@ try {
   assert.equal(await button('Danh sách đã sẵn sàng!').count(), 0, 'Packing completion stays inline without a popup.');
   await screenshot("m13-packing.png");
   await page.getByRole("tab", { name: "Tài khoản", exact: true }).click();
-  await click("Chỉnh sửa hồ sơ");
+  // The Account tab lists "Thông tin cá nhân" (name and photo) in its Hồ sơ group.
+  await click("Thông tin cá nhân");
   await page.getByLabel("Họ và tên", { exact: true }).fill("Minh Anh Nguyễn");
   await screenshot("m32-edit-profile.png");
   await click("Lưu thay đổi");
-  await button("Chỉnh sửa hồ sơ").waitFor();
+  await button("Thông tin cá nhân").waitFor();
+  await page.getByText("Đã cập nhật thông tin cá nhân.", { exact: true }).waitFor();
   assert.equal(profile.full_name, "Minh Anh Nguyễn");
   await screenshot("m22-profile.png");
   await page.setViewportSize({ width: 360, height: 740 });

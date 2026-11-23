@@ -226,7 +226,7 @@ try {
   assert.equal(await page.getByText("gateway.test/invitations", { exact: false }).count(), 0);
   assert.equal(await page.getByText("inv1_", { exact: false }).count(), 0);
   await goto(`/trip/${tripId}/settings`);
-  await page.getByRole("tab", { name: "Chọn thành viên", exact: true }).click();
+  await page.getByRole("radio", { name: "Chọn thành viên", exact: true }).click();
   await page.getByRole("checkbox").click();
   await button("Lưu quyền của nhóm").click();
   assert.equal(calls.filter(call => call.pathname.endsWith("/plan-policy") && call.method === "PUT").length, 0);
@@ -295,11 +295,13 @@ try {
   for (const name of ["Mời thành viên", "Gửi lại", "Thu hồi", "Xóa Bạn đồng hành"]) assert.equal(await button(name).count(), 0);
   assert.equal(calls.filter(call => ["POST", "PATCH", "PUT", "DELETE"].includes(call.method) && call.pathname.startsWith("/trips/")).length, writesBeforeArchive);
   await goto("/profile");
+  // Sign-out asks first; a failed sign-out keeps the sheet open with the reason.
   await button("Đăng xuất").click();
-  await page.getByText(/Chưa xác nhận được đăng xuất/).waitFor();
+  await button("Xác nhận đăng xuất").click();
+  await page.getByText(/Chưa xác nhận được đăng xuất/).first().waitFor();
   assert.equal(loggedOut, false);
   logoutOffline = false;
-  await button("Đăng xuất").click();
+  await button("Xác nhận đăng xuất").click();
   await page.waitForURL(`${appUrl}/`);
   await page.reload({ waitUntil: "networkidle" });
   await button("Bắt đầu hành trình").waitFor();

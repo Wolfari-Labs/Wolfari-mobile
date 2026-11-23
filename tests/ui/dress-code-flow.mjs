@@ -199,7 +199,9 @@ try {
   await editCard('Trắng bên biển');
   await button('Bỏ ảnh tham khảo').click();
   await button('Lưu thay đổi').click();
-  await text('Đã lưu thay đổi cho cả nhóm.').waitFor();
+  // The sheet closes once the save is done (the previous identical toast may still show).
+  await button('Lưu thay đổi').waitFor({ state: 'hidden' });
+  await text('Đã lưu thay đổi cho cả nhóm.').first().waitFor();
   assert.equal(writes().at(-1).body.reference_image_id, null);
   await goto('/trip/' + tripId + '/dress-code');
   assert.equal(await button('Xem ảnh tham khảo Trắng bên biển').count(), 0);

@@ -32,10 +32,15 @@ test("NativeWind shares tokens and permits late web CSS hydration", () => {
   assert.equal(config.darkMode, "class");
 });
 
-test("floating chrome uses opaque soft clay and a decorative pastel canvas (direction D)", async () => {
+test("floating chrome is glass over content, reading surfaces stay clay (direction D)", async () => {
   const glass = await readFile(new URL("../src/shared/ui/glass-surface.tsx", import.meta.url), "utf8");
-  // Clay is opaque by construction, so Reduce Transparency needs no fallback.
-  assert.doesNotMatch(glass, /BlurView|GlassView/);
+  // Liquid Glass on iOS 26, a material blur elsewhere; Android blurs its BlurTargetView.
+  assert.match(glass, /GlassView/);
+  assert.match(glass, /<BlurView/);
+  assert.match(glass, /blurTarget=\{androidBlur \? blurTarget : undefined\}/);
+  // Only floating chrome is glass; cards and Reduce Transparency fall back to opaque clay.
+  assert.match(glass, /dock: true, prominent: true, subtle: true, regular: false, card: false/);
+  assert.match(glass, /GLASS\[variant\] && !reduceTransparency/);
   assert.doesNotMatch(glass, /borderColor: colors\.ink/);
   assert.match(glass, /shadows\.card/);
   assert.match(glass, /backgroundColor: colors\.surface/);
@@ -62,6 +67,13 @@ test("direction D keeps its exact canvas and local static font families", async 
 
 test("the active bottom tab can return from a nested detail screen", async () => {
   const dock = await readFile(new URL("../src/shared/ui/bottom-tab-bar.tsx", import.meta.url), "utf8");
-  assert.match(dock, /router\.navigate\(tab\.route\)/);
+  // From a page above the tabs, pop back to the tab instead of pushing another copy,
+  // so Back never returns to the page that was left through the tab bar.
+  assert.match(dock, /if \(fromPage\) router\.dismissTo\(route\)/);
+  assert.match(dock, /openTab\(tab\.route, page\)/);
   assert.doesNotMatch(dock, /if \(tab\.key !== activeTab\)/);
+  const tabs = await readFile(new URL("../src/app/(tabs)/_layout.tsx", import.meta.url), "utf8");
+  // One persistent bar for the three tabs; screens inside only pad for it.
+  assert.match(tabs, /tabBar=\{\(\) => null\}/);
+  assert.match(tabs, /<BottomTabBar activeTab=\{active\} blurTarget=\{blurTarget\}/);
 });
