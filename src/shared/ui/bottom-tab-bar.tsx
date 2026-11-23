@@ -1,6 +1,6 @@
 import { LinearGradient } from "expo-linear-gradient";
-import { router, useFocusEffect } from "expo-router";
-import { useCallback, useRef, useState, type RefObject } from "react";
+import { router } from "expo-router";
+import { createContext, useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { Pressable, StyleSheet, Text, View, type GestureResponderEvent, type ViewInstance } from "react-native";
 import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -20,14 +20,29 @@ const tabs: { key: TabKey; label: string; icon: DesignIconName; route: "/(tabs)"
   { key: "account", label: "Tài khoản", icon: "user", route: "/(tabs)/profile" },
 ];
 
-// Every screen owns its own tab bar, so remember where the selection was and
-// slide it from there when the next screen gains focus.
+// The three tabs share one persistent bar (TabsLayout). Detail pages pushed above the
+// tabs draw their own copy; remember the selection so a new copy slides from there.
 let lastIndex = 0;
+
+/** Present inside the tabs layout: screens leave the bar to the host and only pad for it. */
+export const TabBarHostContext = createContext<{ height: number } | null>(null);
+
+/**
+ * Tab press. Inside the tabs, switch tabs. From a page pushed above them (a trip), pop
+ * back to that tab instead of pushing another copy of the tabs, so Back never returns
+ * to the page the user just left through the tab bar.
+ */
+export function openTab(route: (typeof tabs)[number]["route"], fromPage: boolean) {
+  if (fromPage) router.dismissTo(route);
+  else router.navigate(route);
+}
 
 const SCRUB_SPRING = { damping: 22, stiffness: 420, mass: 0.4 };
 
-export function BottomTabBar({ activeTab, onHeightChange, blurTarget }: {
+export function BottomTabBar({ activeTab, onHeightChange, blurTarget, page = false }: {
   activeTab: TabKey; onHeightChange?: (height: number) => void; blurTarget?: RefObject<ViewInstance | null>;
+  /** True on detail pages above the tabs (their own bar copy). */
+  page?: boolean;
 }) {
   const insets = useSafeAreaInsets();
   const { reduceMotion } = useAccessibilityPreferences();
@@ -40,25 +55,26 @@ export function BottomTabBar({ activeTab, onHeightChange, blurTarget }: {
 
   const activeIndex = Math.max(0, tabs.findIndex(tab => tab.key === activeTab));
   const tabWidth = Math.max(0, (dockWidth - 10) / tabs.length);
-  const position = useSharedValue(activeIndex);
+  // A new bar copy starts where the previous one ended, then slides to its tab.
+  const position = useSharedValue(reduceMotion ? activeIndex : lastIndex);
   const dragScale = useSharedValue(1);
 
-  useFocusEffect(useCallback(() => {
-    setScrubIndex(null);
+  useEffect(() => {
+    // A finished scrub already cleared its own index; only the indicator moves here.
     dragScale.set(1);
     if (reduceMotion || lastIndex === activeIndex) {
-      position.set(activeIndex);
+      // Already there (or a scrub already springs toward it): settle without a jump.
+      position.set(reduceMotion ? activeIndex : withSpring(activeIndex, springs.snappy));
     } else {
-      position.set(lastIndex);
       position.set(withSpring(activeIndex, springs.snappy));
     }
     lastIndex = activeIndex;
     hoveredRef.current = activeIndex;
-    return () => {
-      cancelAnimation(position);
-      cancelAnimation(dragScale);
-    };
-  }, [activeIndex, dragScale, position, reduceMotion]));
+  }, [activeIndex, dragScale, position, reduceMotion]);
+  useEffect(() => () => {
+    cancelAnimation(position);
+    cancelAnimation(dragScale);
+  }, [dragScale, position]);
 
   const measureDock = useCallback(() => {
     dockWrapRef.current?.measureInWindow?.((x) => {
@@ -85,9 +101,9 @@ export function BottomTabBar({ activeTab, onHeightChange, blurTarget }: {
     if (commit) {
       lastIndex = targetIdx;
       const targetTab = tabs[targetIdx];
-      if (targetTab) router.navigate(targetTab.route);
+      if (targetTab && (targetIdx !== activeIndex || page)) openTab(targetTab.route, page);
     }
-  }, [activeIndex, dragScale, position, reduceMotion]);
+  }, [activeIndex, dragScale, page, position, reduceMotion]);
 
   const onMoveShouldSetResponderCapture = useCallback((event: GestureResponderEvent) => {
     if (tabWidth <= 0) return false;
@@ -142,7 +158,7 @@ export function BottomTabBar({ activeTab, onHeightChange, blurTarget }: {
             lastIndex = index;
             // A detail route can share the active tab. Tapping it must still
             // return to that tab's root instead of trapping the user here.
-            router.navigate(tab.route);
+            openTab(tab.route, page);
           }} />)}
         </GlassSurface>
       </View>

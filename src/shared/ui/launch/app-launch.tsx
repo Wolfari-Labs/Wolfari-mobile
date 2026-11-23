@@ -5,8 +5,7 @@ import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue, withTiming
 
 import { useSession } from "@/features/auth/session/session-provider";
 import { useAccessibilityPreferences } from "@/shared/hooks/use-accessibility-preferences";
-import { colors } from "@/shared/theme/tokens";
-import { LaunchArtwork } from "./launch-artwork";
+import { LaunchArtwork, SPLASH_BASE } from "./launch-artwork";
 import { launchTiming, remainingLaunchTime } from "./launch-policy";
 import { releaseNativeSplash } from "./native-splash";
 import { markLaunchRevealed } from "./launch-signal";
@@ -65,7 +64,7 @@ export function AppLaunch({ children, assetsReady = true }: PropsWithChildren<{ 
 
   return (
     <View style={styles.root}>
-      <StatusBar style={visible ? "light" : "dark"} />
+      <StatusBar style="dark" />
       {/* Keep the navigator mounted, but hide content from keyboard/accessibility
           while covered. Never apply opacity=0 to ancestors of native GlassViews. */}
       <View style={[styles.content, phase === "cover" && styles.hidden]} pointerEvents={visible ? "none" : "auto"}
@@ -82,8 +81,8 @@ export function AppLaunch({ children, assetsReady = true }: PropsWithChildren<{ 
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.ocean },
+  root: { flex: 1, backgroundColor: SPLASH_BASE },
   content: { flex: 1 },
   hidden: { display: "none" },
-  cover: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0, zIndex: 100, backgroundColor: colors.ocean, overflow: "hidden" },
+  cover: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0, zIndex: 100, backgroundColor: SPLASH_BASE, overflow: "hidden" },
 });

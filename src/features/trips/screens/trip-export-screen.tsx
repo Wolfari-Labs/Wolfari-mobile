@@ -5,6 +5,7 @@ import { presentPrivateFile } from "@/shared/files/private-file";
 import { errorMessage } from "@/shared/api/errors";
 import { Button } from "@/shared/ui/button";
 import { Feedback } from "@/shared/ui/feedback";
+import { Snackbar } from "@/shared/ui/toast";
 import { Heading, ResourceFeedback } from "@/shared/ui/journal";
 import { Screen } from "@/shared/ui/screen";
 import { useTrip } from "../hooks/use-trip";
@@ -29,6 +30,6 @@ export default function TripExportScreen() {
     <Text style={typography.footnote}>PDF gồm lịch trình, địa điểm, hành lý và dress code. Không bao gồm sổ quỹ.</Text>
     <Button label="Xuất kế hoạch PDF" loading={busy} disabled={!data || !!resource.error || resource.loading} onPress={() => { void exportPdf(); }} />
     {error && <Feedback message={error} />}
-    {opened && <Feedback success message="Đã mở tùy chọn tệp. Chọn nơi lưu hoặc ứng dụng nhận." />}
+    <Snackbar message={opened ? "Đã mở tùy chọn tệp. Chọn nơi lưu hoặc ứng dụng nhận." : undefined} />
   </Screen>;
 }

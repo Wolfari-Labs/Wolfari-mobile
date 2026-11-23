@@ -21,7 +21,8 @@ test("mobile branding uses Wolfari instead of Expo template assets", () => {
   assert.equal(splash.image, "./assets/figma/mascot.png");
   assert.equal(splash.imageWidth, 176);
   assert.equal(splash.resizeMode, "contain");
-  assert.equal(splash.backgroundColor, "#073B49");
+  // The pastel morning sky of the JS launch cover (SPLASH_BASE) starts from this colour.
+  assert.equal(splash.backgroundColor, "#E6EEFF");
   assert.deepEqual(splash.dark, { backgroundColor: splash.backgroundColor, image: splash.image });
 });
 

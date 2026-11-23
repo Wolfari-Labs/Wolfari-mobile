@@ -1,18 +1,20 @@
 import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
 import { useCallback, useRef, useState } from "react";
-import { Platform, Text, View } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { useApi } from "@/shared/api/use-api";
 import { useCommand } from "@/shared/hooks/use-command";
 import { useResource } from "@/shared/hooks/use-resource";
-import { typography } from "@/shared/theme/tokens";
+import { colors, fonts, radii, shadows, typography } from "@/shared/theme/tokens";
+import { DesignIcon } from "@/shared/ui/design-icon";
 import { Button } from "@/shared/ui/button";
 import { ProfileAvatar } from "../components/profile-avatar";
 import { Feedback } from "@/shared/ui/feedback";
 import { FormField } from "@/shared/ui/form-field";
-import { Heading, ResourceFeedback, ui } from "@/shared/ui/journal";
+import { ResourceFeedback } from "@/shared/ui/journal";
 import { SnapshotConflict } from "@/shared/ui/snapshot-conflict";
+import { toast } from "@/shared/ui/toast";
 import { Screen } from "@/shared/ui/screen";
 import { useSession } from "../session/session-provider";
 import type { Profile } from "../types";
@@ -101,35 +103,45 @@ function ProfileForm({
     });
     if (result) {
       updateProfile(result);
-      router.replace("/(tabs)/profile");
+      toast.success("Đã cập nhật thông tin cá nhân.");
+      // Return to where the user came from instead of stacking another copy of the tabs.
+      if (router.canGoBack()) router.back();
+      else router.replace("/(tabs)/profile");
     }
   }
+  const removing = photo === null;
+  const hasPhoto = !!photo || (!!profile.avatar && !removing);
+  const changed = name.trim() !== profile.full_name || photo !== undefined;
   return (
     <Screen
       title="Thông tin cá nhân"
       bottomPadding={24}
       footer={
         <Button
-          label="Lưu thay đổi"
+          label={changed ? "Lưu thay đổi" : "Chưa có thay đổi"}
           loading={command.busy}
-          disabled={picking || blocked}
+          disabled={picking || blocked || !changed}
           onPress={() => {
             void save();
           }}
         />
       }
     >
-      <Heading
-        title="Thông tin của bạn"
-        subtitle="Cập nhật để nhóm dễ nhận ra bạn."
-      />
-      <View style={[ui.row, { marginVertical: 20 }]}>
-        <ProfileAvatar profile={photo === null ? { ...profile, avatar: null } : profile} preview={photo?.uri} />
-        <Text style={typography.headline}>{profile.full_name}</Text>
+      <View style={styles.avatarBlock}>
+        <Pressable cssInterop={false} accessibilityRole="button" accessibilityLabel="Chọn ảnh đại diện" disabled={command.busy || picking}
+          onPress={() => { void choosePhoto(); }} style={({ pressed }) => [styles.avatarRing, pressed && { opacity: 0.85 }]}>
+          <ProfileAvatar profile={removing ? { ...profile, avatar: null } : profile} preview={photo?.uri} size={112} />
+          <View style={styles.camera}><DesignIcon name="edit" size={15} tintColor={colors.surface} /></View>
+        </Pressable>
+        <Text style={styles.name} numberOfLines={2}>{name.trim() || profile.full_name}</Text>
+        <View style={styles.photoActions}>
+          <Button label={hasPhoto ? "Đổi ảnh" : "Thêm ảnh"} variant="text" compact loading={picking} disabled={command.busy} onPress={() => { void choosePhoto(); }} />
+          {hasPhoto && <Button label="Gỡ ảnh đại diện" accessibilityLabel="Gỡ ảnh đại diện" variant="text" compact disabled={command.busy || picking} onPress={() => { uploaded.current = undefined; setPhoto(null); }} />}
+        </View>
+        <Text style={[typography.footnote, styles.center]}>
+          {photo ? "Ảnh mới sẽ được lưu khi bấm Lưu thay đổi." : removing ? "Ảnh sẽ được gỡ khi bấm Lưu thay đổi." : "JPEG/PNG · tối đa 10 MB"}
+        </Text>
       </View>
-      <Button label="Chọn ảnh đại diện" variant="soft" loading={picking} disabled={command.busy} onPress={() => { void choosePhoto(); }} />
-      {(photo || (profile.avatar && photo !== null)) && <Button label="Gỡ ảnh đại diện" variant="destructive" disabled={command.busy || picking} onPress={() => { uploaded.current = undefined; setPhoto(null); }} />}
-      <Text style={typography.footnote}>JPEG/PNG · Tối đa 10 MB. Ảnh chỉ thay đổi khi bấm Lưu thay đổi.</Text>
       <SnapshotConflict stale={stale} disabled={resource.loading || !!resource.error} onReplace={onReplace} />
       {resource.error && <Feedback message={resource.error} />}
       {validation && <Feedback message={validation} />}
@@ -146,23 +158,46 @@ function ProfileForm({
           />
         </>
       )}
-      <FormField
-        label="Họ và tên"
-        icon="edit"
-        value={name}
-        onChangeText={setName}
-        maxLength={150}
-        editable={!command.busy}
-      />
-      <FormField
-        label="Email"
-        icon="mail"
-        value={profile.email}
-        editable={false}
-      />
-      <Text style={typography.footnote}>
-        Email dùng để nhận lời mời và xác định tài khoản của bạn.
-      </Text>
+      <View style={styles.card}>
+        <FormField
+          label="Họ và tên"
+          icon="edit"
+          value={name}
+          onChangeText={setName}
+          maxLength={150}
+          editable={!command.busy}
+        />
+        <Text style={styles.hint}>Tên này hiện với bạn đồng hành trong chuyến đi, quỹ và lời mời.</Text>
+      </View>
+      <View style={styles.card}>
+        <Text style={styles.label}>Email đăng nhập</Text>
+        <View style={styles.emailRow}>
+          <DesignIcon name="mail" size={18} tintColor={colors.muted} />
+          <Text selectable style={[typography.body, { flex: 1 }]} numberOfLines={1}>{profile.email}</Text>
+          <View style={[styles.chip, profile.email_verified_at ? styles.chipOk : styles.chipWarn]}>
+            <Text style={[styles.chipText, { color: profile.email_verified_at ? colors.pinGreen : colors.amber }]}>{profile.email_verified_at ? "Đã xác minh" : "Chưa xác minh"}</Text>
+          </View>
+        </View>
+        <Text style={styles.hint}>Email dùng để nhận lời mời và khôi phục tài khoản; hiện chưa đổi được trong ứng dụng.</Text>
+        {!profile.email_verified_at && <Button label="Xác minh email ngay" variant="soft" compact onPress={() => router.push("/verify-email")} />}
+      </View>
     </Screen>
   );
 }
+
+const styles = StyleSheet.create({
+  avatarBlock: { alignItems: "center", gap: 8, paddingTop: 4 },
+  avatarRing: { width: 124, height: 124, borderRadius: 62, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center", ...shadows.card },
+  camera: { position: "absolute", right: 4, bottom: 6, width: 34, height: 34, borderRadius: 17, backgroundColor: colors.teal, alignItems: "center", justifyContent: "center", borderWidth: 3, borderColor: colors.surface },
+  name: { ...typography.section, textAlign: "center", marginTop: 6 },
+  photoActions: { flexDirection: "row", gap: 16, justifyContent: "center" },
+  center: { textAlign: "center" },
+  card: { backgroundColor: colors.surface, borderRadius: radii.card, padding: 16, gap: 10, ...shadows.glass },
+  label: { ...typography.eyebrow, textTransform: "uppercase" },
+  hint: { ...typography.footnote },
+  emailRow: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: 44 },
+  chip: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: radii.pill },
+  chipOk: { backgroundColor: colors.mint },
+  chipWarn: { backgroundColor: colors.butter },
+  chipText: { fontFamily: fonts.bold, fontSize: 12, lineHeight: 16 },
+});

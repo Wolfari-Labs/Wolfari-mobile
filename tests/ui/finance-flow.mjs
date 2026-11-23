@@ -44,6 +44,7 @@ await context.route("**/api/v1/**", async route => {
   const request = route.request(), url = new URL(request.url()), p = url.pathname.replace("/api/v1", ""), method = request.method();
   const headers = { "Access-Control-Allow-Origin": appUrl, "Access-Control-Allow-Credentials": "true", "Access-Control-Allow-Headers": "Content-Type, X-Client-Type, Authorization, X-CSRF-Token, Idempotency-Key", "Access-Control-Allow-Methods": "GET, POST, PATCH, PUT, DELETE, OPTIONS" };
   const respond = (status, data) => route.fulfill({ status, headers, contentType: "application/json", body: JSON.stringify({ data, meta: {} }) });
+  if (p === "/me/notifications") return respond(200, []);
   const fail = (status, code) => route.fulfill({ status, headers, contentType: "application/json", body: JSON.stringify({ error: { code, message: "Fixture", retryable: status === 503 }, meta: {} }) });
   if (method === "OPTIONS") return route.fulfill({ status: 204, headers });
   const multipart = request.headers()["content-type"]?.startsWith("multipart/form-data");

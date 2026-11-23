@@ -330,7 +330,8 @@ const flight = {
 test('Watch input normalizes query while keeping each threshold separate', () => {
   const one = watchInput(flight, 0),
     two = watchInput({ ...flight, threshold_price: '3000000' }, 0);
-  assert.equal(one.provider, 'MOCK_FLIGHT');
+  // The server chooses the price source (real Travelpayouts cache or MOCK_FLIGHT).
+  assert.equal('provider' in one, false);
   assert.equal(one.origin, 'SGN');
   assert.equal(one.departure_at, '2030-01-02T12:00:00Z');
   assert.deepEqual({ ...one, threshold_price: null }, { ...two, threshold_price: null });

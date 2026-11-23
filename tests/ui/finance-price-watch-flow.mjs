@@ -233,7 +233,8 @@ await context.route('**/api/v1/**', async (route) => {
         watches.filter((w) => w.user_id === actor),
         { next_cursor: null },
       );
-    assert.equal(body.provider, 'MOCK_FLIGHT');
+    // The server chooses the source; this fixture server is configured for MOCK_FLIGHT.
+    assert.equal('provider' in body, false);
     assert.equal(typeof body.threshold_price, 'string');
     const { threshold_price, ...query } = body;
     const w = {
@@ -248,7 +249,7 @@ await context.route('**/api/v1/**', async (route) => {
       expires_at: body.departure_at,
       last_alert_price: null,
       last_alert_at: null,
-      normalized_query: { ...query, transport_type: 'FLIGHT' },
+      normalized_query: { ...query, provider: 'MOCK_FLIGHT', transport_type: 'FLIGHT' },
     };
     watches.push(w);
     receipts.set(key, structuredClone(w));
@@ -260,6 +261,7 @@ await context.route('**/api/v1/**', async (route) => {
     assert.equal(body.expected_version, w.version);
     if (method === 'PATCH') {
       const { expected_version: _v, threshold_price, ...query } = body;
+      assert.equal(query.provider, w.normalized_query.provider, 'An edit keeps the source the watch was created with');
       w.normalized_query = { ...query, transport_type: 'FLIGHT' };
       w.threshold_price = threshold_price;
     } else w.status = method === 'DELETE' ? 'STOPPED' : p.endsWith('pause') ? 'PAUSED' : 'ACTIVE';

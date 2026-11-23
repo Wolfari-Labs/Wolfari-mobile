@@ -68,7 +68,7 @@ export default function InvitationResponseScreen() {
   }
   return <Screen title="Lời mời chuyến đi" bottomPadding={32}><Heading title="Đi cùng nhau,\nvui hơn nhiều!" subtitle="Mở lời mời từ những người bạn đồng hành." />
     {validation && <Feedback message={validation} />}{command.error && <Feedback message={command.error} />}
-    {resolved ? <><Feedback success message="Đã phản hồi lời mời." /><Button label="Về chuyến đi của tôi" onPress={() => router.replace("/(tabs)/trips")} /></> : <>
+    {resolved ? <><Feedback success message="Đã phản hồi lời mời." /><Button label="Về chuyến đi của tôi" onPress={() => router.dismissTo("/(tabs)/trips")} /></> : <>
       <FormField label="Mã mời" icon="mail" value={input} onChangeText={value => { setInput(value); setPreview(undefined); }} autoCapitalize="characters" autoCorrect={false} placeholder="VD: K7PQ-4M2X" editable={!command.busy} />
       <Text style={typography.footnote}>Nhập mã 8 ký tự người tổ chức gửi bạn, hoặc dán cả tin nhắn mời.</Text>
       <Button label="Dán từ bộ nhớ tạm" variant="soft" compact disabled={command.busy} style={{ alignSelf: "flex-start" }} onPress={() => { void paste(); }} />

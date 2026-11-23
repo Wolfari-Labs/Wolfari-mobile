@@ -263,7 +263,7 @@ function ActivityForm({
       <Segments
         items={[
           { value: "unscheduled", label: "Chưa xếp lịch" },
-          { value: "day", label: "Cả ngày" },
+          { value: "day", label: "Chưa định giờ" },
           { value: "timed", label: "Có giờ" },
         ]}
         value={mode}

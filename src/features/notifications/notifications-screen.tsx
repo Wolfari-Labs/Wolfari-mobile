@@ -11,6 +11,7 @@ import { useResource } from "@/shared/hooks/use-resource";
 import { colors, typography } from "@/shared/theme/tokens";
 import { Button } from "@/shared/ui/button";
 import { Feedback } from "@/shared/ui/feedback";
+import { Snackbar } from "@/shared/ui/toast";
 import { EmptyState, Heading, ResourceFeedback, Segments, ui } from "@/shared/ui/journal";
 import { Screen } from "@/shared/ui/screen";
 import type { AppNotification } from "./api";
@@ -63,7 +64,7 @@ function Inbox({ filter, setFilter }: { filter: "all" | "unread"; setFilter(valu
     <Heading title="Thông báo" subtitle="Lời mời chuyến đi và cập nhật từ nhóm." />
     <Segments items={[{ value: "all", label: "Tất cả" }, { value: "unread", label: "Chưa đọc" }]} value={filter} onChange={value => { if (!busy) setFilter(value); }} />
     {error && <Feedback message={error} />}
-    {success && <Feedback success message={success} />}
+    <Snackbar message={success} />
     <ResourceFeedback {...resource} hasData={!!resource.data} onRetry={() => { void resource.reload(); }} />
     {resource.data && (items.length ? <>
       {items.some(item => !item.read_at) && <Button label="Đánh dấu tất cả đã đọc" loading={busy} variant="text" compact style={{ alignSelf: "flex-end" }} onPress={() => { void readAll(); }} />}

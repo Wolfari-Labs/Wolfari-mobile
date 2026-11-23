@@ -57,7 +57,7 @@ const results = [
   }),
   poi("mykhe", "Bãi biển Mỹ Khê", 16.0544, 108.2472, { category: "beach", category_label: "Bãi biển", typical_duration_min: 120, activity_type: "BEACH" }),
 ];
-const searches = [], saves = [], routes = [], errors = [], imageRequests = [];
+const searches = [], saves = [], routes = [], errors = [], imageRequests = [], activityWrites = [];
 // 1×1 WebP so the photo actually renders in the fixture.
 const tinyWebp = Buffer.from("UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEADsD+JaQAA3AAAAAA", "base64");
 let routeFails = true;
@@ -105,6 +105,14 @@ await context.route("**/api/v1/**", async (route) => {
     locations.push(row);
     return respond(row, 201);
   }
+  if (endpoint === `/trips/${tripId}/activities` && method === "POST") {
+    const body = req.postDataJSON();
+    activityWrites.push(body);
+    assert.equal(body.expected_plan_version, version, "Quick add uses the latest plan version");
+    const row = { id: uid(30 + activityWrites.length), trip_id: tripId, description: null, public_description: null, status: "TODO", scheduled_date: null, ...body, plan_version: ++version };
+    activities.push(row);
+    return respond(row, 201);
+  }
   if (endpoint.startsWith("/travel/poi-images/")) {
     imageRequests.push(endpoint);
     return route.fulfill({ status: 200, headers: { ...cors, "Cache-Control": "public, max-age=31536000, immutable" }, contentType: "image/webp", body: tinyWebp });
@@ -150,6 +158,7 @@ try {
   await page.getByText("Bảo tàng · ~1 giờ 30 phút", { exact: true }).scrollIntoViewIfNeeded();
   await page.getByAltText("Ảnh Bảo tàng Điêu khắc Chăm", { exact: true }).waitFor();
   await shot("places-explore.png");
+  assert.equal(await page.getByText(/^Dữ liệu: /).count(), 0, "No per-card data source line");
   await page.getByText("ⓘ Ảnh: Nguyễn An · CC BY-SA 4.0 · Wikimedia Commons", { exact: true }).waitFor();
   assert.equal(await page.getByAltText("Ảnh Bãi biển Mỹ Khê", { exact: true }).count(), 0, "No photo, no placeholder pretending to be one");
   await tab("Ăn uống").click();
@@ -168,8 +177,21 @@ try {
   await page.getByText("✓ Đã lưu cho nhóm", { exact: true }).waitFor();
   await tab("Của nhóm · 3").waitFor();
 
-  // Adding an activity carries the suggested type and visit length into the form.
+  // Quick add: pick a day and take the suggested slot (after the day's last timed activity).
   await button("Thêm hoạt động tại Bãi biển Mỹ Khê").click();
+  await page.getByRole("radio", { name: /^Ngày 2, / }).click();
+  await page.getByRole("radio", { name: "Khung giờ gợi ý 09:00–11:00", exact: true }).waitFor();
+  await button("Thêm vào Ngày 2 · 09:00").click();
+  await page.getByText("Đã thêm “Bãi biển Mỹ Khê” vào Ngày 2 · 09:00.", { exact: true }).waitFor();
+  const created = activityWrites.at(-1);
+  assert.equal(created.title, "Bãi biển Mỹ Khê");
+  assert.equal(created.selected_location_id, uid(12));
+  assert.equal(created.starts_at, "2026-12-02T02:00:00.000Z");
+  assert.equal(created.ends_at, "2026-12-02T04:00:00.000Z");
+  assert.equal(created.expected_plan_version, version - 1);
+  // "Tùy chỉnh chi tiết" still opens the full form with the place's type and visit length.
+  await button("Thêm hoạt động tại Bãi biển Mỹ Khê").click();
+  await button("Tùy chỉnh chi tiết").click();
   await page.waitForURL(/\/activity\?/);
   const params = new URL(page.url()).searchParams;
   assert.equal(params.get("title"), "Bãi biển Mỹ Khê");

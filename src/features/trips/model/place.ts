@@ -108,3 +108,11 @@ export function poiImageUrl(path: string | null | undefined, apiBase: string) {
     return undefined;
   }
 }
+
+/**
+ * One data credit per source, written the way people read it: "meta (CDLA…)" → "Meta (CDLA…)".
+ * The list shows it once under the results instead of repeating it on every card.
+ */
+export function prettyAttribution(value: string) {
+  return value.replace(/\bmeta\b/g, "Meta").replace(/\bmicrosoft\b/gi, "Microsoft").replace(/\s+/g, " ").trim();
+}

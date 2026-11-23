@@ -45,7 +45,7 @@ function MembershipWorkspace({ memberId }: { memberId?: string }) {
     });
   }
   async function finish() {
-    if (operationCommitted(pending) && pending?.kind === "leave") router.replace("/(tabs)/trips");
+    if (operationCommitted(pending) && pending?.kind === "leave") router.dismissTo("/(tabs)/trips");
     else if (pending?.kind === "remove") router.replace({ pathname: "/trip/[id]/members", params: { id } });
     else { await resource.reload(); await members.reload(); }
   }

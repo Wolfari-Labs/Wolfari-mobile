@@ -1,7 +1,7 @@
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useLocalSearchParams } from "expo-router";
-import { useRef, useState, useSyncExternalStore, type PropsWithChildren, type ReactNode } from "react";
+import { useContext, useRef, useState, useSyncExternalStore, type PropsWithChildren, type ReactNode } from "react";
 import { BlurTargetView } from "expo-blur";
 import {
   KeyboardAvoidingView,
@@ -24,7 +24,7 @@ import { usePressMotion } from "@/shared/hooks/use-press-motion";
 import { colors, fonts, gradients, shadows, typography } from "@/shared/theme/tokens";
 import { designIcons } from "./design-assets";
 import { DesignIcon } from "./design-icon";
-import { BottomTabBar, type TabKey } from "./bottom-tab-bar";
+import { BottomTabBar, TabBarHostContext, type TabKey } from "./bottom-tab-bar";
 import { GlassSurface } from "./glass-surface";
 import { KeyboardScrollProvider, useKeyboardScroll } from "./keyboard-scroll";
 import { webSafeArea } from "./web-safe-area";
@@ -99,7 +99,10 @@ function ScreenInner({
 }: Props) {
   const insets = useSafeAreaInsets();
   const [headerHeight, setHeaderHeight] = useState(56);
-  const [tabHeight, setTabHeight] = useState(0);
+  const [ownTabHeight, setTabHeight] = useState(0);
+  // Inside the tabs layout the persistent bar belongs to the host; pages above draw their own.
+  const tabHost = useContext(TabBarHostContext);
+  const tabHeight = tabHost ? tabHost.height : ownTabHeight;
   const blurTarget = useRef<ViewInstance>(null);
   const keyboardScroll = useKeyboardScroll();
   const keyboardHeight = keyboardScroll?.keyboardHeight ?? 0;
@@ -224,7 +227,7 @@ function ScreenInner({
             </GlassSurface>
           )}
         </KeyboardAvoidingView>
-        {tab && keyboardHeight === 0 && <BottomTabBar activeTab={tab} onHeightChange={setTabHeight} blurTarget={blurTarget} />}
+        {tab && !tabHost && keyboardHeight === 0 && <BottomTabBar page activeTab={tab} onHeightChange={setTabHeight} blurTarget={blurTarget} />}
         {devicePreview && <View style={styles.homeIndicator} />}
       </ScreenArea>
     </View>

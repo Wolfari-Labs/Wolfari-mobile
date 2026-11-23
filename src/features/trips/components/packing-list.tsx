@@ -7,6 +7,7 @@ import { Button } from "@/shared/ui/button";
 import { DateTimeField } from "@/shared/ui/date-time-field";
 import { DesignIcon } from "@/shared/ui/design-icon";
 import { Feedback } from "@/shared/ui/feedback";
+import { Snackbar } from "@/shared/ui/toast";
 import { FormField } from "@/shared/ui/form-field";
 import { EmptyState, IconButton, Notice, Progress, Segments, ui } from "@/shared/ui/journal";
 import { PackingCheck } from "@/shared/ui/packing-check";
@@ -213,7 +214,7 @@ export function PackingList({
         )}
       </View>
 
-      {saved && <Feedback success message={saved} />}
+      <Snackbar message={saved} />
       {!form && !deleting && failure}
       {!rows.length && (
         <EmptyState

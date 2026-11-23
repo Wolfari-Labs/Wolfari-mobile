@@ -28,7 +28,8 @@ export function setupNotificationHandling() {
   let active = true;
   const handledResponses = new Set<string>();
   Notifications.setNotificationHandler({
-    handleNotification: async () => ({ shouldShowBanner: true, shouldShowList: true, shouldPlaySound: true, shouldSetBadge: false }),
+    // In the foreground the in-app banner (NotificationBanner) announces it instead of the system one.
+    handleNotification: async () => ({ shouldShowBanner: false, shouldShowList: true, shouldPlaySound: true, shouldSetBadge: false }),
   });
   const open = (event: Notifications.NotificationResponse) => {
     if (!active) return;

@@ -39,7 +39,7 @@ export function activityDay(activity: Pick<Activity, "starts_at" | "scheduled_da
   return activity.scheduled_date ?? undefined;
 }
 export function activityTimeLabel(activity: Pick<Activity, "starts_at" | "scheduled_date">, timezone: string) {
-  return activity.starts_at ? timeLabel(activity.starts_at, timezone) : activity.scheduled_date ? "Cả ngày" : "Chưa xếp";
+  return activity.starts_at ? timeLabel(activity.starts_at, timezone) : activity.scheduled_date ? "Chưa định giờ" : "Chưa xếp";
 }
 /** dd/mm/yyyy for a calendar string without converting through UTC instants. */
 export function calendarLabel(day: string) {

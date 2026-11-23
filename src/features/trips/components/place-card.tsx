@@ -24,7 +24,7 @@ export type PlaceItem = {
   verified?: boolean;
   /** Licensed photo (absolute URL) and its mandatory credit line. */
   photo?: { uri: string; attribution: string; sourceUrl: string };
-  /** Where the data comes from, shown in small print. */
+  /** Where the data comes from; the list shows it once, not on every card. */
   source: string;
   attribution: { text: string; url: string }[];
 };
@@ -43,27 +43,6 @@ export function PlaceCard({ place, tone, marker, selected, meta, onPress, childr
   const details = [place.categoryLabel, durationLabel(place.durationMin)].filter(Boolean).join(" · ");
   return (
     <View style={[styles.card, selected && styles.selected]}>
-      {place.photo && (
-        <View style={styles.photoBox}>
-          <Image
-            source={{ uri: place.photo.uri }}
-            contentFit="cover"
-            transition={150}
-            accessibilityLabel={`Ảnh ${place.name}`}
-            alt={`Ảnh ${place.name}`}
-            style={styles.photo}
-          />
-          <Pressable
-            cssInterop={false}
-            accessibilityRole="link"
-            accessibilityLabel={`Nguồn ảnh: ${place.photo.attribution}`}
-            onPress={() => { void openURL(place.photo!.sourceUrl).catch(() => {}); }}
-            style={({ pressed }) => [styles.credit, pressed && { opacity: 0.7 }]}
-          >
-            <Text style={styles.creditText} numberOfLines={1}>ⓘ {place.photo.attribution}</Text>
-          </Pressable>
-        </View>
-      )}
       <Pressable
         cssInterop={false}
         accessibilityRole="button"
@@ -72,35 +51,59 @@ export function PlaceCard({ place, tone, marker, selected, meta, onPress, childr
         onPress={onPress}
         style={({ pressed }) => [styles.head, pressed && { opacity: 0.7 }]}
       >
-        <View style={[styles.marker, { backgroundColor: colorsFor.fill }, tone === "result" && styles.markerResult]}>
-          <Text style={[styles.markerText, { color: colorsFor.text }]}>{marker ?? place.icon ?? "•"}</Text>
-        </View>
+        {place.photo ? (
+          <View style={styles.thumbBox}>
+            <Image
+              source={{ uri: place.photo.uri }}
+              contentFit="cover"
+              transition={150}
+              recyclingKey={place.id}
+              accessibilityLabel={`Ảnh ${place.name}`}
+              alt={`Ảnh ${place.name}`}
+              style={styles.thumb}
+            />
+            {marker && <View style={[styles.thumbMarker, { backgroundColor: colorsFor.fill }]}><Text style={[styles.markerSmall, { color: colorsFor.text }]}>{marker}</Text></View>}
+          </View>
+        ) : (
+          <View style={[styles.marker, { backgroundColor: colorsFor.fill }, tone === "result" && styles.markerResult]}>
+            <Text style={[styles.markerText, { color: colorsFor.text }]}>{marker ?? place.icon ?? "•"}</Text>
+          </View>
+        )}
         <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
           <View style={styles.titleRow}>
-            <Text style={[typography.headline, { flexShrink: 1 }]}>{place.name}</Text>
+            <Text style={[typography.headline, { flexShrink: 1 }]} numberOfLines={2}>{place.name}</Text>
             {place.verified && <Text style={styles.verified} accessibilityLabel="Tọa độ đã được kiểm tra">✓</Text>}
           </View>
           {!!details && <Text style={styles.details}>{details}</Text>}
           {!!place.address && <Text style={typography.footnote} numberOfLines={2}>{place.address}</Text>}
           {!!place.dressHint && <Text style={styles.hint}>👗 Nên mặc: {place.dressHint}</Text>}
-          {!!meta && <Text style={styles.meta}>{meta}</Text>}
+          {!!meta && <Text style={[styles.meta, meta.startsWith("✓") && { color: colors.pinGreen }]}>{meta}</Text>}
         </View>
       </Pressable>
+      {place.photo && (
+        <Pressable
+          cssInterop={false}
+          accessibilityRole="link"
+          accessibilityLabel={`Nguồn ảnh: ${place.photo.attribution}`}
+          onPress={() => { void openURL(place.photo!.sourceUrl).catch(() => {}); }}
+          style={({ pressed }) => [styles.credit, pressed && { opacity: 0.7 }]}
+        >
+          <Text style={styles.creditText} numberOfLines={1}>ⓘ {place.photo.attribution}</Text>
+        </Pressable>
+      )}
       {children && <View style={styles.actions}>{children}</View>}
-      <Text style={styles.source}>{place.source}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   card: { gap: 10, padding: 14, borderRadius: radii.card, backgroundColor: colors.surface, borderWidth: 2, borderColor: "transparent", ...shadows.glass },
-  selected: { borderColor: colors.sun },
-  photoBox: { marginTop: -14, marginHorizontal: -14, marginBottom: 2 },
-  // The card keeps its shadow (no overflow clipping), so the photo rounds its own top corners.
-  photo: { width: "100%", aspectRatio: 16 / 9, backgroundColor: colors.fill, borderTopLeftRadius: radii.card - 2, borderTopRightRadius: radii.card - 2 },
-  credit: { paddingHorizontal: 14, paddingTop: 6 },
-  creditText: { color: colors.muted, fontSize: 11 },
+  selected: { borderColor: colors.sun, backgroundColor: "#FFFCF2" },
   head: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
+  thumbBox: { width: 84, height: 84 },
+  thumb: { width: 84, height: 84, borderRadius: 16, backgroundColor: colors.fill },
+  thumbMarker: { position: "absolute", top: -6, left: -6, minWidth: 24, height: 24, paddingHorizontal: 5, borderRadius: 12, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: colors.surface },
+  markerSmall: { fontSize: 11, fontFamily: fonts.bold },
   marker: { minWidth: 34, height: 34, paddingHorizontal: 6, borderRadius: 17, alignItems: "center", justifyContent: "center" },
   markerResult: { backgroundColor: colors.fill },
   markerText: { fontSize: 14, fontFamily: fonts.bold },
@@ -109,6 +112,7 @@ const styles = StyleSheet.create({
   details: { color: colors.teal, fontSize: 13, fontFamily: fonts.bold },
   hint: { color: colors.violet, fontSize: 12, fontFamily: fonts.bold },
   meta: { color: colors.muted, fontSize: 12, fontFamily: fonts.bold },
+  credit: { marginTop: -4 },
+  creditText: { color: colors.muted, fontSize: 11 },
   actions: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  source: { color: colors.muted, fontSize: 11 },
 });
