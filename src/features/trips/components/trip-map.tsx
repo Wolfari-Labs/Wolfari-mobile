@@ -1,11 +1,19 @@
 import { memo, useEffect, useRef, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
-import MapView, { Marker, Polyline } from "react-native-maps";
+import { Platform, StyleSheet, Text, View } from "react-native";
+import MapView, { Marker, Polyline, type MapStyleElement } from "react-native-maps";
 
 import { fitRegion } from "../model/place";
 import { MAP_TONES, type MapPoint, type TripMapProps } from "./trip-map.types";
 
 export type { MapPoint, MapRoute } from "./trip-map.types";
+
+const paperStyle: MapStyleElement[] = [
+  { elementType: "geometry", stylers: [{ color: "#F2EBDD" }] },
+  { featureType: "water", elementType: "geometry", stylers: [{ color: "#ADCCD1" }] },
+  { featureType: "landscape.natural", elementType: "geometry", stylers: [{ color: "#D8E6CD" }] },
+  { featureType: "road", elementType: "geometry", stylers: [{ color: "#FFFAEB" }] },
+  { elementType: "labels.text.fill", stylers: [{ color: "#61594C" }] },
+];
 
 /**
  * Custom marker views are bitmaps on the native map: each one re-renders only while
@@ -19,7 +27,7 @@ const Pin = memo(function Pin({ point, selected, onSelect }: { point: MapPoint; 
     const timer = setTimeout(() => setTracking(false), 500);
     return () => clearTimeout(timer);
   }, []);
-  const tone = MAP_TONES[point.tone ?? "saved"];
+  const tone = MAP_TONES[point.tone === "stop" && point.label === "1" ? "start" : point.tone ?? "saved"];
   return (
     <Marker
       identifier={point.id}
@@ -56,7 +64,8 @@ export function TripMap({ points, selectedId, onSelect, route, mapType = "standa
     <View style={[styles.container, { height }]}>
       <MapView
         ref={map}
-        mapType={mapType}
+        mapType={mapType === "paper" ? (Platform.OS === "ios" ? "mutedStandard" : "standard") : mapType}
+        customMapStyle={mapType === "paper" && Platform.OS === "android" ? paperStyle : undefined}
         style={StyleSheet.absoluteFill}
         initialRegion={fitRegion([...points, ...(route?.geometry ?? [])])}
         accessibilityLabel="Bản đồ các địa điểm của hành trình"
@@ -91,7 +100,7 @@ export function TripMap({ points, selectedId, onSelect, route, mapType = "standa
 }
 
 const styles = StyleSheet.create({
-  container: { overflow: "hidden", borderRadius: 24, backgroundColor: "#E5F3FA" },
+  container: { overflow: "hidden", backgroundColor: "#E5F3FA" },
   pin: {
     minWidth: 28,
     height: 28,

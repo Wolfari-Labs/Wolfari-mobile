@@ -7,27 +7,7 @@ import { colors, fonts, radii, shadows, typography } from "@/shared/theme/tokens
 import { durationLabel } from "../model/place";
 import { MAP_TONES } from "./trip-map.types";
 
-/** One place as shown in lists: a search result, a saved group place or a route stop. */
-export type PlaceItem = {
-  id: string;
-  name: string;
-  address: string;
-  latitude: number | null;
-  longitude: number | null;
-  /** Server-issued token for saving a search result exactly as found. */
-  token?: string;
-  icon?: string;
-  categoryLabel?: string;
-  durationMin?: number;
-  activityType?: string;
-  dressHint?: string;
-  verified?: boolean;
-  /** Licensed photo (absolute URL) and its mandatory credit line. */
-  photo?: { uri: string; attribution: string; sourceUrl: string };
-  /** Where the data comes from; the list shows it once, not on every card. */
-  source: string;
-  attribution: { text: string; url: string }[];
-};
+import type { PlaceItem } from "../model/place-item";
 
 export function PlaceCard({ place, tone, marker, selected, meta, onPress, children }: {
   place: PlaceItem;
@@ -39,15 +19,15 @@ export function PlaceCard({ place, tone, marker, selected, meta, onPress, childr
   onPress?: () => void;
   children?: ReactNode;
 }) {
-  const colorsFor = MAP_TONES[tone];
+  const colorsFor = MAP_TONES[tone === "stop" && marker === "1" ? "start" : tone];
   const details = [place.categoryLabel, durationLabel(place.durationMin)].filter(Boolean).join(" · ");
   return (
     <View style={[styles.card, selected && styles.selected]}>
       <Pressable
         cssInterop={false}
         accessibilityRole="button"
-        accessibilityLabel={`Xem ${place.name} trên bản đồ`}
-        disabled={!onPress || place.latitude === null}
+        accessibilityLabel={`Xem chi tiết ${place.name}`}
+        disabled={!onPress}
         onPress={onPress}
         style={({ pressed }) => [styles.head, pressed && { opacity: 0.7 }]}
       >
@@ -75,7 +55,7 @@ export function PlaceCard({ place, tone, marker, selected, meta, onPress, childr
             {place.verified && <Text style={styles.verified} accessibilityLabel="Tọa độ đã được kiểm tra">✓</Text>}
           </View>
           {!!details && <Text style={styles.details}>{details}</Text>}
-          {!!place.address && <Text style={typography.footnote} numberOfLines={2}>{place.address}</Text>}
+          {tone !== "stop" && !!place.address && <Text style={typography.footnote} numberOfLines={2}>{place.address}</Text>}
           {!!place.dressHint && <Text style={styles.hint}>👗 Nên mặc: {place.dressHint}</Text>}
           {!!meta && <Text style={[styles.meta, meta.startsWith("✓") && { color: colors.pinGreen }]}>{meta}</Text>}
         </View>
@@ -91,7 +71,7 @@ export function PlaceCard({ place, tone, marker, selected, meta, onPress, childr
           <Text style={styles.creditText} numberOfLines={1}>ⓘ {place.photo.attribution}</Text>
         </Pressable>
       )}
-      {children && <View style={styles.actions}>{children}</View>}
+      {children && tone !== "stop" && <View style={styles.actions}>{children}</View>}
     </View>
   );
 }

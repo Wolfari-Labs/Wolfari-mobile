@@ -21,7 +21,7 @@ function pinHtml(label: string, fill: string, text: string, size: number, select
 }
 
 /** Browser map: Leaflet + OpenStreetMap tiles, with the same props as the native map. */
-export function TripMap({ points, selectedId, onSelect, route, onUserMove, fitKey, height = 300 }: TripMapProps) {
+export function TripMap({ points, selectedId, onSelect, route, mapType, onUserMove, fitKey, height = 300 }: TripMapProps) {
   const host = useRef<ViewInstance>(null);
   const map = useRef<L.Map | null>(null);
   const layer = useRef<L.LayerGroup | null>(null);
@@ -60,7 +60,7 @@ export function TripMap({ points, selectedId, onSelect, route, onUserMove, fitKe
     if (!instance || !coords.length || !size?.x || !size.y) return;
     quietly.current(() => {
       if (coords.length === 1) instance.setView([coords[0].latitude, coords[0].longitude], 15, { animate: false });
-      else instance.fitBounds(L.latLngBounds(coords.map((p) => [p.latitude, p.longitude] as [number, number])), { padding: [28, 28], maxZoom: 16, animate: false });
+      else instance.fitBounds(L.latLngBounds(coords.map((p) => [p.latitude, p.longitude] as [number, number])), { paddingTopLeft: [28, 118], paddingBottomRight: [28, 72], maxZoom: 16, animate: false });
     });
   });
 
@@ -111,9 +111,14 @@ export function TripMap({ points, selectedId, onSelect, route, onUserMove, fitKe
   }, []);
 
   useEffect(() => {
+    const tiles = map.current?.getPane("tilePane");
+    if (tiles) tiles.style.filter = mapType === "paper" ? "sepia(65%) saturate(68%) contrast(92%)" : "";
+  }, [mapType]);
+
+  useEffect(() => {
     const group = layer.current;
     if (!group) return;
-    const routeKey = route && route.geometry.length > 1 ? `${route.estimated}|${route.geometry.length}|${route.geometry[0].latitude},${route.geometry[0].longitude}|${route.geometry.at(-1)!.latitude}` : "";
+    const routeKey = route && route.geometry.length > 1 ? `${route.estimated}|${route.geometry.map(p => p.latitude + "," + p.longitude).join(";")}` : "";
     if (line.current?.key !== routeKey) {
       line.current?.layer.remove();
       line.current = route && routeKey
@@ -133,7 +138,7 @@ export function TripMap({ points, selectedId, onSelect, route, onUserMove, fitKe
     const seen = new Set<string>();
     for (const point of points) {
       seen.add(point.id);
-      const tone = MAP_TONES[point.tone ?? "saved"],
+      const tone = MAP_TONES[point.tone === "stop" && point.label === "1" ? "start" : point.tone ?? "saved"],
         selected = point.id === selectedId,
         size = selected ? 34 : 28;
       const key = `${point.latitude},${point.longitude}|${point.label ?? ""}|${point.tone ?? ""}|${selected}`;
@@ -167,5 +172,5 @@ export function TripMap({ points, selectedId, onSelect, route, onUserMove, fitKe
 }
 
 const styles = StyleSheet.create({
-  container: { overflow: "hidden", borderRadius: 24, backgroundColor: "#E5F3FA", zIndex: 0 },
+  container: { overflow: "hidden", backgroundColor: "#E5F3FA", zIndex: 0 },
 });

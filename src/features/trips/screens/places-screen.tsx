@@ -1,23 +1,26 @@
 import { openURL } from "expo-linking";
 import { router } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from "react-native";
 
 import { ApiError } from "@/shared/api/api-client";
-import { getApiBaseUrl } from "@/shared/config/env";
 import { errorMessage } from "@/shared/api/errors";
 import { useCommand } from "@/shared/hooks/use-command";
 import { colors, fonts, radii, shadows, typography } from "@/shared/theme/tokens";
 import { Button } from "@/shared/ui/button";
+import { Dialog } from "@/shared/ui/dialog";
 import { DesignIcon } from "@/shared/ui/design-icon";
 import { Feedback } from "@/shared/ui/feedback";
 import { FormField } from "@/shared/ui/form-field";
-import { GlassSurface } from "@/shared/ui/glass-surface";
+import { ClayChip } from "@/shared/ui/clay-form";
+import { ClayIcon, ClayIconButton } from "@/shared/ui/setting-card";
 import { EmptyState, Notice, ResourceFeedback } from "@/shared/ui/journal";
 import { Screen } from "@/shared/ui/screen";
 import { Sheet } from "@/shared/ui/sheet";
 import { toast } from "@/shared/ui/toast";
-import { PlaceCard, type PlaceItem } from "../components/place-card";
+import { coordsOf, fromPoi, fromSaved, matchingLocation, storeLocation, type PlaceItem } from "../model/place-item";
+import { usePlaceSelection } from "../components/place-selection";
+import { PlaceCard } from "../components/place-card";
 import { TripMap, type MapPoint, type MapRoute } from "../components/trip-map";
 import { switchTripSection, TripNavigation } from "../components/trip-navigation";
 import { useTrip } from "../hooks/use-trip";
@@ -29,15 +32,12 @@ import {
   distanceLabel,
   durationLabel,
   formActivityType,
-  poiImageUrl,
-  prettyAttribution,
   regionBbox,
   straightLine,
   validCoordinates,
-  type LatLng,
   type MapRegion,
 } from "../model/place";
-import type { Activity, Plan, PoiCategory, PoiPlace, PoiQuery, RouteMode, SelectedLocation, Trip } from "../types";
+import type { Activity, Plan, PoiCategory, PoiQuery, RouteMode, Trip } from "../types";
 import { activityDay, calendarLabel, sortedActivities, timeLabel, tripDays } from "../utils";
 
 type Tab = "saved" | "explore" | "route";
@@ -48,54 +48,16 @@ const MODES: { value: RouteMode; label: string }[] = [
   { value: "WALKING", label: "🚶 Đi bộ" },
   { value: "CYCLING", label: "🚲 Xe đạp" },
 ];
-const MAP_HEIGHT = 340;
 const PAGE = 12;
-const groupIcon = (category?: string) => POI_GROUPS.find((group) => group.value === category)?.icon;
 const travelWarnings: Record<string, string> = {
   OPENING_HOURS_NOT_AVAILABLE: "Chưa có giờ mở cửa. Hãy kiểm tra trước khi ghé thăm.",
   STALE_CACHE: "Thông tin gần nhất được lưu tạm và có thể đã thay đổi.",
 };
 
-function fromPoi(place: PoiPlace): PlaceItem {
-  const image = place.hero_image;
-  const uri = image ? poiImageUrl(image.thumbnail_url, getApiBaseUrl()) : undefined;
-  return {
-    ...(uri && image?.attribution && image.source_url ? { photo: { uri, attribution: image.attribution, sourceUrl: image.source_url } } : {}),
-    id: "poi:" + place.id,
-    name: place.name,
-    address: place.address ?? place.province_name ?? "",
-    latitude: place.coordinates.latitude,
-    longitude: place.coordinates.longitude,
-    token: place.selection_token,
-    icon: groupIcon(place.category_group ?? undefined) ?? "📍",
-    categoryLabel: place.category_label || undefined,
-    durationMin: place.typical_duration_min,
-    activityType: place.activity_type,
-    dressHint: place.dress_code_hint || undefined,
-    verified: place.coord_verified,
-    source: prettyAttribution(place.attribution || "OpenStreetMap"),
-    attribution: [],
-  };
-}
-
-function fromSaved(location: SelectedLocation): PlaceItem {
-  return {
-    id: location.id,
-    name: location.name,
-    address: location.address ?? "",
-    latitude: location.latitude === null ? null : Number(location.latitude),
-    longitude: location.longitude === null ? null : Number(location.longitude),
-    source: "Kế hoạch chung",
-    attribution: location.metadata?.attribution ?? [],
-  };
-}
-
-const near = (a: number | null, b: number | null) => (a === null ? b === null : b !== null && Math.abs(a - b) < 0.0001);
-const coordsOf = (place: PlaceItem): LatLng | undefined => (validCoordinates(place.latitude, place.longitude) ? { latitude: place.latitude!, longitude: place.longitude! } : undefined);
-
 type RouteState = { line: MapRoute; distance: number; duration?: number; key: string; basis: "road" | "car-estimate" | "straight"; attribution: { text: string; url: string | null }[] };
 
 export default function PlacesScreen() {
+  const { selectPlace } = usePlaceSelection();
   const resource = useTrip();
   const { data, api, id } = resource;
   const command = useCommand();
@@ -104,10 +66,11 @@ export default function PlacesScreen() {
   const sharedWrites = plan?.capabilities?.locations_write === true;
   const editable = !!plan?.permissions.can_edit;
   const canWrite = editable && !resource.loading && !resource.error && !command.busy;
-  const [tab, setTab] = useState<Tab>("saved");
+  const { height } = useWindowDimensions();
+  const [chosenTab, setTab] = useState<Tab>();
   const [selected, setSelected] = useState<string>();
   const [fitKey, setFitKey] = useState(0);
-  const [mapType, setMapType] = useState<"standard" | "satellite">("standard");
+  const [mapType, setMapType] = useState<"standard" | "satellite" | "paper">("standard");
   const [error, setError] = useState<string>();
   const [limit, setLimit] = useState(PAGE);
   // Explore
@@ -134,12 +97,23 @@ export default function PlacesScreen() {
   const [adding, setAdding] = useState<PlaceItem>();
   useEffect(() => () => search.current?.abort(), []);
 
+  // Day route: the day's activities that are attached to a place with coordinates, in order.
+  const routeDay = day ?? days[0];
+  const stops = useMemo(() => !plan || !trip || !routeDay ? [] : sortedActivities(plan.activities.filter((a) => activityDay(a, trip.timezone) === routeDay)).flatMap((activity) => {
+    const location = plan.selected_locations.find((p) => p.id === activity.selected_location_id);
+    const place = location && fromSaved(location);
+    return place && validCoordinates(place.latitude, place.longitude) ? [{ activity, place }] : [];
+  }), [plan, trip, routeDay]);
+  const tab = chosenTab ?? (stops.length ? "route" : "saved");
   const savedPlaces = useMemo(() => (plan?.selected_locations ?? []).map(fromSaved), [plan?.selected_locations]);
   const savedCenter = useMemo(() => centerOf(savedPlaces.flatMap((p) => coordsOf(p) ?? [])), [savedPlaces]);
   const center = savedCenter ?? DEFAULT_CENTER;
   const activitiesAt = (placeId: string) => (plan?.activities ?? []).filter((a) => a.selected_location_id === placeId);
-  const sharedMatch = (place: PlaceItem) =>
-    plan?.selected_locations.find((p) => p.id === place.id || (p.name === place.name && near(p.latitude === null ? null : Number(p.latitude), place.latitude) && near(p.longitude === null ? null : Number(p.longitude), place.longitude)));
+  const sharedMatch = (place: PlaceItem) => matchingLocation(plan?.selected_locations ?? [], place);
+  function openDetails(place: PlaceItem, activityId?: string) {
+    selectPlace(place);
+    router.push({ pathname: "/trip/[id]/place", params: { id, placeId: place.id, ...(place.id.startsWith("poi:") || place.id.startsWith("search:") ? { q: place.name } : {}), ...(activityId ? { activityId } : {}) } });
+  }
 
   async function runSearch(next: PoiQuery) {
     if (!data) return;
@@ -224,18 +198,8 @@ export default function PlacesScreen() {
     if (!canWrite || !data || !sharedWrites) return;
     const existing = sharedMatch(place);
     if (existing) return existing;
-    const result = place.token
-      ? await command.run({ token: place.token, version: data.plan.plan_version }, (key) =>
-          api.trips.saveLocationToken(id, { selection_token: place.token!, expected_plan_version: data.plan.plan_version }, key),
-        )
-      : await (async () => {
-          const input = {
-            name: place.name.trim(), address: place.address.trim() || null,
-            latitude: place.latitude === null ? null : place.latitude.toFixed(6), longitude: place.longitude === null ? null : place.longitude.toFixed(6),
-            attribution: place.attribution.filter((a) => a.url.startsWith("https://")), expected_plan_version: data.plan.plan_version,
-          };
-          return command.run(input, (key) => api.trips.saveLocation(id, input, key));
-        })();
+    const version = data.plan.plan_version;
+    const result = await command.run({ place, version }, key => storeLocation(api.trips, id, place, version, key));
     if (result) {
       if (!quiet) toast.success(`Đã lưu “${place.name}” cho cả nhóm.`, { icon: "pin" });
       await resource.reload();
@@ -307,13 +271,6 @@ export default function PlacesScreen() {
     }
   }
 
-  // Day route: the day's activities that are attached to a place with coordinates, in order.
-  const routeDay = day ?? days[0];
-  const stops = useMemo(() => !plan || !trip || !routeDay ? [] : sortedActivities(plan.activities.filter((a) => activityDay(a, trip.timezone) === routeDay)).flatMap((activity) => {
-    const location = plan.selected_locations.find((p) => p.id === activity.selected_location_id);
-    const place = location && fromSaved(location);
-    return place && validCoordinates(place.latitude, place.longitude) ? [{ activity, place }] : [];
-  }), [plan, trip, routeDay]);
   const unplaced = plan && trip && routeDay ? plan.activities.filter((a) => activityDay(a, trip.timezone) === routeDay && !stops.some((s) => s.activity.id === a.id)) : [];
   const stopKey = `${routeDay}|${mode}|` + stops.map((s) => `${s.place.latitude},${s.place.longitude}`).join(";");
   const needsRoute = tab === "route" && stops.length > 1 && route?.key !== stopKey;
@@ -378,12 +335,12 @@ export default function PlacesScreen() {
             meta: stop.activity.title + (stop.activity.starts_at ? ` · ${timeLabel(stop.activity.starts_at, trip!.timezone)}` : ""),
           })),
   [tab, savedPlaces, plan?.activities, results, stops, trip]);
-  const points: MapPoint[] = useMemo(() => listed.flatMap(({ place, tone, marker }) => {
+  const points: MapPoint[] = useMemo(() => listed.flatMap(({ place, tone, marker, activity }) => {
     const at = coordsOf(place);
-    return at ? [{ id: place.id, name: place.name, ...at, tone, label: marker ?? place.icon }] : [];
+    return at ? [{ id: activity?.id ?? place.id, name: place.name, ...at, tone, label: marker ?? place.icon }] : [];
   }), [listed]);
   // The tapped place comes first in the list, right under the map.
-  const ordered = selected ? [...listed.filter((row) => row.place.id === selected), ...listed.filter((row) => row.place.id !== selected)] : listed;
+  const ordered = selected && tab !== "route" ? [...listed.filter((row) => row.place.id === selected), ...listed.filter((row) => row.place.id !== selected)] : listed;
   const shown = tab === "explore" ? ordered.slice(0, limit) : ordered;
   const credits = tab === "explore" ? [...new Set((results?.items ?? []).map((item) => item.source).filter(Boolean))] : [];
   const switchTab = (next: Tab) => {
@@ -394,52 +351,81 @@ export default function PlacesScreen() {
     setFitKey((value) => value + 1);
   };
   const tabs: { value: Tab; label: string; a11y: string }[] = [
-    { value: "saved", label: `📍 Nhóm · ${savedPlaces.length}`, a11y: `Của nhóm · ${savedPlaces.length}` },
-    { value: "explore", label: "🔎 Khám phá", a11y: "Tìm quanh đây" },
-    { value: "route", label: "🧭 Lộ trình", a11y: "Lộ trình" },
+    { value: "saved", label: `Đã lưu · ${savedPlaces.length}`, a11y: `Của nhóm · ${savedPlaces.length}` },
+    { value: "explore", label: "Quanh đây", a11y: "Tìm quanh đây" },
+    { value: "route", label: "Lộ trình", a11y: "Lộ trình" },
   ];
 
+  const mapTabs = (
+    <View style={styles.modeBar}>
+      {tabs.map((item) => (
+        <Pressable cssInterop={false} key={item.value} accessibilityRole="tab" accessibilityLabel={item.a11y} accessibilityState={{ selected: tab === item.value }}
+          onPress={() => switchTab(item.value)} style={({ pressed }) => [styles.mode, tab === item.value && styles.modeActive, pressed && { opacity: 0.75 }]}>
+          <Text style={[styles.modeText, tab === item.value && styles.modeTextActive]} numberOfLines={1}>{item.label}</Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+  const marked = selected ? listed.find(row => (row.activity?.id ?? row.place.id) === selected) : undefined;
+
   return (
-    <Screen title={trip?.name ?? "Bản đồ & địa điểm"} tab="trips" onRefresh={() => { void resource.reload(); }} refreshing={resource.loading && !!data}>
+    <Screen immersive={!!data} title={trip?.name ?? "Bản đồ & địa điểm"} tab="trips" onRefresh={() => { void resource.reload(); }} refreshing={resource.loading && !!data}>
       <ResourceFeedback {...resource} hasData={!!data} onRetry={() => { void resource.reload(); }} />
       {data && plan && trip && (
         <>
-          <TripNavigation id={id} active="places" />
-
           <View style={styles.mapShell}>
-            <TripMap points={points} selectedId={selected} onSelect={setSelected} route={activeRoute?.line} mapType={mapType} fitKey={`${tab}:${fitKey}`}
-              onUserMove={tab === "explore" ? setMoved : undefined} height={MAP_HEIGHT} />
+            <TripMap points={points} selectedId={selected} onSelect={setSelected} route={activeRoute?.line} mapType={mapType}
+              fitKey={`${tab}:${routeDay}:${fitKey}`} onUserMove={tab === "explore" ? setMoved : undefined} height={Math.max(350, Math.min(530, height * 0.52))} />
             <View style={styles.topOverlay} pointerEvents="box-none">
-              <GlassSurface variant="prominent" style={styles.modeBar}>
-                {tabs.map((item) => (
-                  <Pressable cssInterop={false} key={item.value} accessibilityRole="tab" accessibilityLabel={item.a11y} accessibilityState={{ selected: tab === item.value }}
-                    onPress={() => switchTab(item.value)} style={({ pressed }) => [styles.mode, tab === item.value && styles.modeActive, pressed && { opacity: 0.75 }]}>
-                    <Text style={[styles.modeText, tab === item.value && styles.modeTextActive]} numberOfLines={1}>{item.label}</Text>
-                  </Pressable>
-                ))}
-              </GlassSurface>
+              <View style={styles.searchRow}>
+                <Pressable accessibilityRole="button" accessibilityLabel="Quay lại" onPress={() => router.canGoBack() ? router.back() : switchTripSection(id, "places", "overview")} style={styles.back}><DesignIcon name="back" size={20} /></Pressable>
+                <View style={styles.searchBar}>
+                  <ClayIcon name="fieldSearch" size={18} />
+                  <TextInput accessibilityLabel="Khám phá địa điểm" value={query} onChangeText={value => { setQuery(value); if (value.trim()) setTab("explore"); }} placeholder="Tìm địa điểm" placeholderTextColor={colors.muted}
+                    maxLength={200} returnKeyType="search" onSubmitEditing={searchText} style={styles.searchInput} autoCorrect={false} />
+                  {!!query && <Pressable cssInterop={false} accessibilityRole="button" accessibilityLabel="Xóa từ khóa" hitSlop={8}
+                    onPress={() => { setQuery(""); void runSearch(nearbyQuery(group)); }} style={styles.clear}><Text style={styles.clearText}>✕</Text></Pressable>}
+                  {!!query && <Button label="Tìm" accessibilityLabel="Tìm địa điểm" compact loading={searching} onPress={searchText} />}
+                </View>
+              </View>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.chipRow}>
+                {POI_GROUPS.map(item => <ClayChip key={item.value} role="tab" label={item.label} selected={tab === "explore" ? group === item.value : item.value === "all"}
+                  onPress={() => { setGroup(item.value); setTab("explore"); void runSearch(typed ? textQuery(typed, item.value) : nearbyQuery(item.value)); }} />)}
+              </ScrollView>
             </View>
             <View style={styles.bottomOverlay} pointerEvents="box-none">
-              {tab === "explore" && moved ? (
-                <Pressable cssInterop={false} accessibilityRole="button" accessibilityLabel="Tìm trong khu vực này"
-                  onPress={() => void runSearch({ bbox: regionBbox(moved), category: group, limit: 150 })} style={({ pressed }) => [styles.floating, pressed && { opacity: 0.8 }]}>
-                  <Text style={styles.floatingText}>🔍 Tìm trong khu vực này</Text>
-                </Pressable>
-              ) : <View />}
-              {Platform.OS !== "web" && (
-                <Pressable cssInterop={false} accessibilityRole="button" accessibilityLabel={mapType === "standard" ? "Xem ảnh vệ tinh" : "Xem bản đồ đường"}
-                  onPress={() => setMapType((value) => (value === "standard" ? "satellite" : "standard"))} style={({ pressed }) => [styles.floating, styles.floatingSmall, pressed && { opacity: 0.8 }]}>
-                  <Text style={styles.floatingText}>{mapType === "standard" ? "🛰️" : "🗺️"}</Text>
-                </Pressable>
-              )}
+              <View style={styles.mapModes}>
+                <ClayChip label="Số" accessibilityLabel="Bản đồ số" selected={mapType === "standard"} onPress={() => setMapType("standard")} />
+                <ClayChip label="Giấy" accessibilityLabel="Bản đồ giấy" selected={mapType === "paper"} onPress={() => setMapType("paper")} />
+                {Platform.OS !== "web" && <ClayChip label="Vệ tinh" selected={mapType === "satellite"} onPress={() => setMapType("satellite")} />}
+              </View>
+              {!!points.length && <ClayIconButton icon="locate" label="Hiện toàn bộ điểm trên bản đồ" onPress={() => setFitKey(value => value + 1)} />}
             </View>
+            {marked && !searching && <Pressable accessibilityRole="button" accessibilityLabel={`Chi tiết ${marked.place.name}`} onPress={() => openDetails(marked.place, marked.activity?.id)}
+              style={styles.callout}><Text numberOfLines={1} style={styles.floatingText}>{marked.place.name}　›</Text></Pressable>}
+            {tab === "explore" && moved && <Pressable accessibilityRole="button" accessibilityLabel="Tìm trong khu vực này" onPress={() => void runSearch({ bbox: regionBbox(moved), category: group, limit: 150 })}
+              style={[styles.loadingPill, { backgroundColor: colors.surface }]}><Text style={styles.floatingText}>Tìm trong khu vực này</Text></Pressable>}
             {searching && <View style={styles.loadingPill} pointerEvents="none"><Text style={styles.loadingText}>Đang tìm…</Text></View>}
           </View>
+          <View style={styles.panel}>
+            <View style={styles.handle} />
+            <Text accessibilityRole="header" style={typography.title}>{tab === "route" && routeDay ? `Ngày ${days.indexOf(routeDay) + 1} · ${stops.length} điểm dừng` : tab === "saved" ? "Địa điểm của nhóm" : "Khám phá quanh đây"}</Text>
+          {tab === "route" && stops.length > 1 && (
+            <View style={styles.summary}>
+              {!activeRoute ? <Text style={typography.footnote}>Đang tính lộ trình…</Text> : (
+                  <Text style={styles.summaryValue}>
+                    {distanceLabel(activeRoute.distance)}
+                    {activeRoute.duration ? ` · ${durationLabel(activeRoute.duration / 60)}` : ""}
+                  </Text>
+              )}
+            </View>
+          )}
 
+          {tab !== "route" && mapTabs}
           {tab === "saved" && (
             <View style={styles.headRow}>
               <Text style={[typography.footnote, { flex: 1 }]}>
-                {savedPlaces.length ? `${savedPlaces.length} địa điểm cả nhóm đã lưu · chạm để xem trên bản đồ` : "Nhóm chưa lưu địa điểm nào."}
+                {savedPlaces.length ? `${savedPlaces.length} địa điểm cả nhóm đã lưu · chạm để xem chi tiết` : "Nhóm chưa lưu địa điểm nào."}
               </Text>
               {editable && sharedWrites && <Button label="Thêm" accessibilityLabel="Thêm địa điểm cho nhóm" variant="soft" compact icon="plus" disabled={!canWrite} onPress={() => { setManualError(undefined); setManual(true); }} />}
             </View>
@@ -448,23 +434,6 @@ export default function PlacesScreen() {
 
           {tab === "explore" && (
             <View style={styles.controls}>
-              <View style={styles.searchBar}>
-                <DesignIcon name="search" size={18} tintColor={colors.muted} />
-                <TextInput accessibilityLabel="Khám phá địa điểm" value={query} onChangeText={setQuery} placeholder="Tìm quán ăn, bãi biển, bảo tàng…" placeholderTextColor={colors.muted}
-                  maxLength={200} returnKeyType="search" onSubmitEditing={searchText} style={styles.searchInput} autoCorrect={false} />
-                {!!query && <Pressable cssInterop={false} accessibilityRole="button" accessibilityLabel="Xóa từ khóa" hitSlop={8}
-                  onPress={() => { setQuery(""); void runSearch(nearbyQuery(group)); }} style={styles.clear}><Text style={styles.clearText}>✕</Text></Pressable>}
-                <Button label="Tìm" accessibilityLabel="Tìm địa điểm" compact loading={searching} onPress={searchText} />
-              </View>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
-                {POI_GROUPS.map((item) => (
-                  <Pressable cssInterop={false} key={item.value} accessibilityRole="tab" accessibilityLabel={item.label} accessibilityState={{ selected: group === item.value }}
-                    onPress={() => { setGroup(item.value); if (!query.trim()) void runSearch(nearbyQuery(item.value)); }}
-                    style={({ pressed }) => [styles.chip, group === item.value && styles.chipActive, pressed && { opacity: 0.7 }]}>
-                    <Text style={[styles.chipText, group === item.value && styles.chipTextActive]}>{item.icon} {item.label}</Text>
-                  </Pressable>
-                ))}
-              </ScrollView>
               {results && !searching && !!results.items.length && (
                 <Text style={typography.footnote}>{results.items.length} địa điểm {typed ? `cho “${typed}”` : "quanh địa điểm của nhóm"}{results.truncated ? " · phóng to để xem đủ" : ""}</Text>
               )}
@@ -475,30 +444,65 @@ export default function PlacesScreen() {
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
                 {days.map((value, index) => (
                   <Pressable cssInterop={false} key={value} accessibilityRole="tab" accessibilityLabel={`Ngày ${index + 1} · ${value.slice(8)}/${value.slice(5, 7)}`} accessibilityState={{ selected: routeDay === value }}
-                    onPress={() => { setDay(value); setSelected(undefined); }} style={({ pressed }) => [styles.chip, routeDay === value && styles.chipActive, pressed && { opacity: 0.7 }]}>
+                    onPress={() => { setTab("route"); setDay(value); setSelected(undefined); }} style={({ pressed }) => [styles.chip, routeDay === value && styles.chipActive, pressed && { opacity: 0.7 }]}>
                     <Text style={[styles.chipText, routeDay === value && styles.chipTextActive]}>Ngày {index + 1} · {value.slice(8)}/{value.slice(5, 7)}</Text>
                   </Pressable>
                 ))}
               </ScrollView>
-              <View style={styles.modeRow}>
-                {MODES.map((item) => (
-                  <Pressable cssInterop={false} key={item.value} accessibilityRole="tab" accessibilityLabel={item.label} accessibilityState={{ selected: mode === item.value }} onPress={() => setMode(item.value)}
-                    style={({ pressed }) => [styles.modeChip, mode === item.value && styles.chipActive, pressed && { opacity: 0.7 }]}>
-                    <Text style={[styles.chipText, mode === item.value && styles.chipTextActive]} numberOfLines={1}>{item.label}</Text>
-                  </Pressable>
-                ))}
-              </View>
+
             </View>
           )}
 
-          {tab === "route" && stops.length > 1 && (
-            <View style={styles.summary}>
-              {!activeRoute ? <Text style={typography.footnote}>Đang tính lộ trình…</Text> : (
-                <>
-                  <Text style={styles.summaryValue}>
-                    {distanceLabel(activeRoute.distance)}
-                    {activeRoute.duration ? ` · ${durationLabel(activeRoute.duration / 60)}` : ""}
-                  </Text>
+          {error && <Feedback message={error} />}
+          {command.error && !adding && !deleting && !manual && <><Feedback message={command.error} /><Button label="Tải lại địa điểm của nhóm" variant="soft" onPress={() => { command.clearError(); void resource.reload(); }} /></>}
+          {tab === "explore" && results?.mock && <Notice>Kết quả từ nguồn dữ liệu mô phỏng của môi trường thử nghiệm.</Notice>}
+          {tab === "explore" && results?.warnings.map((warning) => travelWarnings[warning] ? <Text key={warning} style={typography.footnote}>{travelWarnings[warning]}</Text> : null)}
+          {tab === "explore" && results?.note && <Notice>{results.note}</Notice>}
+
+          {shown.map(({ place, tone, marker, meta, activity }) => {
+            const savedRow = tab === "saved" ? plan.selected_locations.find((p) => p.id === place.id) : sharedMatch(place);
+            const hasCoords = !!coordsOf(place);
+            return (
+              <PlaceCard key={activity?.id ?? place.id} place={place} tone={tone} marker={marker} selected={selected === (activity?.id ?? place.id)}
+                meta={tab === "explore" ? (savedRow ? "✓ Đã lưu cho nhóm" : undefined) : meta}
+                onPress={() => openDetails(place, activity?.id)}>
+                {editable && tab !== "route" && (
+                  <Button label="Thêm vào lịch trình" accessibilityLabel={`Thêm hoạt động tại ${place.name}`} icon="calendar" compact disabled={!canWrite}
+                    onPress={() => { command.clearError(); setError(undefined); setAdding(place); }} />
+                )}
+                {editable && sharedWrites && tab === "explore" && !savedRow && (
+                  <Button label="Lưu cho nhóm" accessibilityLabel={`Lưu ${place.name} cho nhóm`} compact variant="soft" disabled={!canWrite} onPress={() => { void saveShared(place); }} />
+                )}
+                {hasCoords && tab !== "route" && <Button label="Chỉ đường" accessibilityLabel={`Chỉ đường tới ${place.name}`} compact variant="text" onPress={() => { void directions(place); }} />}
+                {editable && sharedWrites && tab === "saved" && !activitiesAt(place.id).length && (
+                  <Button label="Xóa" accessibilityLabel={`Xóa ${place.name} khỏi nhóm`} compact variant="text" disabled={!canWrite} onPress={() => setDeleting(place)} />
+                )}
+              </PlaceCard>
+            );
+          })}
+          {tab === "explore" && ordered.length > shown.length && (
+            <Button label={`Xem thêm ${Math.min(PAGE, ordered.length - shown.length)} địa điểm`} variant="text" onPress={() => setLimit((value) => value + PAGE)} />
+          )}
+
+          {tab === "saved" && !savedPlaces.length && (
+            <EmptyState scene="notFound" title="Chưa có điểm dừng" message="Mở Khám phá để tìm nơi muốn đến rồi lưu cho cả nhóm." icon="pin"
+              action={<Button label="Khám phá quanh đây" compact onPress={openExplore} />} />
+          )}
+          {tab === "explore" && !searching && results && !results.items.length && !results.note && (
+            <EmptyState scene="notFound" title="Thử một ý tưởng khác nhé" message="Đổi nhóm địa điểm, tìm theo tên hoặc kéo bản đồ rồi bấm “Tìm trong khu vực này”." icon="pin" />
+          )}
+          {tab === "route" && stops.length < 2 && (
+            <EmptyState scene="tripDone" title={stops.length ? "Cần thêm một điểm dừng" : "Ngày này chưa có điểm dừng"}
+              message="Lộ trình nối các hoạt động trong ngày đã gắn địa điểm. Thêm địa điểm vào lịch trình từ tab Nhóm hoặc Khám phá." icon="map" />
+          )}
+          {tab === "route" && unplaced.length > 0 && (
+            <Text style={typography.footnote}>
+              Chưa có trên lộ trình: {unplaced.map((a) => a.title).join(", ")} (chưa gắn địa điểm).
+            </Text>
+          )}
+          {credits.length > 0 && <Text style={styles.footerCredit}>Dữ liệu địa điểm: {credits.join(" · ")}</Text>}
+
+          {tab === "route" && activeRoute && <View style={styles.controls}>
                   <Text style={typography.footnote}>
                     {activeRoute.basis === "straight"
                       ? "Đường chim bay (nét đứt) · chưa có dữ liệu chỉ đường, khoảng cách thực tế sẽ dài hơn."
@@ -513,73 +517,34 @@ export default function PlacesScreen() {
                         : <Text key={item.text} style={styles.credit}>{item.text}</Text>)}
                     </View>
                   )}
-                </>
-              )}
-            </View>
+          </View>}
+          {tab === "route" && (
+              <View style={styles.modeRow}>
+                {MODES.map((item) => (
+                  <Pressable cssInterop={false} key={item.value} accessibilityRole="tab" accessibilityLabel={item.label} accessibilityState={{ selected: mode === item.value }} onPress={() => setMode(item.value)}
+                    style={({ pressed }) => [styles.modeChip, mode === item.value && styles.chipActive, pressed && { opacity: 0.7 }]}>
+                    <Text style={[styles.chipText, mode === item.value && styles.chipTextActive]} numberOfLines={1}>{item.label}</Text>
+                  </Pressable>
+                ))}
+              </View>
           )}
-
-          {error && <Feedback message={error} />}
-          {command.error && !adding && !deleting && !manual && <><Feedback message={command.error} /><Button label="Tải lại địa điểm của nhóm" variant="soft" onPress={() => { command.clearError(); void resource.reload(); }} /></>}
-          {tab === "explore" && results?.mock && <Notice>Kết quả từ nguồn dữ liệu mô phỏng của môi trường thử nghiệm.</Notice>}
-          {tab === "explore" && results?.warnings.map((warning) => travelWarnings[warning] ? <Text key={warning} style={typography.footnote}>{travelWarnings[warning]}</Text> : null)}
-          {tab === "explore" && results?.note && <Notice>{results.note}</Notice>}
-
-          {shown.map(({ place, tone, marker, meta }) => {
-            const savedRow = tab === "saved" ? plan.selected_locations.find((p) => p.id === place.id) : sharedMatch(place);
-            const hasCoords = !!coordsOf(place);
-            return (
-              <PlaceCard key={place.id} place={place} tone={tone} marker={marker} selected={selected === place.id}
-                meta={tab === "explore" ? (savedRow ? "✓ Đã lưu cho nhóm" : undefined) : meta}
-                onPress={hasCoords ? () => { setSelected(place.id); } : undefined}>
-                {editable && tab !== "route" && (
-                  <Button label="Thêm vào lịch trình" accessibilityLabel={`Thêm hoạt động tại ${place.name}`} icon="calendar" compact disabled={!canWrite}
-                    onPress={() => { command.clearError(); setError(undefined); setAdding(place); }} />
-                )}
-                {editable && sharedWrites && tab === "explore" && !savedRow && (
-                  <Button label="Lưu cho nhóm" accessibilityLabel={`Lưu ${place.name} cho nhóm`} compact variant="soft" disabled={!canWrite} onPress={() => { void saveShared(place); }} />
-                )}
-                {hasCoords && <Button label="Chỉ đường" accessibilityLabel={`Chỉ đường tới ${place.name}`} compact variant="text" onPress={() => { void directions(place); }} />}
-                {editable && sharedWrites && tab === "saved" && !activitiesAt(place.id).length && (
-                  <Button label="Xóa" accessibilityLabel={`Xóa ${place.name} khỏi nhóm`} compact variant="text" disabled={!canWrite} onPress={() => setDeleting(place)} />
-                )}
-              </PlaceCard>
-            );
-          })}
-          {tab === "explore" && ordered.length > shown.length && (
-            <Button label={`Xem thêm ${Math.min(PAGE, ordered.length - shown.length)} địa điểm`} variant="text" onPress={() => setLimit((value) => value + PAGE)} />
-          )}
-
-          {tab === "saved" && !savedPlaces.length && (
-            <EmptyState title="Chưa có điểm dừng" message="Mở Khám phá để tìm nơi muốn đến rồi lưu cho cả nhóm." icon="pin"
-              action={<Button label="Khám phá quanh đây" compact onPress={openExplore} />} />
-          )}
-          {tab === "explore" && !searching && results && !results.items.length && !results.note && (
-            <EmptyState title="Thử một ý tưởng khác nhé" message="Đổi nhóm địa điểm, tìm theo tên hoặc kéo bản đồ rồi bấm “Tìm trong khu vực này”." icon="pin" />
-          )}
-          {tab === "route" && stops.length < 2 && (
-            <EmptyState title={stops.length ? "Cần thêm một điểm dừng" : "Ngày này chưa có điểm dừng"}
-              message="Lộ trình nối các hoạt động trong ngày đã gắn địa điểm. Thêm địa điểm vào lịch trình từ tab Nhóm hoặc Khám phá." icon="map" />
-          )}
-          {tab === "route" && unplaced.length > 0 && (
-            <Text style={typography.footnote}>
-              Chưa có trên lộ trình: {unplaced.map((a) => a.title).join(", ")} (chưa gắn địa điểm).
-            </Text>
-          )}
-          {credits.length > 0 && <Text style={styles.footerCredit}>Dữ liệu địa điểm: {credits.join(" · ")}</Text>}
-
+          {tab === "route" && mapTabs}
+          <TripNavigation id={id} active="places" />
+          </View>
           <QuickAddSheet place={adding} trip={trip} plan={plan} days={days} defaultDay={tab === "route" ? routeDay : undefined} busy={command.busy} error={command.error ?? undefined}
             onClose={() => { if (!command.busy) { command.clearError(); setAdding(undefined); } }}
             onConfirm={async (chosenDay, slot) => { if (adding && await quickAdd(adding, chosenDay, slot)) setAdding(undefined); }}
             onCustomize={(chosenDay) => { const place = adding!; setAdding(undefined); customize(place, chosenDay, sharedMatch(place)?.id); }} />
-          <Sheet visible={!!deleting} title="Xóa địa điểm khỏi nhóm?" dismissible={!command.busy} onClose={() => setDeleting(undefined)}>
-            <Text style={typography.body}>{deleting?.name} sẽ bị xóa khỏi danh sách chung. Địa điểm đang gắn với hoạt động phải được gỡ khỏi hoạt động trước.</Text>
+          <Dialog kind="confirm" icon="deleted" visible={!!deleting} title="Xóa địa điểm khỏi nhóm?" dismissible={!command.busy} onClose={() => setDeleting(undefined)}
+            message={`${deleting?.name ?? ""} sẽ bị xóa khỏi danh sách chung. Địa điểm đang gắn với hoạt động phải được gỡ khỏi hoạt động trước.`}>
             {command.error && <Feedback message={command.error} />}
             <Button label="Xác nhận xóa địa điểm" variant="destructive" loading={command.busy} disabled={!canWrite} onPress={() => { void (async () => {
               if (!deleting || !canWrite) return;
               const result = await command.run({ remove: deleting.id, version: plan.plan_version }, (key) => api.trips.removeLocation(id, deleting.id, plan.plan_version, key));
-              if (result) { toast.success(`Đã xóa “${deleting.name}” khỏi nhóm.`); setDeleting(undefined); await resource.reload(); }
+              if (result) { toast.success(`Đã xóa “${deleting.name}” khỏi nhóm.`, { icon: "deleted" }); setDeleting(undefined); await resource.reload(); }
             })(); }} />
-          </Sheet>
+            <Button label="Giữ lại" variant="soft" disabled={command.busy} onPress={() => setDeleting(undefined)} />
+          </Dialog>
           <Sheet visible={manual} title="Địa điểm của nhóm" dismissible={!command.busy} onClose={() => setManual(false)}>
             <Notice>Địa điểm được lưu vào kế hoạch chung của nhóm. Tọa độ không bắt buộc; cần đủ hai tọa độ để hiện trên bản đồ.</Notice>
             {command.error && <Feedback message={command.error} />}
@@ -668,22 +633,26 @@ function QuickAddSheet({ place, trip, plan, days, defaultDay, busy, error, onClo
 }
 
 const styles = StyleSheet.create({
-  mapShell: { borderRadius: 24, ...shadows.card },
-  topOverlay: { position: "absolute", top: 10, left: 10, right: 10, alignItems: "center", zIndex: 500 },
-  modeBar: { flexDirection: "row", padding: 4, gap: 2, borderRadius: radii.pill, alignSelf: "stretch" },
+  mapShell: { backgroundColor: colors.mint },
+  panel: { gap: 14, marginTop: 0, paddingHorizontal: 20, paddingTop: 10, paddingBottom: 12, borderTopLeftRadius: 28, borderTopRightRadius: 28, backgroundColor: colors.canvas },
+  handle: { width: 44, height: 5, borderRadius: 3, alignSelf: "center", backgroundColor: colors.line },
+  searchRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  back: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface, ...shadows.glass },
+  mapModes: { flexDirection: "row", gap: 4 },
+  topOverlay: { position: "absolute", top: 12, left: 16, right: 16, gap: 8, zIndex: 500 },
+  modeBar: { backgroundColor: colors.fill, flexDirection: "row", padding: 4, gap: 2, borderRadius: radii.pill, alignSelf: "stretch" },
   mode: { flex: 1, minHeight: 40, alignItems: "center", justifyContent: "center", paddingHorizontal: 6, borderRadius: radii.pill },
-  modeActive: { backgroundColor: colors.ink },
+  modeActive: { backgroundColor: colors.tealPressed },
   modeText: { color: colors.ink, fontSize: 13, fontFamily: fonts.bold },
   modeTextActive: { color: colors.surface },
-  bottomOverlay: { position: "absolute", bottom: 12, left: 10, right: 10, flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", zIndex: 500 },
-  floating: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: radii.pill, backgroundColor: colors.surface, boxShadow: "0 4px 12px rgba(23,63,99,0.22)" },
-  floatingSmall: { paddingHorizontal: 10 },
+  bottomOverlay: { position: "absolute", bottom: 25, left: 16, right: Platform.OS === "web" ? 58 : 16, flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", zIndex: 500 },
+  callout: { position: "absolute", bottom: 84, maxWidth: "85%", alignSelf: "center", paddingHorizontal: 16, paddingVertical: 9, borderRadius: 18, backgroundColor: colors.surface, zIndex: 500, ...shadows.floating },
   floatingText: { color: colors.ink, fontSize: 13, fontFamily: fonts.bold },
-  loadingPill: { position: "absolute", top: 62, alignSelf: "center", paddingHorizontal: 12, paddingVertical: 5, borderRadius: radii.pill, backgroundColor: "rgba(31,42,68,0.78)", zIndex: 501 },
+  loadingPill: { position: "absolute", top: 126, alignSelf: "center", paddingHorizontal: 12, paddingVertical: 5, borderRadius: radii.pill, backgroundColor: "rgba(31,42,68,0.78)", zIndex: 501 },
   loadingText: { color: colors.surface, fontSize: 12, fontFamily: fonts.bold },
   headRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   controls: { gap: 10 },
-  searchBar: { flexDirection: "row", alignItems: "center", gap: 8, minHeight: 54, paddingLeft: 16, paddingRight: 5, borderRadius: radii.pill, backgroundColor: colors.surface, ...shadows.glass },
+  searchBar: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 8, minHeight: 54, paddingLeft: 16, paddingRight: 5, borderRadius: radii.pill, backgroundColor: colors.surface, ...shadows.glass },
   searchInput: { ...typography.body, flex: 1, minWidth: 0, minHeight: 44, paddingVertical: 10 },
   clear: { width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: colors.fill },
   clearText: { color: colors.muted, fontSize: 12, fontFamily: fonts.bold },
@@ -691,11 +660,11 @@ const styles = StyleSheet.create({
   modeRow: { flexDirection: "row", gap: 6 },
   chip: { minHeight: 38, justifyContent: "center", paddingHorizontal: 12, borderRadius: radii.pill, backgroundColor: colors.surface },
   modeChip: { flex: 1, minHeight: 38, alignItems: "center", justifyContent: "center", paddingHorizontal: 6, borderRadius: radii.pill, backgroundColor: colors.surface },
-  chipActive: { backgroundColor: colors.ink },
+  chipActive: { backgroundColor: colors.tealPressed },
   chipText: { color: colors.ink, fontSize: 13, fontFamily: fonts.bold },
   chipTextActive: { color: colors.surface },
-  summary: { gap: 4, padding: 14, borderRadius: radii.card, backgroundColor: colors.surface, ...shadows.glass },
-  summaryValue: { ...typography.section, fontSize: 20 },
+  summary: { marginTop: -10 },
+  summaryValue: { ...typography.headline, color: colors.tealPressed },
   creditRow: { flexDirection: "row", flexWrap: "wrap", columnGap: 10, marginTop: 2 },
   credit: { color: colors.muted, fontSize: 11 },
   creditLink: { color: colors.teal, textDecorationLine: "underline" },

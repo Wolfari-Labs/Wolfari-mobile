@@ -28,7 +28,7 @@ export type Activity = {
   position: number; status: "TODO" | "COMPLETED"; source: string; plan_version: number;
 };
 export type ActivityInput = { title: string; activity_type: string; description?: string | null; public_description?: string | null; starts_at?: string | null; ends_at?: string | null; scheduled_date?: string | null; selected_location_id?: string | null; position: number; expected_plan_version: number };
-export type SelectedLocation = { id: string; name: string; address: string | null; latitude: string | null; longitude: string | null; source: string; metadata?: { attribution?: { text: string; url: string }[] } };
+export type SelectedLocation = { id: string; name: string; address: string | null; latitude: string | null; longitude: string | null; provider_place_id?: string | null; source: string; metadata?: { attribution?: { text: string; url: string }[] } };
 export type PackingItem = { id: string; name: string; quantity: string; unit: string | null; note: string | null; category: string | null; assigned_member_id: string | null; due_at: string | null; status: "TODO" | "COMPLETED"; completed_by_user_id?: string | null; plan_version?: number };
 export type PackingInput = Pick<PackingItem, "name" | "quantity" | "unit" | "note" | "category" | "assigned_member_id" | "due_at"> & { expected_plan_version: number };
 export type DressCode = { id: string; scope_type: "TRIP" | "DAY" | "ACTIVITY"; plan_date: string | null; activity_id: string | null; label: string; description: string | null; plan_version?: number; reference_image_available?: boolean };

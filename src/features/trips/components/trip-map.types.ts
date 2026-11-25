@@ -8,7 +8,7 @@ export type TripMapProps = {
   selectedId?: string;
   onSelect: (id: string) => void;
   route?: MapRoute;
-  mapType?: "standard" | "satellite";
+  mapType?: "standard" | "satellite" | "paper";
   /** Called after the user pans or zooms (not after the map fits itself). */
   onUserMove?: (region: MapRegion) => void;
   /** Change it to make the map frame the current points again. */
@@ -19,5 +19,6 @@ export type TripMapProps = {
 export const MAP_TONES = {
   saved: { fill: "#245CB8", text: "#FFFFFF" },
   result: { fill: "#FFFFFF", text: "#1F2A44" },
-  stop: { fill: "#0E7378", text: "#FFFFFF" },
+  start: { fill: "#AF6500", text: "#FFFFFF" },
+  stop: { fill: "#158278", text: "#FFFFFF" },
 } as const;
