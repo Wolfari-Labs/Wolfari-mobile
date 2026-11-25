@@ -325,7 +325,7 @@ const button = (name) => page.getByRole('button', { name, exact: true }),
 const tab = (name) => page.getByRole('tab', { name, exact: true });
 const goto = async (feature = 'fund-tools') => {
   await page.goto(`${appUrl}/trip/${tripId}/${feature}`, { waitUntil: 'networkidle' });
-  await page.getByText('Finance & Price Watch', { exact: true }).first().waitFor();
+  await page.getByText(feature === 'fund' ? 'QUỸ CÒN LẠI' : 'Finance & Price Watch', { exact: true }).first().waitFor();
 };
 const save = async () => {
   await button('Xác nhận lưu').click();
@@ -338,11 +338,11 @@ try {
   const starts = (name) => page.getByRole('button', { name: new RegExp(`^${name}`) });
   const fundTab = async () => {
     await goto('fund');
-    await tab('Đợt góp').click();
+    await tab('Đóng góp').click();
     await page.getByText(/^(Khoản đóng của bạn|Bạn đồng hành)/).first().waitFor();
   };
   const confirmSheet = async () => {
-    const sheet = page.getByRole('dialog');
+    const sheet = page.getByRole('dialog').filter({ has: button('Đóng hộp thoại') });
     await sheet.waitFor();
     assert.equal(await sheet.getByRole('button', { name: 'Tiếp tục', exact: true }).count(), 0);
     await sheet.getByRole('button').last().click();
@@ -353,8 +353,8 @@ try {
     assert.equal(await button('Tải lại quỹ').count(), 0);
   };
   await goto('fund');
-  await page.getByText('Số dư đã ghi nhận', { exact: true }).waitFor();
-  await tab('Đợt góp').click();
+  await page.getByText('QUỸ CÒN LẠI', { exact: true }).waitFor();
+  await tab('Đóng góp').click();
   await page.getByText(/^Bạn đồng hành/).first().waitFor();
   assert.equal(await starts('Xác nhận đã nhận đủ').count(), 0, 'Owner does not gain Holder rights');
   actor = memberId;
@@ -405,13 +405,14 @@ try {
   await page.getByText('+300.000 ₫', { exact: true }).waitFor();
   await assertPublicText(page);
   await page.screenshot({ path: path.join(shots, 'fund-ledger.png'), fullPage: true });
-  await tab('Khoản chi').click();
-  await button('Tạo khoản chi').click();
-  await field('Nội dung').fill('Bữa trưa thử nghiệm');
+  await tab('Chi tiêu').click();
+  await button('Ghi nhận khoản chi').click();
+  await field('Ghi chú').fill('Bữa trưa thử nghiệm');
   await field('Số tiền (VND)').fill('100000');
-  await confirmSheet();
-  await settle();
-  await page.getByText('Bữa trưa thử nghiệm · 100.000 ₫', { exact: true }).waitFor();
+  await button('Lưu khoản chi').click();
+  await page.getByRole('heading', { name: 'Đã lưu khoản chi' }).waitFor();
+  await button('Về quỹ nhóm').click();
+  await page.getByText('Bữa trưa thử nghiệm', { exact: true }).waitFor();
   assert.equal(fund.current_balance, '500000', 'Draft expense has no ledger effect');
   await button('Xem chứng từ').click();
   await page.getByLabel('Ảnh chứng từ khoản chi', { exact: true }).waitFor();
@@ -431,7 +432,8 @@ try {
   await page.getByText('Không tìm thấy chứng từ (có thể đã được thay).', { exact: true }).waitFor();
 
   // Side links live on the overview tab; record tabs show records only.
-  await tab('Tổng quan').click();
+  await button('Tùy chọn quỹ').click();
+  await button('Tổng quan').click();
   assert.equal(await button('Công cụ quỹ mở rộng').count(), 0, 'Secondary tools stay collapsed by default.');
   await button('Công cụ và hướng dẫn').click();
   await button('Công cụ quỹ mở rộng').click();
@@ -454,6 +456,8 @@ try {
   await field('Giờ khởi hành (giờ Việt Nam)').fill('19:00');
   await field('Ngưỡng giá riêng (VND)').fill('2000000');
   await save();
+  await page.getByRole('dialog').getByText(/2.000.000/).waitFor();
+  await button('Hoàn tất').click();
   await page.getByText('SGN → DAD', { exact: true }).waitFor();
   await button('Xem lịch sử giá').click();
   await page.getByText(/Giá cũ · Nguồn giá/).waitFor();
@@ -470,6 +474,8 @@ try {
   await button('Sửa theo dõi giá').click();
   await field('Ngưỡng giá riêng (VND)').fill('1700000');
   await save();
+  await page.getByRole('dialog').getByText(/1.700.000/).waitFor();
+  await button('Hoàn tất').click();
   assert.equal(watches[0].threshold_price, '1700000');
   await button('Tạm dừng theo dõi').click();
   await save();

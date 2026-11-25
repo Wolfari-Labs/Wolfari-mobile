@@ -27,8 +27,14 @@ vấn, yêu cầu của người dùng, quan sát giá và cảnh báo gần nh�
 khác nhau. App không tự áp dụng quy tắc 5%/24 giờ để phát cảnh báo; backend quyết định.
 
 `meta.stale` và `meta.last_error` được đọc riêng. Khi nguồn lỗi, giá cũ và thời điểm
-vẫn được giữ và gắn nhãn; giá cũ không được tô như một giá mới dưới ngưỡng. Không có
-quan sát không có nghĩa là giá bằng 0. Lọc danh sách áp dụng trên các trang đã tải.
+vẫn được giữ và gắn nhãn. Khi chưa có quan sát, app để trống giá. Lọc danh sách
+áp dụng trên các trang đã tải.
+
+## Nghiệm thu trên môi trường thử với nhà cung cấp
+
+- **Price Watch.** Chạy `scripts/provider-smoke.mjs` ở backend với token Travelpayouts để đối chiếu giá VND trên các chặng mẫu. Sau khi xác minh, đặt `PRICE_WATCH_PROVIDER=TRAVELPAYOUTS_CACHE`, `TRAVELPAYOUTS_VND_VERIFIED=true` và `PRICE_WATCH_WORKER_ENABLED=true` trong cấu hình Automation. Tạo một theo dõi mới cho vé một chiều, 1 người lớn, hạng phổ thông. Kiểm tra giá VND, thời điểm nguồn ghi nhận và nhãn giá tham khảo. Theo dõi đã tạo vẫn giữ nguồn cũ. [Aviasales Data API](https://support.travelpayouts.com/hc/en-us/articles/203956163-Aviasales-Data-API)
+- **VietQR và SePay.** Dùng quỹ thử với tài khoản nhận do người giữ quỹ kiểm soát. Tạo webhook HMAC-SHA256 kiểu JSON cho tiền vào tại `/api/v1/webhooks/bank/sepay` trên Gateway HTTPS của môi trường thử. Đặt `BANK_WEBHOOK_SEPAY_SECRET` ở Gateway. Địa chỉ phải nhận trực tiếp webhook từ SePay. Dùng tính năng gửi thử để kiểm tra phản hồi rồi xác minh một khoản góp đã được người kiểm thử duyệt. Phải khớp ngân hàng, tài khoản, mã khoản góp và số tiền. Gửi lại cùng giao dịch phải giữ nguyên một bút toán. [Hướng dẫn webhook SePay](https://docs.sepay.vn/tich-hop-webhooks.html)
+- **Push Android.** Đặt `GOOGLE_SERVICES_JSON` kiểu file và `EXPO_PUBLIC_API_URL` trong environment `development` của EAS. Cấu hình FCM v1 trong mục Credentials của dự án Expo. Môi trường Automation cần `REMINDER_WORKER_ENABLED=true`, `PUSH_DELIVERY_ENABLED=true` và `EXPO_PUSH_ACCESS_TOKEN`. Build Android bằng profile `development`, cấp quyền trên điện thoại rồi tạo nhắc việc thử. Đối chiếu receipt Expo và kiểm tra chạm thông báo mở đúng màn. [Cấu hình FCM v1](https://docs.expo.dev/push-notifications/fcm-credentials/) · [Hướng dẫn push của Expo](https://docs.expo.dev/push-notifications/push-notifications-setup/)
 
 ## Một màn quỹ chính (07/11/2026)
 

@@ -1,3 +1,4 @@
+import { DesignPopup } from "@/shared/ui/design-popup";
 import { errorMessage } from "@/shared/api/errors";
 import { useCallback, useRef, useState } from 'react';
 import { useLocalSearchParams } from 'expo-router';
@@ -125,7 +126,11 @@ function WatchWorkspace({ id, userId }: { id: string; userId: string }) {
     await reloadTrip();
     return reloadList();
   }, [reloadTrip, reloadList]);
-  const command = useFinanceCommand(userId, id, 'watch', refresh);
+  const [savedThreshold, setSavedThreshold] = useState<string>();
+  const command = useFinanceCommand(userId, id, 'watch', refresh, intent => {
+    if ((intent.method === "PATCH" || intent.method === "POST") && intent.body.threshold_price != null)
+      setSavedThreshold(moneyLabel(String(intent.body.threshold_price)));
+  });
   const writable =
     !!trip.data &&
     !trip.data.current_membership.left_at &&
@@ -133,18 +138,18 @@ function WatchWorkspace({ id, userId }: { id: string; userId: string }) {
     !trip.error &&
     !list.error &&
     !list.loading;
-  // Which source the server uses, from the watches it already normalised.
+  // Existing watches retain their original source, even after the server changes it.
   const kinds = new Set((list.data?.items ?? []).map((w) => priceKind(w.normalized_query.provider)));
   const sourceNote = kinds.has('real')
     ? 'Giá vé thật từ dữ liệu tìm kiếm Aviasales (Travelpayouts), là giá tham khảo và có thể đổi khi đặt.'
     : kinds.has('mock')
-      ? 'Máy chủ đang dùng giá mô phỏng vì chưa cấu hình nguồn giá vé thật.'
-      : 'Máy chủ tự chọn nguồn giá: giá vé thật khi đã cấu hình, nếu không là giá mô phỏng.';
+      ? 'Danh sách có theo dõi dùng dữ liệu mô phỏng. Xem nguồn trên từng theo dõi.'
+      : 'Nguồn giá sẽ hiển thị sau khi tạo theo dõi.';
   function edit(w?: Watch) {
     setForm({
       title: w ? 'Sửa theo dõi giá' : 'Tạo theo dõi giá',
       message:
-        'Máy chủ chọn nguồn giá: giá vé thật (dữ liệu tìm kiếm Aviasales, chỉ vé một chiều, phổ thông, 1 người lớn) hoặc giá mô phỏng khi chưa cấu hình. Ngưỡng là riêng cho bạn. Ngày và giờ bay theo giờ Việt Nam.',
+        'Nguồn Aviasales hỗ trợ vé một chiều, hạng phổ thông cho 1 người lớn. Ngưỡng giá là riêng cho bạn. Ngày và giờ bay theo giờ Việt Nam.',
       fields: watchFields(w),
       submit: async (values) => {
         const input = watchInput(localWatchValues(values));
@@ -336,7 +341,7 @@ function WatchWorkspace({ id, userId }: { id: string; userId: string }) {
           </Card>
         ))}
       {list.data && !list.data.items.some((w) => filter === 'ALL' || w.status === filter) && (
-        <EmptyState icon="plane" title="Chưa có theo dõi nào ở đây" message="Không có yêu cầu trong các trang đã tải phù hợp bộ lọc." />
+        <EmptyState icon="plane" scene="waiting" title="Chưa có theo dõi nào ở đây" message="Không có yêu cầu trong các trang đã tải phù hợp bộ lọc." />
       )}
       {list.data?.next_cursor && (
         <Button
@@ -347,6 +352,7 @@ function WatchWorkspace({ id, userId }: { id: string; userId: string }) {
           }}
         />
       )}
+      {!form && savedThreshold && <DesignPopup kind="threshold" message={`Thông báo giá vé sẽ dùng ngưỡng ${savedThreshold} bạn đã chọn.`} onPrimary={() => setSavedThreshold(undefined)} onClose={() => setSavedThreshold(undefined)} />}
       {form && <ActionSheet form={form} close={() => setForm(undefined)} />}
     </Screen>
   );
