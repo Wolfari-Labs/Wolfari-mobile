@@ -1,3 +1,4 @@
+import { DesignPopup } from "@/shared/ui/design-popup";
 import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
 import { useCallback, useRef, useState } from "react";
@@ -14,7 +15,6 @@ import { Feedback } from "@/shared/ui/feedback";
 import { FormField } from "@/shared/ui/form-field";
 import { ResourceFeedback } from "@/shared/ui/journal";
 import { SnapshotConflict } from "@/shared/ui/snapshot-conflict";
-import { toast } from "@/shared/ui/toast";
 import { Screen } from "@/shared/ui/screen";
 import { useSession } from "../session/session-provider";
 import type { Profile } from "../types";
@@ -53,6 +53,7 @@ function ProfileForm({
     command = useCommand();
   const { updateProfile } = useSession();
   const profile = resource.data!;
+  const [saved, setSaved] = useState(false);
   const [baseVersion] = useState(profile.version);
   const stale = baseVersion !== profile.version;
   const blocked = stale || resource.loading || !!resource.error;
@@ -103,10 +104,8 @@ function ProfileForm({
     });
     if (result) {
       updateProfile(result);
-      toast.success("Đã cập nhật thông tin cá nhân.");
-      // Return to where the user came from instead of stacking another copy of the tabs.
-      if (router.canGoBack()) router.back();
-      else router.replace("/(tabs)/profile");
+      resource.setData(result);
+      setSaved(true);
     }
   }
   const removing = photo === null;
@@ -127,6 +126,7 @@ function ProfileForm({
         />
       }
     >
+      {saved && <DesignPopup kind="profile" message="Bạn có thể tiếp tục quản lý thông báo và thông tin tài khoản." onPrimary={() => router.dismissTo("/(tabs)/profile")} onClose={onReplace} />}
       <View style={styles.avatarBlock}>
         <Pressable cssInterop={false} accessibilityRole="button" accessibilityLabel="Chọn ảnh đại diện" disabled={command.busy || picking}
           onPress={() => { void choosePhoto(); }} style={({ pressed }) => [styles.avatarRing, pressed && { opacity: 0.85 }]}>

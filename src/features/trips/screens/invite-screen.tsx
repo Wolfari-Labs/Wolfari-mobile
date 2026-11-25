@@ -1,3 +1,4 @@
+import { DesignPopup } from "@/shared/ui/design-popup";
 import * as Clipboard from "expo-clipboard";
 import { Image } from "expo-image";
 import * as Linking from "expo-linking";
@@ -34,6 +35,7 @@ export default function InviteScreen() {
   const [email, setEmail] = useState("");
   const [validation, setValidation] = useState<string>();
   const [result, setResult] = useState<InvitationResult>();
+  const [showReady, setShowReady] = useState(false);
   const [copied, setCopied] = useState(false);
   const [shareError, setShareError] = useState<string>();
   const code = result?.join_code;
@@ -74,6 +76,7 @@ export default function InviteScreen() {
     );
     if (response) {
       setResult(response);
+      setShowReady(true);
       setCopied(false);
     }
   }
@@ -92,6 +95,7 @@ export default function InviteScreen() {
     );
     if (next) {
       setResult(next);
+      setShowReady(true);
       setCopied(false);
     } else setResult(undefined);
   }
@@ -137,6 +141,7 @@ export default function InviteScreen() {
             {result ? (
               <>
                 <Feedback
+                  inline
                   success
                   message={
                     (result.invitation.email ? "Lời mời cho " + result.invitation.email : "Mã mời") +
@@ -270,6 +275,7 @@ export default function InviteScreen() {
         ) : (
           <EmptyState
             title={archived ? "Chuyến đi đã lưu trữ" : "Cùng mời bạn bè"}
+            scene={archived ? "quiet" : "inviteSent"}
             message={
               archived
                 ? "Không thể tạo lời mời cho chuyến đi đã lưu trữ. Bạn vẫn có thể xem danh sách thành viên."
@@ -278,6 +284,10 @@ export default function InviteScreen() {
             icon="users"
           />
         ))}
+      {showReady && result && <DesignPopup kind="invitation" message={kind === "EMAIL" ? `Đã tạo lời mời cho ${email.trim()} tham gia ${data?.trip.name}.` : "Mã mời đã sẵn sàng. Mở mã để sao chép hoặc gửi cho bạn đồng hành."}
+        secondaryLabel={code ? "Xem mã mời" : "Xem lời mời"}
+        onPrimary={() => router.dismissTo({ pathname: "/trip/[id]/members", params: { id } })}
+        onClose={() => setShowReady(false)} />}
     </Screen>
   );
 }
