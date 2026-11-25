@@ -119,7 +119,7 @@ const styles = StyleSheet.create({
   soft: { backgroundColor: colors.tealSoft, boxShadow: "none" },
   secondary: { backgroundColor: colors.surface, paddingHorizontal: 12, boxShadow: "0 8px 20px -4px rgba(92,122,199,0.12)" },
   buttonInset: { borderRadius: radii.pill, boxShadow: clayInset },
-  buttonLabel: { fontFamily: fonts.heading, fontSize: 17, lineHeight: 22, color: colors.surface },
+  buttonLabel: { flexShrink: 1, textAlign: "center", fontFamily: fonts.heading, fontSize: 17, lineHeight: 22, color: colors.surface },
   compact: { minHeight: 34, paddingLeft: 12, paddingRight: 14, gap: 4, boxShadow: "none" },
   compactLabel: { fontFamily: fonts.bold, fontSize: 13, lineHeight: 18 },
 });

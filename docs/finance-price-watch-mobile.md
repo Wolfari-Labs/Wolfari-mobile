@@ -18,7 +18,7 @@ Gateway và OpenAPI trong Wolfari-backend; API162 đối chiếu với `origin/m
 | Hoàn tiền | API111–119: tạo dự phòng, Holder báo trả, người nhận xác nhận/chưa nhận, hủy hợp lệ, đề nghị/đồng ý/đảo hoàn; lý do đảo phải khớp lý do đề nghị |
 | Chốt quỹ | API120–125: tạo bản chụp, đọc danh sách, xác nhận đúng hash, hủy và nhắc. Số dư phải bằng 0, không còn nghĩa vụ/đối soát chờ. `PENDING_CONFIRMATIONS` và từng `confirmed_at` được phân biệt |
 | Lịch sử | API162 GET `/funds/:id/history`: metadata audit/phiên bản/lý do, có phân trang; không coi đây là toàn bộ giá trị lịch sử hoặc chứng từ |
-| Theo dõi giá | API133–139: tạo, danh sách, sửa, tạm dừng/tiếp tục, DELETE để dừng, lịch sử giá. Chỉ người sở hữu watch được thao tác; luôn gửi expected_version |
+| Theo dõi giá | API133–139 cho phép thành viên xem theo dõi của chuyến và lịch sử giá. Người tạo được sửa, tạm dừng, tiếp tục và dừng. Chủ chuyến cũng được dừng theo dõi của thành viên. Khi sửa hoặc đổi trạng thái, app gửi `expected_version`. |
 
 Tiền là chuỗi số nguyên VND đến int64, không chuyển qua JavaScript Number.
 Ngày/giờ truy vấn Price Watch dùng UTC theo contract. Giá `MOCK_FLIGHT` là mô phỏng
@@ -32,7 +32,7 @@ vẫn được giữ và gắn nhãn. Khi chưa có quan sát, app để trống
 
 ## Nghiệm thu trên môi trường thử với nhà cung cấp
 
-- **Price Watch.** Chạy `scripts/provider-smoke.mjs` ở backend với token Travelpayouts để đối chiếu giá VND trên các chặng mẫu. Sau khi xác minh, đặt `PRICE_WATCH_PROVIDER=TRAVELPAYOUTS_CACHE`, `TRAVELPAYOUTS_VND_VERIFIED=true` và `PRICE_WATCH_WORKER_ENABLED=true` trong cấu hình Automation. Tạo một theo dõi mới cho vé một chiều, 1 người lớn, hạng phổ thông. Kiểm tra giá VND, thời điểm nguồn ghi nhận và nhãn giá tham khảo. Theo dõi đã tạo vẫn giữ nguồn cũ. [Aviasales Data API](https://support.travelpayouts.com/hc/en-us/articles/203956163-Aviasales-Data-API)
+- **Theo dõi giá vé.** Trong backend, chạy `corepack pnpm price-watch:live-check` để kiểm tra một chặng bằng nguồn đã cấu hình. Trong mobile, tạo theo dõi vé một chiều, hạng phổ thông cho một người lớn. Đối chiếu nguồn trên thẻ với `normalized_query.provider`. Mở lịch sử để xem giá VND, độ mới, kết quả lần kiểm tra gần nhất và lịch kiểm tra tiếp theo. Google Flights qua SearchApi trả giá từ kết quả tìm kiếm, còn Aviasales qua Travelpayouts trả giá tham khảo đã lưu. Máy chủ quản lý khóa của cả hai nguồn.
 - **VietQR và SePay.** Dùng quỹ thử với tài khoản nhận do người giữ quỹ kiểm soát. Tạo webhook HMAC-SHA256 kiểu JSON cho tiền vào tại `/api/v1/webhooks/bank/sepay` trên Gateway HTTPS của môi trường thử. Đặt `BANK_WEBHOOK_SEPAY_SECRET` ở Gateway. Địa chỉ phải nhận trực tiếp webhook từ SePay. Dùng tính năng gửi thử để kiểm tra phản hồi rồi xác minh một khoản góp đã được người kiểm thử duyệt. Phải khớp ngân hàng, tài khoản, mã khoản góp và số tiền. Gửi lại cùng giao dịch phải giữ nguyên một bút toán. [Hướng dẫn webhook SePay](https://docs.sepay.vn/tich-hop-webhooks.html)
 - **Push Android.** Đặt `GOOGLE_SERVICES_JSON` kiểu file và `EXPO_PUBLIC_API_URL` trong environment `development` của EAS. Cấu hình FCM v1 trong mục Credentials của dự án Expo. Môi trường Automation cần `REMINDER_WORKER_ENABLED=true`, `PUSH_DELIVERY_ENABLED=true` và `EXPO_PUSH_ACCESS_TOKEN`. Build Android bằng profile `development`, cấp quyền trên điện thoại rồi tạo nhắc việc thử. Đối chiếu receipt Expo và kiểm tra chạm thông báo mở đúng màn. [Cấu hình FCM v1](https://docs.expo.dev/push-notifications/fcm-credentials/) · [Hướng dẫn push của Expo](https://docs.expo.dev/push-notifications/push-notifications-setup/)
 
