@@ -4,7 +4,7 @@ export function errorMessage(error: unknown, fallback = "Chưa thể hoàn tất
   if (error instanceof ApiError) {
     if (error.code === 'PAYMENT_PROVIDER_NOT_CONFIGURED') return 'Máy chủ chưa cấu hình MoMo Test. Cần bộ khóa sandbox và địa chỉ nhận kết quả thanh toán.';
     if (error.reason === "PROVIDER_QUERY_UNSUPPORTED") return "Nguồn giá vé thật chỉ theo dõi vé một chiều, hạng phổ thông, 1 người lớn. Hãy chỉnh lại chuyến bay.";
-    if (error.reason === "PRICE_PROVIDER_NOT_CONFIGURED") return "Máy chủ chưa cấu hình nguồn giá vé thật. Người quản trị cần thêm khóa Travelpayouts rồi thử lại.";
+    if (error.reason === "PRICE_PROVIDER_NOT_CONFIGURED") return "Máy chủ chưa cấu hình nguồn giá vé thật hoặc chưa bật kiểm tra giá. Vui lòng báo cho quản trị viên.";
     if (error.code === "NETWORK_ERROR") return "Không thể kết nối. Kiểm tra mạng rồi thử lại.";
     if (error.code === "SESSION_CHANGED") return "Phiên đăng nhập vừa thay đổi (app được tải lại hoặc đổi tài khoản). Đợi app đăng nhập xong rồi thử lại.";
     if (error.code === "INVALID_RESPONSE") return "Máy chủ trả phản hồi không đúng định dạng. Kiểm tra trạng thái để biết yêu cầu đã được ghi nhận chưa.";

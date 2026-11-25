@@ -25,7 +25,7 @@ export default function TripToolsScreen() {
     <SectionLink grouped title="Dress code" icon="shirt" onPress={() => router.push({ pathname: "/trip/[id]/dress-code", params: { id } })} />
     <SectionLink grouped title="Quỹ nhóm" icon="wallet" onPress={() => router.push({ pathname: "/trip/[id]/fund", params: { id } })} />
     <SectionLink grouped title="Thành viên" icon="users" onPress={() => router.push({ pathname: "/trip/[id]/members", params: { id } })} />
-    <SectionLink grouped title="Theo dõi giá vé" subtitle="Giá mô phỏng" icon="plane" onPress={() => router.push({ pathname: "/trip/[id]/price-watch", params: { id } })} />
+    <SectionLink grouped title="Theo dõi giá vé" subtitle="Theo dõi chặng bay và đặt ngưỡng báo giá" icon="plane" onPress={() => router.push({ pathname: "/trip/[id]/price-watch", params: { id } })} />
     <SectionLink grouped title="Lịch nhắc của tôi" icon="calendar" onPress={() => router.push({ pathname: "/trip/[id]/reminders", params: { id } })} />
     <SectionLink grouped title="Xuất kế hoạch PDF" icon="calendar" onPress={() => router.push({ pathname: "/trip/[id]/export", params: { id } })} />
     <SectionLink grouped last title="Cài đặt chuyến đi" icon="gear" onPress={() => router.push({ pathname: "/trip/[id]/settings", params: { id } })} />

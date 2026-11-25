@@ -179,6 +179,16 @@ test('Initial version rejection unlocks for reload but uncertain retry conflict 
   );
   assert.equal(uncertain.pending.key, intent.key);
 });
+test('a confirmed provider configuration rejection unlocks a new watch but preserves an uncertain retry', async () => {
+  const write = { ...intent, kind: 'watch' };
+  const unavailable = () => { throw new ApiError('SERVICE_UNAVAILABLE', 'unavailable', 503, false, undefined, 'PRICE_PROVIDER_NOT_CONFIGURED'); };
+  const journal = createCommandJournal(memory(), 'watch');
+  await assert.rejects(journal.send(write, unavailable));
+  assert.equal(journal.pending, null);
+  await assert.rejects(journal.send(write, () => { throw new ApiError('NETWORK_ERROR', 'lost', 0, true); }));
+  await assert.rejects(journal.send(undefined, unavailable));
+  assert.equal(journal.pending.key, write.key);
+});
 test('202/recovery does not mean success; only committed matching operation clears the journal', async () => {
   const journal = createCommandJournal(memory(), 'op');
   assert.equal(

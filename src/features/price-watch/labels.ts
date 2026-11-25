@@ -1,5 +1,5 @@
 const reasons: Record<string, string> = {
-  USER_STOPPED: "Bạn đã dừng theo dõi",
+  USER_STOPPED: "Đã dừng theo yêu cầu",
   DEPARTED: "Đã qua giờ khởi hành",
   TRIP_ARCHIVED: "Chuyến đi đã được lưu trữ",
   TRIP_DELETED: "Chuyến đi đã được xóa",
@@ -14,35 +14,54 @@ export function watchStatusReason(reason: string) {
   return reasons[reason] ?? "Theo dõi đã thay đổi trạng thái. Tải lại để kiểm tra.";
 }
 
+const providers = new Map([
+  ["MOCK", "Nguồn mô phỏng"], ["MOCK_FLIGHT", "Nguồn mô phỏng"],
+  ["SEARCHAPI_GOOGLE_FLIGHTS", "Google Flights (SearchApi)"],
+  ["TRAVELPAYOUTS_CACHE", "Aviasales (Travelpayouts)"],
+  ["AMADEUS", "Amadeus"], ["DUFFEL", "Duffel"], ["SKYSCANNER", "Skyscanner"],
+]);
+
 export function priceProviderLabel(provider: string) {
-  const providers: Record<string, string> = {
-    MOCK: "Nguồn mô phỏng", MOCK_FLIGHT: "Nguồn mô phỏng",
-    TRAVELPAYOUTS_CACHE: "Aviasales · giá tham khảo",
-    AMADEUS: "Amadeus", DUFFEL: "Duffel", SKYSCANNER: "Skyscanner",
-  };
-  return providers[provider.toUpperCase()] ?? "Nhà cung cấp giá";
+  return providers.get(provider.toUpperCase()) ?? "Nhà cung cấp giá";
 }
 
-/** Real (cached fares from real searches) vs simulated, from the source code the server reports. */
 export function priceKind(provider: string | undefined): "real" | "mock" | "unknown" {
   const value = (provider ?? "").toUpperCase();
   if (value === "MOCK" || value === "MOCK_FLIGHT") return "mock";
-  return value ? "real" : "unknown";
+  return providers.has(value) ? "real" : "unknown";
 }
 
-/** "Giá thật" / "Giá mô phỏng" for headings. */
 export function priceKindLabel(provider: string | undefined) {
   const kind = priceKind(provider);
-  return kind === "real" ? "Giá vé thật" : kind === "mock" ? "Giá mô phỏng" : "Giá";
+  return kind === "real" ? "Giá tham khảo" : kind === "mock" ? "Giá mô phỏng" : "Giá";
 }
 
-/** How fresh a cached real fare is (fare_metadata.source_freshness / provider_found_at). */
+// Automation considers a reference fare current for up to 48 hours and until its source expiry.
+export function fareFreshness(metadata: Record<string, string | null> | null | undefined, now = Date.now()) {
+  if (metadata?.source_freshness !== "FRESH_REFERENCE") return metadata?.source_freshness;
+  const found = Date.parse(metadata.provider_found_at ?? "");
+  const expiry = metadata.provider_expires_at == null ? Infinity : Date.parse(metadata.provider_expires_at);
+  if (!Number.isFinite(found) || found > now || Number.isNaN(expiry)) return "UNKNOWN";
+  return now - found <= 48 * 3_600_000 && expiry > now ? "FRESH_REFERENCE" : "STALE";
+}
+
 export function freshnessLabel(metadata: Record<string, string | null> | null | undefined, now = Date.now()) {
   if (!metadata) return "";
   const found = metadata.provider_found_at ? Date.parse(metadata.provider_found_at) : NaN;
   const hours = Number.isFinite(found) ? Math.max(0, Math.round((now - found) / 3_600_000)) : undefined;
   const age = hours === undefined ? "" : hours < 1 ? "tìm thấy dưới 1 giờ trước" : hours < 48 ? `tìm thấy ${hours} giờ trước` : `tìm thấy ${Math.round(hours / 24)} ngày trước`;
-  if (metadata.source_freshness === "FRESH_REFERENCE") return age ? `Mới · ${age}` : "Mới";
-  if (metadata.source_freshness === "STALE") return age ? `Đã cũ · ${age}` : "Đã cũ";
+  const freshness = fareFreshness(metadata, now);
+  if (freshness === "FRESH_REFERENCE") return age ? `Mới · ${age}` : "Mới";
+  if (freshness === "STALE") return age ? `Đã cũ · ${age}` : "Đã cũ";
+  if (freshness === "UNKNOWN") return "Chưa xác định độ mới";
   return age;
+}
+
+const checkStatuses = new Map([
+  ["PENDING", "Đang chờ kiểm tra giá"], ["RUNNING", "Đang kiểm tra giá"],
+  ["SUCCEEDED", "Đã tìm thấy giá vé"], ["NO_RESULT", "Lần kiểm tra gần nhất chưa tìm thấy vé phù hợp"],
+  ["FAILED", "Lần kiểm tra giá gần nhất thất bại"],
+]);
+export function checkStatusLabel(status?: string | null) {
+  return status ? checkStatuses.get(status) : undefined;
 }

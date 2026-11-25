@@ -74,9 +74,8 @@ export function createCommandJournal(storage: JournalStorage, scope: string) {
           if (
             !retry &&
             error instanceof ApiError &&
-            error.status >= 400 &&
-            error.status < 500 &&
-            ![408, 425, 429].includes(error.status) &&
+            ((error.status >= 400 && error.status < 500 && ![408, 425, 429].includes(error.status)) ||
+              (saved.kind === 'watch' && error.status === 503 && error.reason === 'PRICE_PROVIDER_NOT_CONFIGURED')) &&
             !error.retryable
           )
             await clear();
