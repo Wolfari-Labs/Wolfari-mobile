@@ -1,7 +1,8 @@
 import { useRef } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View, type TextInputInstance } from "react-native";
+import { Pressable, StyleSheet, Text, TextInput, View, type TextInputInstance, type ViewInstance } from "react-native";
 
 import { colors, fonts, radii } from "@/shared/theme/tokens";
+import { useKeyboardScroll } from "@/shared/ui/keyboard-scroll";
 import { EMAIL_CODE_LENGTH, emailCodeInput } from "../account-validation";
 
 /**
@@ -17,9 +18,11 @@ export function CodeField({ label, value, onChange, onComplete, editable = true,
   invalid?: boolean;
 }) {
   const input = useRef<TextInputInstance>(null);
+  const field = useRef<ViewInstance | null>(null);
+  const keyboardScroll = useKeyboardScroll();
   const digits = value.split("");
   return (
-    <View style={styles.field}>
+    <View ref={field} collapsable={false} style={styles.field}>
       <Text style={styles.label}>{label}</Text>
       <Pressable cssInterop={false} accessible={false} onPress={() => input.current?.focus()} style={styles.boxes}>
         {Array.from({ length: EMAIL_CODE_LENGTH }, (_, index) => (
@@ -49,6 +52,8 @@ export function CodeField({ label, value, onChange, onComplete, editable = true,
           textContentType="oneTimeCode"
           autoComplete="one-time-code"
           maxLength={EMAIL_CODE_LENGTH + 2}
+          onFocus={() => keyboardScroll?.scrollToField(field.current)}
+          onBlur={() => keyboardScroll?.scrollToField(null)}
           caretHidden
           selectionColor="transparent"
           style={styles.hidden}

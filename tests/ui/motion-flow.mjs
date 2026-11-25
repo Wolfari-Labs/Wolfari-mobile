@@ -36,6 +36,7 @@ async function run({ reduced = false, blockCanvas = false } = {}) {
     if (p === "/auth/csrf") data = { csrf_token: "fixture-csrf" };
     else if (p === "/auth/refresh") data = { access_token: "fixture-access", token_type: "Bearer", expires_in: 900, profile };
     else if (p === "/me") data = profile;
+    else if (p === "/me/notifications") data = [];
     else if (p === "/trips") data = { items: [trip], next_cursor: null };
     else throw new Error(`Unexpected fixture request: ${p}`);
     if (req.method() !== "GET" && !p.startsWith("/auth/")) writes.push(p);
@@ -57,6 +58,9 @@ async function run({ reduced = false, blockCanvas = false } = {}) {
     assert.equal(await hero.evaluate(node => getComputedStyle(node).backgroundColor), "rgb(255, 255, 255)", "The D featured trip uses an opaque clay card");
     assert.equal(await hero.locator("canvas").count(), 0, "The featured card must not allocate a decorative canvas");
     assert.equal(await page.getByRole("tab", { name: "Khám phá", exact: true }).evaluate(node => getComputedStyle(node).minHeight), "50px", "NativeWind tab styles must compile");
+    const dock = page.getByTestId("glass-tab-bar");
+    assert.ok(await dock.evaluate(node => [...node.querySelectorAll("div")].some(child =>
+      getComputedStyle(child).backdropFilter.includes("blur"))), "The dock samples the content beneath it");
     await page.waitForTimeout(2600); // The finite entry animation must have settled.
     const suffix = blockCanvas ? "fallback" : reduced ? "reduced" : "animated";
     const first = await hero.screenshot({ path: path.join(output, `hero-${suffix}-settled-a.png`) });

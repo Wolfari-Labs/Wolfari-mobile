@@ -7,10 +7,10 @@ import { AuthGate } from "@/features/auth/session/auth-gate";
 import { useAccessibilityPreferences } from "@/shared/hooks/use-accessibility-preferences";
 import { BottomTabBar, TabBarHostContext, type TabKey } from "@/shared/ui/bottom-tab-bar";
 
-const keyOf: Record<string, TabKey> = { index: "explore", trips: "trips", profile: "account" };
+const keyOf: Record<string, TabKey> = { index: "explore", trips: "trips", notifications: "notifications", profile: "account" };
 
 /**
- * One persistent glass tab bar above the three tab screens. The bar no longer fades
+ * One persistent glass tab bar above the tab screens. The bar no longer fades
  * out and back in with each screen; only the content cross-fades with a small shift.
  * Everything behind the bar sits in the BlurTargetView so Android can blur it too.
  */
@@ -46,6 +46,7 @@ export default function TabsLayout() {
             >
               <Tabs.Screen name="index" />
               <Tabs.Screen name="trips" />
+              <Tabs.Screen name="notifications" />
               <Tabs.Screen name="profile" />
             </Tabs>
           </BlurTargetView>

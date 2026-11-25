@@ -12,14 +12,14 @@ export function OperationFeedback({ operation, onFinish, finishLabel = "Tải l�
   const pending = operation.pending;
   if (!operation.error && operation.ready && !pending) return null;
   return <FadeInView>
-    {operation.error && <Feedback message={operation.error} />}
+    {operation.error && <Feedback inline message={operation.error} />}
     {!operation.ready && <Button label="Đọc lại trạng thái yêu cầu" compact variant="soft" onPress={() => { void operation.load(); }} />}
     {pending && <View style={ui.card}>
       <View style={ui.recordHeader}>
         <Text style={typography.headline}>{pending.title}</Text>
         {operation.terminal && <Button label={finishLabel} compact loading={operation.busy} onPress={() => { void (async () => { if (await operation.acknowledge()) await onFinish(); })(); }} />}
       </View>
-      <Feedback success={operationCommitted(pending)} message={operationMessage(pending)} />
+      <Feedback inline success={operationCommitted(pending)} message={operationMessage(pending)} />
       {!operation.terminal && <>
         <View style={ui.actionRow}>
           <Button label="Kiểm tra trạng thái" compact variant="soft" loading={operation.busy} onPress={() => { void operation.check(); }} />

@@ -1,7 +1,6 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
-  ActivityIndicator,
   type GestureResponderEvent,
   Pressable,
   ScrollView,
@@ -11,7 +10,7 @@ import {
   View,
   type ViewInstance,
 } from "react-native";
-import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withRepeat, withSpring, withTiming } from "react-native-reanimated";
+import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
 
 import { useAccessibilityPreferences } from "@/shared/hooks/use-accessibility-preferences";
 import { usePressMotion } from "@/shared/hooks/use-press-motion";
@@ -21,7 +20,8 @@ import { DesignIcon } from "./design-icon";
 import type { DesignIconName } from "./design-assets";
 import { Feedback } from "./feedback";
 import { Wolfi } from "./carto/wolfi";
-import { useMotionActive } from "@/shared/hooks/use-motion-active";
+import { CompassLoader } from "./brand/compass-loader";
+import { WolfiScene, type WolfiSceneName } from "./brand/wolfi-scene";
 import { statusText } from "./status-labels";
 
 export function Heading({
@@ -309,17 +309,20 @@ export function EmptyState({
   message,
   action,
   icon = "bag",
+  scene,
 }: {
   title: string;
   message: string;
   action?: ReactNode;
   icon?: DesignIconName;
+  /** A Wolfi scene (see WolfiScene) in place of the small floating mascot. */
+  scene?: WolfiSceneName;
 }) {
   return (
     <View style={ui.empty}>
-      <View style={ui.emptyIcon}>
+      {scene ? <WolfiScene name={scene} style={ui.emptyScene} /> : <View style={ui.emptyIcon}>
         <Wolfi pose={icon === "bag" ? "walk" : "map"} size={96} />
-      </View>
+      </View>}
       <Text style={[typography.headline, ui.center]}>{title}</Text>
       <Text style={[typography.body, ui.center, { color: colors.muted }]}>
         {message}
@@ -349,31 +352,16 @@ export function ResourceFeedback({
       )}
       {error && (
         <View style={ui.stack}>
-          <Feedback message={error} />
+          <Feedback inline message={error} />
           <Button label="Tải lại" variant="soft" compact onPress={onRetry} />
         </View>
       )}
     </>
   );
 }
-/** Loading state: a compass needle hunting for north. Falls back to a spinner under Reduce Motion. */
+/** Loading state: the brand compass loader (falls back to a spinner under Reduce Motion). */
 function SpinningCompass() {
-  const active = useMotionActive();
-  const turn = useSharedValue(0);
-  useEffect(() => {
-    if (active) turn.set(withRepeat(withTiming(1, { duration: 1400, easing: Easing.inOut(Easing.cubic) }), -1));
-    else { cancelAnimation(turn); turn.set(0); }
-    return () => cancelAnimation(turn);
-  }, [active, turn]);
-  const style = useAnimatedStyle(() => ({ transform: [{ rotate: `${turn.get() * 360}deg` }] }));
-  if (!active) return <ActivityIndicator color={colors.ink} />;
-  return (
-    <View style={ui.compass}>
-      <Animated.View style={style}>
-        <DesignIcon name="compass" size={26} tintColor={colors.ink} />
-      </Animated.View>
-    </View>
-  );
+  return <CompassLoader />;
 }
 
 export function SectionLink({
@@ -600,6 +588,7 @@ export const ui = StyleSheet.create({
     paddingVertical: 32,
     gap: 12,
   },
+  emptyScene: { maxWidth: 360, marginBottom: 4 },
   emptyIcon: {
     width: 104,
     height: 104,

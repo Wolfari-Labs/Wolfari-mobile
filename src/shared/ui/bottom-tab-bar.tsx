@@ -7,20 +7,21 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useAccessibilityPreferences } from "@/shared/hooks/use-accessibility-preferences";
 import { usePressMotion } from "@/shared/hooks/use-press-motion";
-import { colors, fonts, gradients, radii, springs } from "@/shared/theme/tokens";
+import { colors, fonts, radii, springs } from "@/shared/theme/tokens";
+import { BottomBarSurface } from "./bottom-bar-surface";
 import type { DesignIconName } from "./design-assets";
 import { DesignIcon } from "./design-icon";
-import { GlassSurface } from "./glass-surface";
 import { webSafeArea } from "./web-safe-area";
 
-export type TabKey = "explore" | "trips" | "account";
-const tabs: { key: TabKey; label: string; icon: DesignIconName; route: "/(tabs)" | "/(tabs)/trips" | "/(tabs)/profile" }[] = [
+export type TabKey = "explore" | "trips" | "notifications" | "account";
+const tabs: { key: TabKey; label: string; icon: DesignIconName; route: "/(tabs)" | "/(tabs)/trips" | "/notifications" | "/(tabs)/profile" }[] = [
   { key: "explore", label: "Khám phá", icon: "compass", route: "/(tabs)" },
   { key: "trips", label: "Chuyến đi", icon: "bag", route: "/(tabs)/trips" },
+  { key: "notifications", label: "Thông báo", icon: "bell", route: "/notifications" },
   { key: "account", label: "Tài khoản", icon: "user", route: "/(tabs)/profile" },
 ];
 
-// The three tabs share one persistent bar (TabsLayout). Detail pages pushed above the
+// The tabs share one persistent bar (TabsLayout). Detail pages pushed above the
 // tabs draw their own copy; remember the selection so a new copy slides from there.
 let lastIndex = 0;
 
@@ -38,6 +39,7 @@ export function openTab(route: (typeof tabs)[number]["route"], fromPage: boolean
 }
 
 const SCRUB_SPRING = { damping: 22, stiffness: 420, mass: 0.4 };
+const activeGradient = [colors.tealSoft, colors.mint] as const;
 
 export function BottomTabBar({ activeTab, onHeightChange, blurTarget, page = false }: {
   activeTab: TabKey; onHeightChange?: (height: number) => void; blurTarget?: RefObject<ViewInstance | null>;
@@ -149,18 +151,22 @@ export function BottomTabBar({ activeTab, onHeightChange, blurTarget, page = fal
         onResponderRelease={() => finishScrub(true)}
         onResponderTerminate={() => finishScrub(false)}
       >
-        <GlassSurface variant="dock" blurTarget={blurTarget} style={styles.dock} onLayout={event => {
+        <BottomBarSurface radius={radii.pill} blurTarget={blurTarget} style={styles.dock} onLayout={event => {
           setDockWidth(event.nativeEvent.layout.width);
           measureDock();
         }}>
-          {tabWidth > 0 && <Animated.View pointerEvents="none" style={[styles.indicator, { width: tabWidth }, indicatorStyle]}><LinearGradient colors={gradients.primary} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={StyleSheet.absoluteFill} /></Animated.View>}
+          {tabWidth > 0 && (
+            <Animated.View pointerEvents="none" style={[styles.indicator, { width: tabWidth }, indicatorStyle]}>
+              <LinearGradient colors={activeGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+            </Animated.View>
+          )}
           {tabs.map((tab, index) => <TabItem key={tab.key} tab={tab} active={tab.key === activeTab} highlighted={index === visualActiveIndex} onPress={() => {
             lastIndex = index;
             // A detail route can share the active tab. Tapping it must still
             // return to that tab's root instead of trapping the user here.
             openTab(tab.route, page);
           }} />)}
-        </GlassSurface>
+        </BottomBarSurface>
       </View>
     </View>
   );
@@ -181,9 +187,9 @@ function TabItem({ tab, active, highlighted, onPress }: { tab: (typeof tabs)[num
             transitionProperty: "transform",
             transitionDuration: reduceMotion ? 0 : 200,
           }}>
-            <DesignIcon name={tab.icon} size={21} tintColor={highlighted ? colors.onAccent : colors.muted} />
+            <DesignIcon name={tab.icon} size={21} tintColor={highlighted ? colors.tealPressed : colors.muted} spark={highlighted} pop />
           </Animated.View>
-          <Text style={[styles.tabLabel, { color: highlighted ? colors.onAccent : colors.muted }]}>{tab.label}</Text>
+          <Text style={[styles.tabLabel, { color: highlighted ? colors.tealPressed : colors.muted }]}>{tab.label}</Text>
         </View>
       </Animated.View>
     </Pressable>
@@ -193,7 +199,7 @@ function TabItem({ tab, active, highlighted, onPress }: { tab: (typeof tabs)[num
 const styles = StyleSheet.create({
   container: { position: "absolute", bottom: 0, left: 0, right: 0, alignItems: "center", paddingHorizontal: 24, paddingTop: 8 },
   row: { width: "100%", maxWidth: 400, flexDirection: "row", alignItems: "center", gap: 10 },
-  dock: { flex: 1, minHeight: 70, borderRadius: radii.pill, flexDirection: "row", alignItems: "stretch", padding: 5 },
-  indicator: { position: "absolute", top: 5, bottom: 5, left: 5, borderRadius: radii.pill, backgroundColor: colors.gradientBlue, overflow: "hidden" },
+  dock: { flex: 1, minHeight: 66, flexDirection: "row", alignItems: "stretch", padding: 5 },
+  indicator: { position: "absolute", top: 5, bottom: 5, left: 5, borderRadius: radii.pill, backgroundColor: colors.tealSoft, overflow: "hidden" },
   tabLabel: { fontFamily: fonts.bold, fontSize: 12, lineHeight: 18, textAlign: "center" },
 });

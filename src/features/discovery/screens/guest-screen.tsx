@@ -31,7 +31,7 @@ export default function GuestScreen() {
   </>}>
     {notice === "signed-in" && profile && <Feedback success message={`Đăng nhập thành công. Xin chào, ${profile.full_name}!`} />}
     {status === "unavailable" && <View style={styles.stack}>
-      <Feedback message="Chưa thể khôi phục phiên của bạn. Vui lòng kiểm tra kết nối mạng." />
+      <Feedback inline message="Chưa thể khôi phục phiên của bạn. Vui lòng kiểm tra kết nối mạng." />
       <Button label="Thử lại" variant="soft" compact onPress={() => { void restore(); }} />
     </View>}
     <View style={styles.heroWrap}>
