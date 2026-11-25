@@ -126,7 +126,7 @@ try {
 
   fundPresent = false;
   await goto(tripRoute('fund'));
-  await page.getByText('Chuyến đi chưa có quỹ nhóm.', { exact: true }).waitFor();
+  await page.getByText('Quỹ chung cho cả nhóm', { exact: true }).waitFor();
   assert.equal(await button('Quét QR thanh toán').count(), 0, 'A trip without a fund cannot offer fund payments.');
   fundPresent = true;
   await goto(tripRoute('fund'));
@@ -266,6 +266,7 @@ try {
   await page.setViewportSize({ width: 360, height: 740 });
   await screenshot("create-small-phone");
   await button("Tạo chuyến đi").click();
+  await button("Mở chuyến đi").click();
   await page.waitForURL("**/trip/" + tripId);
   const create = calls.find(call => call.pathname === "/trips" && call.method === "POST");
   for (const key of ["client_request_id", "end_at", "name", "start_at", "timezone"]) assert.ok(key in create.body, key);

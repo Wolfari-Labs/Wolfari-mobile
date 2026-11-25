@@ -65,6 +65,7 @@ await context.route("**/api/v1/**", async route => {
     profile = { ...profile, full_name: body.full_name ?? profile.full_name, avatar: "avatar_object_key" in body ? body.avatar_object_key ? "/api/v1/me/avatar" : null : profile.avatar, version: profile.version + 1 };
     return respond(200, profile);
   }
+  if (pathname === "/me/sessions") return respond(200, { items: [{ id: sessionId, created_at: "2026-10-18T00:00:00Z", expires_at: "2099-11-01T00:00:00Z", last_used_at: null }], next_cursor: null });
   if (pathname === "/me") return respond(200, profile);
   if (pathname === "/trips") return respond(200, { items: [trip], next_cursor: null });
   if (pathname === `/trips/${tripId}`) return respond(200, trip);
@@ -197,6 +198,7 @@ try {
     assert.equal(await button("Lưu mật khẩu mới").isDisabled(), true);
     assert.equal(await field("Mật khẩu mới").inputValue(), "");
     assert.equal(calls.filter(call => call.pathname === endpoint).length, previousWrites + 1);
+    await button("Đóng thông báo").click();
     await button("Đến trang đăng nhập").click();
     await page.waitForURL("**/sign-in");
     lostPasswordReply = false;
@@ -208,17 +210,20 @@ try {
   await button("Gỡ ảnh đại diện").waitFor();
   assert.equal(calls.filter(call => call.pathname === "/me/avatar" && call.method === "POST").length, 0);
   await button("Lưu thay đổi").click();
+  await button("Về tài khoản").click();
   await page.waitForURL("**/profile");
   assert.equal(calls.filter(call => call.pathname === "/me/avatar" && call.method === "POST").length, 1);
   await screenshot("profile.png");
   await goto("/edit-profile");
   await button("Gỡ ảnh đại diện").click();
   await button("Lưu thay đổi").click();
+  await button("Về tài khoản").click();
   await page.waitForURL("**/profile");
   assert.equal(profile.avatar, null);
   await goto(`/trip/${tripId}/invite`);
   await page.getByRole("tab", { name: "Bằng mã mời", exact: true }).click();
   await button("Tạo mã mời").click();
+  await button("Xem mã mời").click();
   // The short join code and its QR are shown; neither the secret link nor the long token is rendered.
   await page.getByText("K7PQ-4M2X", { exact: true }).waitFor();
   await page.getByRole("img", { name: "Mã QR lời mời K7PQ-4M2X", exact: true }).waitFor();
@@ -226,12 +231,13 @@ try {
   assert.equal(await page.getByText("gateway.test/invitations", { exact: false }).count(), 0);
   assert.equal(await page.getByText("inv1_", { exact: false }).count(), 0);
   await goto(`/trip/${tripId}/settings`);
-  await page.getByRole("radio", { name: "Chọn thành viên", exact: true }).click();
+  await button("Chọn thành viên").click();
   await page.getByRole("checkbox").click();
-  await button("Lưu quyền của nhóm").click();
+  await button("Chọn xong").click();
+  await button("Lưu cài đặt").click();
   assert.equal(calls.filter(call => call.pathname.endsWith("/plan-policy") && call.method === "PUT").length, 0);
   await button("Xác nhận thay thế quyền").click();
-  await page.getByText("Đã cập nhật quyền chỉnh sửa của nhóm.").waitFor();
+  await button("Tiếp tục chỉnh sửa").click();
   await screenshot("permissions.png");
   await goto(`/trip/${tripId}/members`);
   await page.setViewportSize({ width: 360, height: 740 });
@@ -264,7 +270,7 @@ try {
   removed = false; rejectFinance = true;
   trip = { ...trip, current_membership: { ...member, user_id: userId }, permissions: { can_read: true, can_update: false } };
   await goto(`/trip/${tripId}/settings`);
-  assert.equal(await button("Lưu quyền của nhóm").count(), 0);
+  assert.equal(await page.getByRole("switch", { name: "Cùng chỉnh sửa lịch", exact: true }).count(), 0);
   await button("Rời chuyến đi").click();
   await field("Lý do").fill("Không thể tham gia");
   await button("Rời chuyến đi").click();
@@ -284,7 +290,7 @@ try {
   const writesBeforeArchive = calls.filter(call => ["POST", "PATCH", "PUT", "DELETE"].includes(call.method) && call.pathname.startsWith("/trips/")).length;
   await goto(`/trip/${tripId}/settings`);
   await page.getByText("Chuyến đi đã lưu trữ. Quyền của nhóm chỉ có thể xem.").waitFor();
-  assert.equal(await button("Lưu quyền của nhóm").count(), 0);
+  assert.equal(await page.getByRole("switch", { name: "Cùng chỉnh sửa lịch", exact: true }).count(), 0);
   assert.equal(await button("Rời chuyến đi").count(), 0);
   await goto(`/trip/${tripId}/invite`);
   await page.getByText("Chuyến đi đã lưu trữ", { exact: true }).waitFor();
@@ -295,13 +301,18 @@ try {
   for (const name of ["Mời thành viên", "Gửi lại", "Thu hồi", "Xóa Bạn đồng hành"]) assert.equal(await button(name).count(), 0);
   assert.equal(calls.filter(call => ["POST", "PATCH", "PUT", "DELETE"].includes(call.method) && call.pathname.startsWith("/trips/")).length, writesBeforeArchive);
   await goto("/profile");
+  await button("Phiên đăng nhập").click();
+  await button("Đang dùng").click();
+  await page.getByRole("heading", { name: "Thiết bị đang đăng nhập" }).waitFor();
+  await button("Đã hiểu").click();
+  await goto("/profile");
   // Sign-out asks first; a failed sign-out keeps the sheet open with the reason.
   await button("Đăng xuất").click();
-  await button("Xác nhận đăng xuất").click();
+  await page.getByRole("dialog").getByRole("button", { name: "Đăng xuất", exact: true }).click();
   await page.getByText(/Chưa xác nhận được đăng xuất/).first().waitFor();
   assert.equal(loggedOut, false);
   logoutOffline = false;
-  await button("Xác nhận đăng xuất").click();
+  await page.getByRole("dialog").getByRole("button", { name: "Đăng xuất", exact: true }).click();
   await page.waitForURL(`${appUrl}/`);
   await page.reload({ waitUntil: "networkidle" });
   await button("Bắt đầu hành trình").waitFor();

@@ -45,6 +45,9 @@ await context.route("**/api/v1/**", async route => {
     const row = { id: "50000000-0000-4000-8000-000000000001", trip_id: tripId, ...body, source: "MANUAL", metadata: { attribution: body.attribution }, plan_version: ++version };
     locations.push(row); return respond(row, {}, 201);
   }
+  if (pathname === "/invitations/preview") return respond({ id: activityId, trip_name: "Hẹn ở Đà Lạt", inviter_display_name: "Trang Nguyễn", status: "PENDING", expires_at: new Date(Date.now() + (body.code === "K7PQ-4M2X" ? 86400000 : -86400000)).toISOString() });
+  if (pathname === "/invitations/decline") { assert.equal(body.code, "K7PQ-4M2X"); return respond({}); }
+  if (pathname === "/invitations/accept") { assert.equal(body.code, "K7PQ-4M2X"); return respond({ membership: { trip_id: tripId } }); }
   if (pathname === "/me/notifications") {
     const start = Number(url.searchParams.get("cursor") ?? "0"), limit = Number(url.searchParams.get("limit"));
     const available = notices.map((n, i) => ({ n, i })).filter(({ n, i }) => i >= start && (url.searchParams.get("unread") !== "true" || !n.read_at));
@@ -57,6 +60,9 @@ await context.route("**/api/v1/**", async route => {
   }
   return fail();
 });
+notices[0].created_at = new Date().toISOString();
+notices[2] = { ...notices[2], type: "TRIP_INVITATION", title: "Lời mời chuyến đi", body: "K7PQ-4M2X", created_at: new Date().toISOString() };
+notices[3] = { ...notices[3], type: "PRICE_DROP", title: "Giá vé vừa giảm", created_at: new Date().toISOString() };
 const page = await context.newPage();
 page.setDefaultTimeout(30000); page.setDefaultNavigationTimeout(120000);
 page.on("pageerror", e => errors.push(e.message));
@@ -70,9 +76,11 @@ try {
   await button("Gửi lại yêu cầu đã lưu").waitFor();
   await page.reload({ waitUntil: "networkidle" });
   await button("Gửi lại yêu cầu đã lưu").click();
+  await button("Mở chuyến đi").click();
   await page.getByRole("tab", { name: "Tổng quan", exact: true }).waitFor();
   assert.equal(createRequests.length, 2); assert.deepEqual(createRequests[0], createRequests[1]);
   await page.goto(`${appUrl}/trip/${tripId}/activity?activityId=${activityId}&preview=1`, { waitUntil: "networkidle" });
+  await button("Tùy chọn hoạt động").click();
   await page.getByRole("tab", { name: "Loại hoạt động khác", exact: true }).waitFor();
   await assertPublicText(page);
   await page.goto(`${appUrl}/trip/${tripId}/places?preview=1`, { waitUntil: "networkidle" });
@@ -85,8 +93,17 @@ try {
   await page.getByText("Địa điểm chung", { exact: true }).waitFor(); assert.equal(locations.length, 1);
   await assertPublicText(page);
   await page.goto(`${appUrl}/notifications?preview=1`, { waitUntil: "networkidle" });
+  await page.getByRole("heading", { name: "Có gì mới?" }).waitFor();
+  await page.getByText("30+ thông báo chưa đọc", { exact: true }).waitFor();
+  await page.getByRole("heading", { name: "Hôm nay" }).waitFor();
+  assert.equal(await page.getByText("K7PQ-4M2X", { exact: true }).count(), 0);
+  await mkdir(".cache/visual/reliability", { recursive: true });
+  await page.screenshot({ path: ".cache/visual/reliability/notifications.png" });
+  await page.getByRole("tab", { name: "Chưa đọc", exact: true }).click();
+  await page.getByRole("tab", { name: "Tất cả", exact: true }).click();
   await button("Thông báo cũ hơn").click(); await page.getByText("Thông báo 31", { exact: true }).waitFor();
   await button("Thông báo cũ hơn").click(); await page.getByText("Thông báo 65", { exact: true }).waitFor();
+  await button("Tùy chọn thông báo").click();
   await button("Đánh dấu tất cả đã đọc").click();
   await page.getByText("Đã đánh dấu các thông báo đã đọc.", { exact: true }).waitFor();
   assert.equal(notices.filter(n => !n.read_at).length, 0);
@@ -97,6 +114,18 @@ try {
   await assertPublicText(page);
   await mkdir(".cache/visual/reliability", { recursive: true });
   await page.screenshot({ path: ".cache/visual/reliability/itinerary.png" });
+  await page.goto(appUrl + "/invitation?code=K7PQ-4M2X", { waitUntil: "networkidle" });
+  await page.getByText("Trang Nguyễn đã mời bạn", { exact: true }).waitFor();
+  await page.getByRole("heading", { name: "Hẹn ở Đà Lạt" }).waitFor();
+  await page.screenshot({ path: ".cache/visual/reliability/invitation.png" });
+  await button("Từ chối").click();
+  await page.getByText("Đã phản hồi lời mời.", { exact: true }).waitFor();
+  await page.goto(appUrl + "/invitation?code=K7PQ-4M2X", { waitUntil: "networkidle" });
+  await button("Chấp nhận lời mời").click();
+  await page.waitForURL(new RegExp("/trip/" + tripId + "$"));
+  await page.goto(appUrl + "/invitation?code=M7PQ-4M2X", { waitUntil: "networkidle" });
+  await page.getByText("Lời mời này đã được phản hồi hoặc không còn hiệu lực.", { exact: true }).waitFor();
+  assert.equal(await button("Chấp nhận lời mời").count(), 0);
   assert.deepEqual(errors, []);
   console.log("PASS durable create recovery, safe activity labels, shared places, inbox paging, mark-all and reminder navigation");
 } catch (error) {
