@@ -36,7 +36,7 @@ test('QR image is published only when the NAPAS payload and SVG match this instr
   ])
     assert.throws(() => instructionQrImage({ ...instruction, ...change }), JSON.stringify(change));
 });
-test('bank app deeplink pre-fills only this instruction and only for autofill apps', () => {
+test('bank app deeplink pre-fills only this instruction and only for known bank apps', () => {
   const instruction = {
     environment: 'LIVE', bank_code: 'VCB', bank_bin: '970436', account_number: '0001234567',
     amount: '180000', reference: 'TESTREF 01', recipient_name: 'TEST ONLY',
@@ -47,7 +47,7 @@ test('bank app deeplink pre-fills only this instruction and only for autofill ap
     app: 'mb', ba: '0001234567@vcb', am: '180000', tn: 'TESTREF 01', url: 'wolfarimobile://', bn: 'TEST ONLY',
   });
   for (const [change, app] of [
-    [{}, 'vcb'],
+    [{}, 'not-a-bank-app'],
     [{ environment: 'PRODUCTION' }, 'mb'],
     [{ bank_code: 'BNP HN' }, 'mb'],
     [{ account_number: '0001-234' }, 'mb'],
