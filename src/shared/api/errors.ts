@@ -11,6 +11,7 @@ export function errorMessage(error: unknown, fallback = "Chưa thể hoàn tất
     if (error.code === "REQUEST_TIMEOUT") return "Chưa nhận được phản hồi. Vui lòng kiểm tra lại trạng thái yêu cầu.";
     if (error.code === "VERSION_CONFLICT") return "Dữ liệu vừa được cập nhật. Tải lại thông tin và kiểm tra trước khi gửi yêu cầu mới.";
     if (error.code === "FINANCE_OBLIGATION_BLOCKED") return "Chưa thể rời hoặc xóa thành viên vì còn nghĩa vụ tài chính cần giải quyết.";
+    if (error.reason === "INSUFFICIENT_AVAILABLE_BALANCE") return "Quỹ không đủ số dư khả dụng cho khoản chi này. Cần thêm tiền vào quỹ (đóng góp được xác nhận) rồi xác nhận lại.";
     if (error.code === "STATE_CONFLICT") return "Trạng thái hiện tại chưa cho phép thao tác. Kiểm tra các giao dịch và yêu cầu đang chờ trước khi thử lại.";
     if (error.status === 409) return "Dữ liệu hoặc trạng thái vừa thay đổi. Tải lại rồi kiểm tra trước khi thử lại.";
     if (error.status === 403) return "Bạn chưa có quyền thực hiện thao tác này trong chuyến đi.";

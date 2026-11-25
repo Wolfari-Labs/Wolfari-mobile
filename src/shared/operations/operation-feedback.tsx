@@ -25,7 +25,10 @@ export function OperationFeedback({ operation, onFinish, finishLabel = "Tải l�
           <Button label="Kiểm tra trạng thái" compact variant="soft" loading={operation.busy} onPress={() => { void operation.check(); }} />
           {pending.command && pending.operation?.state !== "NEEDS_REVIEW" && <Button label="Gửi lại cùng yêu cầu" compact loading={operation.busy} onPress={() => { void operation.retry(); }} />}
         </View>
-        <Notice>Ứng dụng sẽ tiếp tục kiểm tra yêu cầu này khi bạn mở lại. Hãy kiểm tra trạng thái trước khi thực hiện thao tác khác.</Notice>
+        {operation.notFound && !pending.command && !pending.operation ? <>
+          <Notice>Máy chủ không có yêu cầu này, nên nó chưa được thực hiện. Có thể bỏ yêu cầu rồi kiểm tra lại dữ liệu trước khi làm lại.</Notice>
+          <Button label="Bỏ yêu cầu này" variant="soft" loading={operation.busy} onPress={() => { void (async () => { if (await operation.discard()) await onFinish(); })(); }} />
+        </> : <Notice>Ứng dụng sẽ tiếp tục kiểm tra yêu cầu này khi bạn mở lại. Hãy kiểm tra trạng thái trước khi thực hiện thao tác khác.</Notice>}
       </>}
     </View>}
   </FadeInView>;

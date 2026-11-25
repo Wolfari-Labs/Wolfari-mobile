@@ -299,3 +299,18 @@ test("Extended entity responses cannot bypass operation identity validation", as
   assert.equal(operationCommitted(c.getSnapshot().pending), false);
   assert.equal(c.getSnapshot().result, undefined);
 });
+test("a restored request the server has no record of can be discarded; others cannot", async () => {
+  const { controller: first, deps, values } = harness({ execute: async () => { throw new ApiError("NETWORK_ERROR", "network"); } });
+  await first.load(); await first.run(write);
+  assert.equal(await first.discard(), false, "a request this device can still resend is never discarded");
+  const restored = createOperationController({ ...deps, poll: async () => { throw new ApiError("RESOURCE_NOT_FOUND", "missing", 404); } });
+  await restored.load();
+  assert.equal(await restored.discard(), false, "unchecked requests stay");
+  await restored.check();
+  assert.equal(restored.getSnapshot().notFound, true);
+  assert.equal(await restored.discard(), true);
+  assert.equal(restored.getSnapshot().pending, undefined);
+  assert.equal(values.has("scope"), false);
+  const known = createOperationController({ ...deps, poll: async () => pendingOp });
+  await known.load();
+});
