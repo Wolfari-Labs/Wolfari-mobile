@@ -5,6 +5,7 @@
   },
   "build": {
     "development": {
+      "environment": "development",
       "developmentClient": true,
       "distribution": "internal",
       "android": {
@@ -19,6 +20,10 @@
       }
     },
     "production": {
+      "environment": "production",
+      "env": {
+        "EXPO_PUBLIC_PAYMENT_SANDBOX": "false"
+      },
       "autoIncrement": true
     }
   },

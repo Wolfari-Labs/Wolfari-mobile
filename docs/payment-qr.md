@@ -24,6 +24,8 @@ Dữ liệu người nhận trong QR chỉ ở trong bộ nhớ màn hình, khô
 
 ## Thử với MoMo Sandbox
 
+Bản dùng VietQR mở danh sách ngân hàng ngay ở bước chọn ứng dụng thanh toán. Muốn hiện MoMo Test và sổ quỹ mô phỏng trong một bản thử riêng, đặt `EXPO_PUBLIC_PAYMENT_SANDBOX=true` lúc chạy Metro hoặc build. Chuyến đi mẫu có ví mô phỏng riêng.
+
 Muốn demo ngay, không có khóa: chọn **Mô phỏng trong app** sau khi đọc QR và nhập tiền/nội dung. Thanh toán thành công sẽ trừ và ghi lịch sử vào **Sổ quỹ mô phỏng** riêng của chuyến đi trên thiết bị. Xem [pipeline demo mô phỏng](payment-simulation-demo.md) về số dư, lưu lại lịch sử và đặt lại sổ. Lựa chọn này không gọi MoMo hay cập nhật sổ quỹ máy chủ.
 
 Sau khi nhập tiền/nội dung, **MoMo Test · Thanh toán thử** được chọn sẵn khi có chuyến đi. Danh sách ngân hàng nằm trong **Chuyển bằng ngân hàng**. Bấm **Mở MoMo Test**; native yêu cầu mở trang thanh toán ngay khi nhận được liên kết, web có nút **Mở lại MoMo Test** để tránh trình duyệt chặn popup sau request bất đồng bộ. Có thể mở lại cùng liên kết. Đây là giao dịch thử với đối tác MoMo cấu hình cho Wolfari, **không chuyển tiền tới tài khoản ngân hàng trong QR**. Chỉ số tiền/nội dung người dùng đã nhập và UUID lần thử được gửi tới backend, không gửi số tài khoản nhận.

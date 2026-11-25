@@ -24,6 +24,7 @@ const env = {
   CI: "1",
   EXPO_NO_TELEMETRY: "1",
   EXPO_PUBLIC_API_URL: "https://ci.invalid/api/v1",
+  EXPO_PUBLIC_PAYMENT_SANDBOX: "true",
   WOLFARI_EXPORT_DIR: path.join(root, "dist"),
 };
 let activeChild;

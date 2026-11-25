@@ -197,15 +197,30 @@ page.setDefaultTimeout(30_000); page.setDefaultNavigationTimeout(120_000);
 page.on("pageerror", error => errors.push(error.message));
 const button = name => page.getByRole("button", { name, exact: true });
 const field = name => page.getByLabel(name, { exact: true });
-const tab = name => page.getByRole("tab", { name, exact: true }).click();
+// Everyday tabs stay on the page; the others open from the "…" menu.
+const mainTab = { "Khoản chi": "Chi tiêu", "Đợt góp": "Đóng góp", "Lịch sử": "Lịch sử" };
+const tab = async name => {
+  if (mainTab[name]) return page.getByRole("tab", { name: mainTab[name], exact: true }).click();
+  await button("Tùy chọn quỹ").click();
+  await page.getByRole("dialog").getByRole("button", { name, exact: true }).click();
+};
 const screenshotDir = path.resolve(".cache/visual/finance"); await mkdir(screenshotDir, { recursive: true });
 const goto = () => page.goto(`${appUrl}/trip/${tripId}/fund`, { waitUntil: "networkidle" });
 async function settled() {
-  await page.getByText("Đã cập nhật quỹ.", { exact: true }).waitFor();
+  const expense = button("Về quỹ nhóm");
+  await page.getByText("Đã cập nhật quỹ.", { exact: true }).or(expense).first().waitFor();
+  if (await expense.isVisible()) await expense.click();
   assert.equal(await button("Tải lại quỹ").count(), 0, "Successful changes refresh automatically.");
 }
 async function confirm({ finish = true } = {}) {
-  const sheet = page.getByRole("dialog");
+  const saveExpense = button("Lưu khoản chi");
+  if (await saveExpense.isVisible()) {
+    await saveExpense.click();
+    await page.getByRole("heading", { name: "Đã lưu khoản chi" }).waitFor();
+    await button("Về quỹ nhóm").click();
+    return;
+  }
+  const sheet = page.getByRole("dialog").filter({ has: button("Đóng hộp thoại") });
   await sheet.waitFor();
   if (await sheet.getByRole("button", { name: "Tiếp tục", exact: true }).count()) {
     await button("Tiếp tục").click(); await button("Xác nhận thực hiện").click();
@@ -250,14 +265,14 @@ try {
   await button("Tiếp tục").click();
   await page.getByText(/Ngân hàng không có trong danh mục VietQR/).waitFor();
   // Pasting the holder's receiving VietQR fills bank code (from BIN), account and printed name.
-  await button("Quét/dán VietQR của tài khoản nhận").click();
-  await button("Dán nội dung QR").click();
+  await button("Hoặc dán nội dung mã (000201…)").click();
   await field("Nội dung VietQR (000201…)").fill(makeQr({ bin: "970436", account: "0012345678", recipient: "TEST ACCOUNT" }));
   await button("Đọc và điền thông tin").click();
   await page.getByText("Đã điền từ VietQR. Kiểm tra lại từng trường trước khi tiếp tục.", { exact: true }).waitFor();
   await page.getByText("Đã chọn: Vietcombank · Ngoại thương", { exact: true }).waitFor();
   await confirm();
   assert.equal(destinations[0].bank_code, "VCB"); assert.equal(destinations[0].account_number, "0012345678"); assert.equal(fund.current_balance, "0"); assert.equal(destinations[0].confirmed_by_holder_at, null);
+  await tab("Tổng quan");
   await action("Xác nhận tài khoản");
   assert.ok(destinations[0].confirmed_by_holder_at);
   await button("Quét QR thanh toán").waitFor();
@@ -274,7 +289,7 @@ try {
   conflictBudget = true; await action("Cập nhật ngân sách", { "Số tiền (VND)": "1000000" }, false);
   await page.getByText(/Dữ liệu vừa được cập nhật/).waitFor(); assert.equal(await button("Gửi lại cùng yêu cầu").count(), 0);
   conflictBudget = false; await button("Tải lại quỹ").click();
-  await button("Góp quỹ").click(); await button("Tạo đợt góp").click();
+  await tab("Đợt góp"); await button("Tạo đợt góp").click();
   await field("Nội dung").fill("Đợt góp đầu tiên"); await field("Số tiền (VND)").fill("500000");
   await page.getByRole("checkbox", { name: "Người đóng góp: Bạn · Chủ nhóm" }).click(); await confirm();
   assert.equal(contributions.length, 1); assert.equal(fund.current_balance, "0");
@@ -348,8 +363,19 @@ try {
   assert.equal(await page.evaluate(() => Object.values(localStorage).some(value => value.includes('0099998888'))), false);
   await button('Đặt lại sổ mô phỏng').click();
   await page.getByText('Sổ quỹ mô phỏng', { exact: true }).waitFor({ state: 'hidden' });
-  await tab("Khoản chi"); await button("Tạo khoản chi").click();
-  await field("Nội dung").fill("Bữa tối"); await field("Số tiền (VND)").fill("200000"); await confirm();
+  await tab("Khoản chi"); await button("Ghi nhận khoản chi").click();
+  await field("Ghi chú").fill("Bữa tối");
+  await field("Số tiền (VND)").fill("200.000 ₫");
+  assert.equal(await field("Số tiền (VND)").inputValue(), "200.000");
+  await page.getByRole("radio", { name: "Danh mục Ăn uống" }).click();
+  const receiptPicker = page.waitForEvent("filechooser");
+  await button("Đính kèm ảnh chứng từ").click();
+  await (await receiptPicker).setFiles({ name: "lunch.png", mimeType: "image/png", buffer: png });
+  await button("Bỏ ảnh đã chọn").click();
+  await button("Đính kèm ảnh chứng từ").waitFor();
+  await page.getByText(/Khả dụng sau khi duyệt: 300.000 ₫/).waitFor();
+  await shot("m15-expense.png");
+  await confirm();
   await action("Sửa khoản chi", { "Số tiền (VND)": "150000" });
   await action("Gửi duyệt khoản chi", {}, false);
   await button("Gửi lại cùng yêu cầu").click(); await page.getByText(/Máy chủ đang xử lý/).waitFor();
@@ -357,15 +383,19 @@ try {
   await shot("03-pending.png");
   settle = true; await goto(); await settled(); await tab("Khoản chi");
   await action("Rút đề nghị chi"); await action("Gửi duyệt khoản chi"); await action("Xác nhận đã chi"); assert.equal(fund.current_balance, "350000");
+  await button("Chi tiết khoản chi Bữa tối").waitFor();
+  await page.getByText("Đã cập nhật quỹ.", { exact: true }).waitFor({ state: "hidden" });
+  await shot("m14-fund.png");
+  await button("Chi tiết khoản chi Bữa tối").click();
   await action("Đảo giao dịch", { "Lý do": "Đối chiếu chi nhầm" }); assert.equal(fund.current_balance, "500000");
-  await button("Tạo khoản chi").click(); await field("Nội dung").fill("Nháp cần xóa"); await field("Số tiền (VND)").fill("1"); await confirm();
+  await button("Ghi nhận khoản chi").click(); await field("Ghi chú").fill("Nháp cần xóa"); await field("Số tiền (VND)").fill("1"); await confirm();
   await action("Xóa khoản chi nháp"); assert.equal(expenses.length, 1);
   await tab("Hoàn tiền"); await button("Tạo hoàn tiền").click();
   await page.getByRole("radio", { name: "Người nhận hoàn: Bạn · Chủ nhóm" }).click();
   await field("Số tiền (VND)").fill("500000"); await field("Lý do").fill("Hoàn quỹ dư"); await confirm();
   assert.equal(fund.current_balance, "500000"); assert.equal(fund.available_balance, "0");
-  await tab("Khoản chi"); await button("Tạo khoản chi").click();
-  await field("Nội dung").fill("Không được chi phần đã giữ chỗ"); await field("Số tiền (VND)").fill("1"); await confirm();
+  await tab("Khoản chi"); await button("Ghi nhận khoản chi").click();
+  await field("Ghi chú").fill("Không được chi phần đã giữ chỗ"); await field("Số tiền (VND)").fill("1"); await confirm();
   await action("Gửi duyệt khoản chi"); await action("Xác nhận đã chi", {}, false);
   await page.getByText(/Trạng thái hiện tại chưa cho phép thao tác/).waitFor();
   assert.equal(fund.current_balance, "500000"); assert.equal(fund.available_balance, "0");
@@ -449,7 +479,7 @@ try {
   assert.equal(await page.getByText("Đang mở", { exact: true }).count(), 0, "A closed fund cannot display an open collection badge.");
   await page.getByText("Khoản đóng của bạn", { exact: true }).scrollIntoViewIfNeeded();
   await shot("06-closed-contribution-history.png");
-  await tab("Khoản chi"); assert.equal(await button("Tạo khoản chi").count(), 0);
+  await tab("Khoản chi"); assert.equal(await button("Ghi nhận khoản chi").count(), 0);
   await tab("Tổng quan"); assert.equal(await button("Cập nhật ngân sách").count(), 0);
   assert.equal(await button("Góp quỹ").count(), 0, "A settled fund cannot offer another contribution.");
   assert.equal(await button("Quét QR thanh toán").count(), 0, "A closed fund cannot offer outgoing QR.");
@@ -462,7 +492,7 @@ try {
   await goto();
   assert.equal(await button("Quét QR thanh toán").count(), 0, "A regular member cannot scan an outgoing fund payment.");
   assert.equal(await button("Cập nhật ngân sách").count(), 0);
-  await button("Góp quỹ").click();
+  await tab("Đợt góp");
   assert.equal(await button("Tạo đợt góp").count(), 0);
   await button("Xem QR góp quỹ").click();
   await page.getByText("Góp quỹ bằng VietQR", { exact: true }).waitFor();
@@ -507,7 +537,7 @@ try {
   assert.equal(await button("Xem QR góp quỹ").count(), 0, "An OPEN fund does not reopen a CLOSED contribution request.");
   assert.equal(await page.getByRole("button", { name: /^Báo đã chuyển tiền/ }).count(), 0);
   requests[0].status = "OPEN";
-  await tab("Khoản chi"); await button("Tạo khoản chi").waitFor();
+  await tab("Khoản chi"); await button("Ghi nhận khoản chi").waitFor();
   fund.holder_user_id = memberUser;
   await goto();
   await button("Quét QR thanh toán").waitFor();

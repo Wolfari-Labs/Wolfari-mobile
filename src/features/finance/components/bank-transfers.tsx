@@ -30,7 +30,7 @@ const reviewText: Record<string, string> = {
   NO_REFERENCE: "Nội dung chuyển khoản không có mã tham chiếu của khoản góp.",
   UNKNOWN_REFERENCE: "Mã tham chiếu không khớp khoản góp nào của quỹ.",
   MULTIPLE_REFERENCES: "Nội dung có nhiều mã tham chiếu nên không tự ghi.",
-  ACCOUNT_MISMATCH: "Tiền về tài khoản khác với tài khoản nhận đã chốt cho khoản góp.",
+  ACCOUNT_MISMATCH: "Thông tin ngân hàng hoặc số tài khoản nhận cần được đối chiếu.",
   AMOUNT_MISMATCH: "Số tiền chuyển khác số tiền phải góp.",
   CONTRIBUTION_NOT_PAYABLE: "Khoản góp không còn ở trạng thái chờ góp (đã hủy, miễn hoặc đổi).",
   ALREADY_CONFIRMED: "Khoản góp này đã được xác nhận trước đó; có thể là chuyển trùng.",
@@ -53,12 +53,12 @@ export function BankTransfers({ fund, timezone, holder, writable, locked, open, 
   const rows = useResource(useCallback((signal: AbortSignal) => api.finance.bankTransfers(fund.id, signal), [api, fund.id]));
   const review = rows.data?.filter(row => row.processing_status === "NEEDS_REVIEW").length ?? 0;
   return <View style={ui.stack}>
-    <Notice>Tiền chuyển vào tài khoản nhận của quỹ (qua SePay) được tự ghi khi nội dung có đúng mã khoản góp và đủ số tiền. Giao dịch không khớp không được tự ghi; người giữ quỹ đối chiếu rồi xử lý.</Notice>
+    <Notice>SePay tự xác nhận khoản góp khi khớp ngân hàng, số tài khoản nhận, mã khoản góp và số tiền. Người giữ quỹ xem lại các giao dịch cần đối chiếu tại đây.</Notice>
     {review > 0 && <Notice>
       {review} giao dịch cần xem lại. Quỹ chỉ chốt được khi đã xử lý hết. Người giữ quỹ hoàn lại tiền hoặc xác nhận tay khoản góp tương ứng ở tab Đợt góp, rồi bấm “Đã xử lý” trên từng giao dịch.
     </Notice>}
     <ResourceFeedback {...rows} hasData={!!rows.data} onRetry={() => { void rows.reload(); }} />
-    {rows.data && !rows.data.length && <EmptyState title="Chưa có tiền về" message="Khi thành viên chuyển khoản với đúng nội dung, giao dịch sẽ hiện ở đây." icon="wallet" />}
+    {rows.data && !rows.data.length && <EmptyState title="Chưa có tiền về" message="Khi thành viên chuyển khoản với đúng nội dung, giao dịch sẽ hiện ở đây." icon="wallet" scene="waiting" />}
     {rows.data?.map(row => <View key={row.id} style={ui.record}>
       <View style={ui.recordHeader}>
         <Text style={typography.headline}>{row.transfer_type === "OUT" ? "−" : "+"}{money(row.amount)}</Text>
