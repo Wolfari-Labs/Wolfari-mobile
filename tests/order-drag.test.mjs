@@ -43,6 +43,8 @@ test("edge scrolling clamps at both ends and does not scroll in the middle or a 
   assert.equal(dragScrollOffset(700, 290, 300, 1000), 700);
   assert.equal(dragScrollOffset(0, 290, 300, 200), 0);
   assert.equal(dragScrollOffset(50, 290, 0, 1000), 50);
+  assert.equal(dragScrollOffset(50, 190, 300, 1000, 80), 59);
+  assert.equal(dragScrollOffset(700, 190, 300, 1000, 80), 700);
   assert.equal(ORDER_HOLD_MS, 250);
 });
 

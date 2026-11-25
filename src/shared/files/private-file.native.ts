@@ -27,5 +27,5 @@ export async function presentPrivateFile(blob: Blob, name: string, mode: "previe
     throw Error("Thiết bị chưa có ứng dụng mở/chia sẻ định dạng này.");
   }
   // Android can resolve before the receiving app reads its URI; retain the temporary copy.
-  await Sharing.shareAsync(file.uri, { mimeType: blob.type, dialogTitle: filename, UTI: blob.type === "application/pdf" ? "com.adobe.pdf" : blob.type === "image/png" ? "public.png" : "public.jpeg" });
+  await Sharing.shareAsync(file.uri, { mimeType: blob.type, dialogTitle: filename, UTI: blob.type === "text/calendar" ? "com.apple.ical.ics" : blob.type === "application/pdf" ? "com.adobe.pdf" : blob.type === "image/png" ? "public.png" : "public.jpeg" });
 }
