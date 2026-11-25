@@ -1,67 +1,67 @@
-import { readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+// Regenerates every launcher, splash and favicon PNG from the Wolfari brand masters:
+//   assets/brand/wolfi-mark.png      Wolfi bust (transparent, square)
+//   assets/brand/icon-backdrop.png   1024 px launcher backdrop (compass halo, from icon-backdrop.svg)
+// The notification stencil is drawn from scripts/brand/notification.svg (vector, kept as PNG).
+import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import imageUtils from "@expo/image-utils";
+import { PNG } from "pngjs";
 
-const { generateImageAsync, generateImageBackgroundAsync, compositeImagesAsync } = imageUtils;
-const projectRoot = fileURLToPath(new URL("../", import.meta.url));
-const assetsDirectory = join(projectRoot, "assets/images");
-const sourcePath = join(assetsDirectory, "wolfari-logo.png");
-const backgroundColor = "#DDF7EF";
-const iconSize = 1024;
+const root = fileURLToPath(new URL("../", import.meta.url));
+const directory = join(root, "assets/images");
+const master = join(root, "assets/brand/wolfi-mark.png");
+const backdrop = join(root, "assets/brand/icon-backdrop.png");
+const paper = "#EAF0FF";
 
-async function resizeLogo(size, options = {}) {
-  const { source } = await generateImageAsync({ projectRoot }, {
-    src: sourcePath,
-    width: size,
-    height: size,
-    resizeMode: "contain",
-    ...options,
+async function resize(size, options = {}) {
+  const { source } = await imageUtils.generateImageAsync({ projectRoot: root }, {
+    src: master, width: size, height: size, resizeMode: "contain", ...options,
   });
   return source;
 }
 
-// Export platform sizes only; never crop, redraw, or overwrite the supplied logo.
-// iOS requires a square, opaque PNG. The logo sits on its own sky-to-meadow gradient
-// (wolfari-icon-background.png, sampled from the logo's edges), so the artwork reaches
-// the tile edges and the OS mask is the only rounding: no mint frame, no double corner.
-const fullBleed = await compositeImagesAsync({
-  foreground: await resizeLogo(iconSize),
-  background: await readFile(join(assetsDirectory, "wolfari-icon-background.png")),
-  x: 0,
-  y: 0,
-});
-const flatPath = join(tmpdir(), `wolfari-app-icon-${process.pid}.png`);
-await writeFile(flatPath, fullBleed);
-const { source: appIcon } = await generateImageAsync({ projectRoot }, {
-  src: flatPath, width: iconSize, height: iconSize, resizeMode: "cover", backgroundColor, removeTransparency: true,
-});
-await rm(flatPath, { force: true });
-const splashIcon = await resizeLogo(iconSize);
-
-// The entire rounded-square logo fits inside Android's central 66/108 safe circle.
-// Padding belongs in the foreground asset; Expo resizes the full layer to 108dp.
-const foregroundSize = 512;
-const foreground = await resizeLogo(foregroundSize);
-const background = await generateImageBackgroundAsync({
-  width: iconSize,
-  height: iconSize,
-  backgroundColor: "transparent",
-  resizeMode: "contain",
-});
-const adaptiveIcon = await compositeImagesAsync({
-  foreground,
-  background,
-  x: (iconSize - foregroundSize) / 2,
-  y: (iconSize - foregroundSize) / 2,
-});
-
-for (const [filename, data] of [
-  ["wolfari-app-icon.png", appIcon],
-  ["wolfari-adaptive-foreground.png", adaptiveIcon],
-  ["wolfari-splash-icon.png", splashIcon],
-]) {
-  await writeFile(join(assetsDirectory, filename), data);
-  console.log(`Exported assets/images/${filename}`);
+async function place(background, size, dy = 0) {
+  const canvas = PNG.sync.read(background);
+  return imageUtils.compositeImagesAsync({
+    foreground: await resize(size), background, x: (canvas.width - size) / 2, y: (canvas.height - size) / 2 + dy,
+  });
 }
+
+const save = (name, buffer) => writeFile(join(directory, `wolfari-${name}.png`), buffer);
+
+function opaque(buffer) {
+  const png = PNG.sync.read(buffer);
+  return PNG.sync.write(png, { colorType: 2 });
+}
+
+/** White stencil: Wolfi's ink lines become the gaps that keep the face readable. */
+function silhouette(buffer) {
+  const png = PNG.sync.read(buffer);
+  for (let offset = 0; offset < png.data.length; offset += 4) {
+    const luminance = (png.data[offset] + png.data[offset + 1] + png.data[offset + 2]) / 3;
+    if (luminance < 70) png.data[offset + 3] = 0;
+    png.data.fill(255, offset, offset + 3);
+    if (png.data[offset + 3] <= 1) png.data.fill(0, offset, offset + 4);
+  }
+  return PNG.sync.write(png);
+}
+
+const { source: backdropPng } = await imageUtils.generateImageAsync({ projectRoot: root }, {
+  src: backdrop, width: 1024, height: 1024, resizeMode: "cover",
+});
+const transparent = await imageUtils.generateImageBackgroundAsync({
+  width: 1024, height: 1024, backgroundColor: "transparent", resizeMode: "contain",
+});
+const paperSquare = await imageUtils.generateImageBackgroundAsync({
+  width: 160, height: 160, backgroundColor: paper, resizeMode: "contain",
+});
+
+// 560 px keeps every visible pixel inside Android's 66/108 safe circle.
+const adaptive = await place(transparent, 560);
+await save("app-icon", opaque(await place(backdropPng, 860, 30)));
+await save("adaptive-foreground", adaptive);
+await save("adaptive-monochrome", silhouette(adaptive));
+await save("splash-icon", await resize(456));
+await save("avatar", opaque(await place(paperSquare, 144, 4)));
+await save("favicon", await resize(64));

@@ -3,6 +3,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSession } from "@/features/auth/session/session-provider";
 import { colors, radii, shadows, typography } from "@/shared/theme/tokens";
+import { BrandLockup } from "@/shared/ui/brand/brand-lockup";
 import { Button } from "@/shared/ui/button";
 import { designAssets, type DesignIconName } from "@/shared/ui/design-assets";
 import { DesignIcon } from "@/shared/ui/design-icon";
@@ -22,7 +23,9 @@ export default function GuestScreen() {
   const authenticated = status === "authenticated";
   const start = () => router.push(authenticated ? "/(tabs)" : "/sign-up");
   return <Screen header={<>
-    <Image source={designAssets.logo} style={styles.logo} contentFit="contain" accessibilityLabel="Wolfari" />
+    <View accessible accessibilityRole="image" accessibilityLabel="Wolfari" style={styles.brand}>
+      <BrandLockup />
+    </View>
     <View style={styles.flex} />
     <Button label={authenticated ? "Tài khoản" : "Đăng nhập"} variant="glass" compact onPress={() => router.push(authenticated ? "/(tabs)/profile" : "/sign-in")} />
   </>}>
@@ -59,12 +62,12 @@ export default function GuestScreen() {
   </Screen>;
 }
 const styles = StyleSheet.create({
-  logo: { width: 140, height: 44 },
+  brand: { flexDirection: "row", alignItems: "center" },
   flex: { flex: 1 },
   stack: { gap: 8 },
   heroWrap: { marginTop: 4 },
   hero: { height: 280, borderRadius: radii.cardLarge, borderWidth: 6, borderColor: colors.surface, overflow: "hidden", ...shadows.card },
-  mascot: { width: 100, height: 84, position: "absolute", right: -8, top: -32 },
+  mascot: { width: 84, height: 104, position: "absolute", right: -4, top: -54 },
   badge: { position: "absolute", bottom: 14, left: 12, maxWidth: "92%", borderRadius: radii.pill, paddingHorizontal: 10, paddingVertical: 8, backgroundColor: colors.surface, flexDirection: "row", alignItems: "center", gap: 6 },
   badgeText: { ...typography.footnote, fontSize: 12, color: colors.ink, flexShrink: 1 },
   title: { ...typography.largeTitle, fontSize: 30, lineHeight: 38, letterSpacing: -0.5 },

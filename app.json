@@ -16,8 +16,9 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#DDF7EF",
-        "foregroundImage": "./assets/images/wolfari-adaptive-foreground.png"
+        "backgroundColor": "#EAF0FF",
+        "foregroundImage": "./assets/images/wolfari-adaptive-foreground.png",
+        "monochromeImage": "./assets/images/wolfari-adaptive-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.tanthanh_67.Wolfarimobile"
@@ -25,7 +26,7 @@
     "web": {
       "bundler": "metro",
       "output": "single",
-      "favicon": "./assets/images/wolfari-app-icon.png"
+      "favicon": "./assets/images/wolfari-favicon.png"
     },
     "plugins": [
       [
@@ -39,13 +40,13 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#E6EEFF",
-          "image": "./assets/figma/mascot.png",
-          "imageWidth": 176,
+          "backgroundColor": "#EAF0FF",
+          "image": "./assets/images/wolfari-splash-icon.png",
+          "imageWidth": 152,
           "resizeMode": "contain",
           "dark": {
-            "backgroundColor": "#E6EEFF",
-            "image": "./assets/figma/mascot.png"
+            "backgroundColor": "#EAF0FF",
+            "image": "./assets/images/wolfari-splash-icon.png"
           }
         }
       ],
@@ -71,8 +72,8 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/images/wolfari-adaptive-foreground.png",
-          "color": "#0E8C8C"
+          "icon": "./assets/images/wolfari-notification.png",
+          "color": "#245CB8"
         }
       ],
       "expo-sharing"
