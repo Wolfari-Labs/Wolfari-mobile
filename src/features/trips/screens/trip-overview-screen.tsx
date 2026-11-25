@@ -3,10 +3,10 @@ import { Text, View } from "react-native";
 
 import { colors, typography } from "@/shared/theme/tokens";
 import { Button } from "@/shared/ui/button";
+import { Feedback } from "@/shared/ui/feedback";
 import {
   EmptyState,
   IconButton,
-  Notice,
   ResourceFeedback,
   SectionLink,
   ui,
@@ -19,7 +19,7 @@ import { TripCard } from "../components/trip-card";
 import { openTrip, TripNavigation } from "../components/trip-navigation";
 import { useTrip } from "../hooks/use-trip";
 import { money as budgetNumber, moneyLabel } from "../model/local-parity";
-import { activityDay, dateKey, sortedActivities, tripDates } from "../utils";
+import { activityDay, dateKey, sortedActivities } from "../utils";
 
 function packingTile(done: number, total: number) {
   if (!total) return { value: "Chưa có đồ", label: "Thêm đồ cần mang theo" };
@@ -74,9 +74,8 @@ export default function TripOverviewScreen() {
       {trip && plan && (
         <>
           <TripCard trip={trip} interactive={false} />
-          <Text selectable style={typography.footnote}>{tripDates(trip)}</Text>
           {trip.budget_amount && budgetNumber(trip.budget_amount) ? <Text style={typography.footnote}>Ngân sách dự kiến: {moneyLabel(budgetNumber(trip.budget_amount)!)}</Text> : null}
-          {cover === "failed" && !trip.cover_image_available && <Notice>Chuyến đi đã tạo nhưng ảnh bìa chưa tải lên được. Vào Cài đặt → Chỉnh sửa thông tin để thử lại.</Notice>}
+          {cover === "failed" && !trip.cover_image_available && <Feedback tone="warning" message="Chuyến đi đã tạo nhưng ảnh bìa chưa tải lên được. Vào Cài đặt → Chỉnh sửa thông tin để thử lại." />}
           <TripNavigation id={id} active="overview" />
           {trip.description && (
             <Text style={[typography.body, { color: colors.muted }]}>
@@ -117,6 +116,7 @@ export default function TripOverviewScreen() {
           {!activities.length && (
             <EmptyState
               title="Ngày đầu tiên, nhiều mong đợi"
+              scene="greet"
               message="Thêm những điểm dừng và trải nghiệm để cả nhóm cùng chuẩn bị."
               action={
                 plan.permissions.can_edit ? (

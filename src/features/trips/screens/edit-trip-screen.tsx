@@ -1,3 +1,4 @@
+import { DesignPopup } from "@/shared/ui/design-popup";
 import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
 import { useState } from "react";
@@ -33,6 +34,7 @@ const RANGE_CONFLICT = "Một số hoạt động hoặc dress code theo ngày �
 
 function EditTripForm({ resource, onReplace }: { resource: ReturnType<typeof useTrip>; onReplace(): void }) {
   const { trip } = resource.data!; const command = useCommand();
+  const [saved, setSaved] = useState(false);
   const [base] = useState(trip);
   const stale = trip.plan_version !== base.plan_version || trip.export_revision !== base.export_revision;
   const blocked = stale || resource.loading || !!resource.error;
@@ -87,9 +89,12 @@ function EditTripForm({ resource, onReplace }: { resource: ReturnType<typeof use
       }
       return true;
     });
-    if (result) router.replace({ pathname: "/trip/[id]/settings", params: { id: trip.id } });
+    if (result) setSaved(true);
   }
   return <Screen title="Chỉnh sửa chuyến đi" bottomPadding={24} footer={<Button label="Lưu thay đổi" disabled={blocked} loading={command.busy} onPress={() => { void save(); }} />}>
+    {saved && <DesignPopup kind="tripEdited" message="Bạn có thể tiếp tục quản lý các tùy chọn của chuyến đi."
+      onPrimary={() => router.dismissTo({ pathname: "/trip/[id]/settings", params: { id: trip.id } })}
+      onClose={() => { setSaved(false); void resource.reload().then(latest => { if (latest) onReplace(); }); }} />}
     <TripCoverImage trip={trip} fallback={coverFor(trip)} preview={cover ? cover.uri : undefined} style={{ width: "100%", height: 166, borderRadius: 24 }} />
     <View style={[ui.row, { flexWrap: "wrap" }]}>
       <Button label={trip.cover_image_available || cover ? "Đổi ảnh bìa" : "Thêm ảnh bìa"} variant="soft" compact disabled={command.busy} onPress={() => { void chooseCover(); }} />
