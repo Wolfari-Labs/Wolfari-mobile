@@ -71,3 +71,22 @@ export type RouteMode = "DRIVING" | "WALKING" | "CYCLING";
 export type TravelRoute = { distance_m: number; duration_seconds: number; geometry: { latitude: number; longitude: number }[] } | null;
 /** `attribution` (OpenStreetMap credit + fix-the-map link) must be shown with the route. */
 export type TravelRouteMeta = { status: "SUCCESS" | "NO_RESULT"; provider: string; stale: boolean; warnings: string[]; attribution?: { text: string; url: string | null }[] };
+
+/** FR-TI01: GET /travel/weather — one day at one point (Open-Meteo through Travel). */
+export type WeatherDay = { date: string; temperature_max_c: number | null; temperature_min_c: number | null; rain_probability: number | null; uv_index: number | null };
+export type WeatherMeta = { status: "SUCCESS" | "NO_RESULT"; provider: string; fetched_at: string | null; stale: boolean; is_mock: boolean; warnings: string[]; attribution: { text: string; url: string }[] };
+
+/** FR-DS01/FR-DS03: rule-based suggestions previewed by the server, applied only when chosen. */
+export type RecommendationType = "PACKING" | "DRESS_CODE" | "ALL";
+export type RecommendationItem = {
+  id: string; kind: "PACKING" | "DRESS_CODE"; reasons: string[]; rule_ids: string[]; warnings: string[]; date?: string;
+  packing_item?: { name: string; quantity: string; unit?: string; category?: string };
+  dress_code?: { label: string; description?: string; activity_id: string };
+};
+export type RecommendationSource = { provider: string; fetched_at: string | null; stale: boolean; is_mock: boolean; attribution: { text: string; url: string }[] };
+export type Recommendation = {
+  id: string; trip_id: string; type: RecommendationType; status: "PREVIEWED" | "APPLIED" | "REJECTED" | "EXPIRED";
+  rule_version: string; base_plan_version: number; applied_plan_version: number | null; created_at: string; expires_at: string;
+  can_apply: boolean; items: RecommendationItem[]; warnings: string[]; sources: RecommendationSource[];
+  applied?: { item_ids: string[]; created: { item_id: string; entity_type: "PACKING_ITEM" | "DRESS_CODE"; id: string }[]; skipped: { item_id: string; reason: string }[] };
+};

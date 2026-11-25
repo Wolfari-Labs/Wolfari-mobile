@@ -11,8 +11,15 @@ import { useTrip } from "../hooks/use-trip";
 export default function TripToolsScreen() {
   const resource = useTrip(); const { data, id } = resource;
   const done = data?.plan.packing_items.filter(item => item.status === "COMPLETED").length ?? 0;
+  const total = data?.plan.packing_items.length ?? 0;
   return <Screen title={data?.trip.name ?? "Tiện ích chuyến đi"} tab="trips" onRefresh={() => { void resource.reload(); }} refreshing={resource.loading && !!data}><ResourceFeedback {...resource} hasData={!!data} onRetry={() => { void resource.reload(); }} />{data && <><TripNavigation id={id} active="tools" /><Heading title="Tiện ích chuyến đi" />
-    <View style={ui.section}><Text style={typography.footnote}>HÀNH LÝ CỦA NHÓM</Text><Text style={typography.largeTitle}>{done} / {data.plan.packing_items.length} món</Text><Progress done={done} total={data.plan.packing_items.length} /></View>
+    {total > 0 && (
+      <View style={ui.section}>
+        <Text style={typography.footnote}>HÀNH LÝ CỦA NHÓM</Text>
+        <Text style={typography.largeTitle}>{done} / {total} món</Text>
+        <Progress done={done} total={total} />
+      </View>
+    )}
     <View style={[layered.panel, layered.rows]}>
     <SectionLink grouped title="Hành lý" icon="bag" onPress={() => router.push({ pathname: "/trip/[id]/packing", params: { id } })} />
     <SectionLink grouped title="Dress code" icon="shirt" onPress={() => router.push({ pathname: "/trip/[id]/dress-code", params: { id } })} />

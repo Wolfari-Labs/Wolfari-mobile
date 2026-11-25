@@ -8,6 +8,7 @@ import { DressReferenceImage } from './dress-reference-image';
 import { useCommand } from "@/shared/hooks/use-command";
 import { colors, fonts, pastelTones, radii, shadows, typography } from "@/shared/theme/tokens";
 import { Button } from "@/shared/ui/button";
+import { Dialog } from "@/shared/ui/dialog";
 import { Feedback } from "@/shared/ui/feedback";
 import { Snackbar } from "@/shared/ui/toast";
 import { FormField } from "@/shared/ui/form-field";
@@ -215,7 +216,7 @@ export function DressCodeList({ api, trip, plan, days, reload }: Props) {
       })}
     </View>)}
 
-    {!visible.length && <EmptyState icon="shirt"
+    {!visible.length && <EmptyState icon="shirt" scene="noMemories"
       title={plan.dress_codes.length ? "Chưa có dress code ở phạm vi này" : "Chưa có dress code"}
       message={plan.dress_codes.length ? "Chọn phạm vi khác để xem các hướng dẫn đã lưu." : editable ? "Chọn nhanh một gợi ý bên dưới hoặc bấm + để tự thêm cho cả nhóm." : "Hướng dẫn trang phục của nhóm sẽ xuất hiện tại đây."}
       action={editable && !plan.dress_codes.length ? <View style={styles.suggestions}>
@@ -274,12 +275,12 @@ export function DressCodeList({ api, trip, plan, days, reload }: Props) {
           onPress={() => { command.clearError(); setSaved(undefined); closeForm(); setDeleting(editingCode); }} />}
       </>}
     </Sheet>
-    <Sheet visible={!!deleting} title="Xóa dress code?" dismissible={!busy} onClose={() => setDeleting(undefined)}>
-      <Text style={typography.body}>“{deleting?.label}” sẽ bị xóa khỏi kế hoạch chung của cả nhóm.</Text>
+    <Dialog kind="confirm" icon="deleted" visible={!!deleting} title="Xóa dress code?" dismissible={!busy} onClose={() => setDeleting(undefined)}
+      message={`“${deleting?.label ?? ""}” sẽ bị xóa khỏi kế hoạch chung của cả nhóm.`}>
       {failure}
       <Button label="Xóa dress code" variant="destructive" loading={busy} onPress={() => { void remove(); }} />
       <Button label="Giữ lại" variant="soft" disabled={busy} onPress={() => setDeleting(undefined)} />
-    </Sheet>
+    </Dialog>
   </>;
 }
 
