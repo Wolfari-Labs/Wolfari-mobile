@@ -67,6 +67,7 @@ export const designIcons = {
   wifi: { line: require("@/assets/figma/wifi.svg") },
   battery: { line: require("@/assets/figma/battery.svg") },
   bell: { fill: require("@/assets/brand/icons/fill/bell.svg"), spark: require("@/assets/brand/icons/spark/bell.svg"), line: require("@/assets/brand/icons/line/bell.svg"), sparkAt: [19.6, 4.4] },
+  qr: { line: require("@/assets/brand/icons/line/qr.svg") },
   plus: { line: require("@/assets/brand/icons/line/plus.svg") },
   compass: { fill: require("@/assets/brand/icons/fill/compass.svg"), spark: require("@/assets/brand/icons/spark/compass.svg"), line: require("@/assets/brand/icons/line/compass.svg"), sparkAt: [12, 12] },
   user: { fill: require("@/assets/brand/icons/fill/user.svg"), line: require("@/assets/brand/icons/line/user.svg") },

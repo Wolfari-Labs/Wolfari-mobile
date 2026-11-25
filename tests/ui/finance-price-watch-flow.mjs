@@ -433,7 +433,7 @@ try {
 
   // Side links live on the overview tab; record tabs show records only.
   await button('Tùy chọn quỹ').click();
-  await button('Tổng quan').click();
+  await button('Tài khoản & ngân sách').click();
   assert.equal(await button('Công cụ quỹ mở rộng').count(), 0, 'Secondary tools stay collapsed by default.');
   await button('Công cụ và hướng dẫn').click();
   await button('Công cụ quỹ mở rộng').click();

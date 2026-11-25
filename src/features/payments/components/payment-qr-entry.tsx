@@ -3,7 +3,7 @@ import { useCallback, useState } from "react";
 import { Keyboard, Pressable, StyleSheet, Text, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 
-import { colors, gradients, radii, shadows, typography } from "@/shared/theme/tokens";
+import { colors, fonts, gradients, radii, shadows, typography } from "@/shared/theme/tokens";
 import { DesignIcon } from "@/shared/ui/design-icon";
 import { Button } from "@/shared/ui/button";
 import { Feedback } from "@/shared/ui/feedback";
@@ -17,6 +17,7 @@ import { Notice } from "@/shared/ui/journal";
 import { PaymentQrCamera } from "./payment-qr-camera";
 import { PaymentQrReview } from "./payment-qr-review";
 import type { PaymentSimulationOptions } from './payment-qr-transfer';
+import { QuickTransfer, type QuickTransferRecord } from "./quick-transfer";
 
 type Mode = "camera" | "paste" | "manual";
 
@@ -54,7 +55,7 @@ function ModeSwitch({ mode, onChange }: { mode: Mode; onChange(mode: Mode): void
   </View>;
 }
 
-function PaymentQrSession({ onClose, tripId, ...simulation }: { onClose: () => void; tripId?: string } & PaymentSimulationOptions) {
+function PaymentQrSession({ onClose, tripId, record, ...simulation }: { onClose: () => void; tripId?: string; record?: QuickTransferRecord } & PaymentSimulationOptions) {
   const [mode, setMode] = useState<Mode>("camera");
   const [raw, setRaw] = useState("");
   const [result, setResult] = useState<PaymentQrResult>();
@@ -64,8 +65,12 @@ function PaymentQrSession({ onClose, tripId, ...simulation }: { onClose: () => v
     setRaw("");
   }, []);
   const switchTo = (next: Mode) => { setResult(undefined); setRaw(""); setMode(next); };
-  return <Sheet visible title={simulation.simulationOnly ? 'Thanh toán mô phỏng' : result?.ok ? "Chuyển khoản" : mode === "manual" ? "Nhập thông tin chuyển khoản" : "Quét QR chuyển khoản"} onClose={onClose}>
-    {result ? <>
+  return <Sheet visible title={simulation.simulationOnly ? 'Thanh toán mô phỏng' : result?.ok ? (record ? "Kiểm tra khoản chi" : "Chuyển khoản") : mode === "manual" ? "Nhập thông tin chuyển khoản" : "Quét QR chuyển khoản"} onClose={onClose}>
+    {result?.ok && record ? <>
+      {mode === "manual" && <Notice>Thông tin nhập tay chưa được ngân hàng kiểm tra. Trước khi chuyển, đối chiếu tên người nhận hiện trong ứng dụng ngân hàng.</Notice>}
+      <QuickTransfer payment={result.payment} record={record} onClose={onClose} onScanAgain={() => { setResult(undefined); setMode("camera"); }}
+        onEditRecipient={mode === "manual" ? () => setResult(undefined) : undefined} />
+    </> : result ? <>
       {result.ok ? <>
         {mode === "manual" && <Notice>Thông tin nhập tay chưa được ngân hàng kiểm tra. Trước khi chuyển, đối chiếu tên người nhận hiện trong ứng dụng ngân hàng.</Notice>}
         <PaymentQrReview payment={result.payment} tripId={tripId} {...simulation} />
@@ -87,30 +92,42 @@ function PaymentQrSession({ onClose, tripId, ...simulation }: { onClose: () => v
   </Sheet>;
 }
 
-export function PaymentQrEntry(simulation: PaymentSimulationOptions = {}) {
+/** `record`: the real trip fund; the scanned payment becomes an expense (QuickTransfer). */
+export function PaymentQrEntry({ record, onOpenChange, compact = false, ...simulation }: PaymentSimulationOptions & {
+  record?: QuickTransferRecord;
+  /** Small tile beside another action. */
+  compact?: boolean; onOpenChange?(open: boolean): void } = {}) {
   const { simulationOnly } = simulation;
   const { id } = useLocalSearchParams<{ id?: string }>();
-  const [open, setOpen] = useState(false);
+  const [open, setOpenState] = useState(false);
+  const setOpen = useCallback((value: boolean) => { setOpenState(value); onOpenChange?.(value); }, [onOpenChange]);
   const focused = useIsFocused();
-  useFocusEffect(useCallback(() => () => setOpen(false), []));
+  useFocusEffect(useCallback(() => () => setOpen(false), [setOpen]));
   return <>
     <Pressable cssInterop={false} accessibilityRole="button" accessibilityLabel={simulationOnly ? 'Quét QR thanh toán mô phỏng' : 'Quét QR thanh toán'}
-      onPress={() => setOpen(true)} style={({ pressed }) => [styles.tile, pressed && { opacity: 0.85, transform: [{ scale: 0.99 }] }]}>
+      onPress={() => setOpen(true)} style={({ pressed }) => [compact ? styles.compact : styles.tile, pressed && { opacity: 0.85, transform: [{ scale: 0.99 }] }]}>
+      {compact ? <>
+        <DesignIcon name="qr" size={24} tintColor={colors.teal} />
+        <Text style={styles.compactText}>Quét QR</Text>
+      </> : <>
       <LinearGradient colors={gradients.primary} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.icon}>
         <DesignIcon name="wallet" size={24} tintColor={colors.onAccent} />
       </LinearGradient>
       <View style={{ flex: 1, gap: 2 }}>
         <Text style={typography.headline}>{simulationOnly ? 'Quét QR thanh toán mô phỏng' : 'Quét QR thanh toán'}</Text>
-        <Text style={typography.footnote}>{simulationOnly ? 'Thử chi tiền từ quỹ, không chuyển tiền thật.' : 'Chi tiền từ quỹ bằng VietQR · dành cho người giữ quỹ'}</Text>
+        <Text style={typography.footnote}>{simulationOnly ? 'Thử chi tiền từ quỹ, không chuyển tiền thật.' : 'Quét mã, mở app ngân hàng điền sẵn và tự ghi khoản chi'}</Text>
       </View>
       <DesignIcon name="chevron" size={18} tintColor={colors.muted} />
+      </>}
     </Pressable>
-    {open && focused && <PaymentQrSession tripId={id} {...simulation} onClose={() => setOpen(false)} />}
+    {open && focused && <PaymentQrSession tripId={id} record={record} {...simulation} onClose={() => setOpen(false)} />}
   </>;
 }
 
 const styles = StyleSheet.create({
   tile: { flexDirection: "row", alignItems: "center", gap: 14, padding: 14, borderRadius: radii.card, backgroundColor: colors.surface, ...shadows.glass },
+  compact: { width: 76, minHeight: 56, alignItems: "center", justifyContent: "center", gap: 2, borderRadius: 20, backgroundColor: colors.surface, ...shadows.glass },
+  compactText: { fontFamily: fonts.bold, fontSize: 12, lineHeight: 16, color: colors.teal },
   manual: { gap: 12 },
   modes: { flexDirection: "row", gap: 4, padding: 4, borderRadius: radii.pill, backgroundColor: colors.fill },
   mode: { flex: 1, minHeight: 40, alignItems: "center", justifyContent: "center", borderRadius: radii.pill },
