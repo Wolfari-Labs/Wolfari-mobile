@@ -2,6 +2,7 @@ import { ApiError, type ApiClient } from '../../shared/api/api-client.ts';
 import { decodeRow, object, pageQuery, validateMoney } from '../finance/api.ts';
 import { money, type Page } from '../finance/extended-model.ts';
 import { calendarLabel, dateKey, localTimestamp, parseDate, timeLabel } from '../trips/utils.ts';
+import { ANY_SOURCE, decodeCapabilities, type Capabilities } from './capabilities.ts';
 export type WatchInput = {
   /** The server selects the provider on create. Edits retain the watch's original provider. */
   provider?: string;
@@ -133,6 +134,15 @@ export function watchInput(values: Record<string, string>, now = Date.now()): Wa
 export function createPriceWatchApi(client: ApiClient) {
   const enc = encodeURIComponent;
   return {
+    /** The fare source and what it compares; an older server without this API offers everything. */
+    async capabilities(signal?: AbortSignal): Promise<Capabilities> {
+      try {
+        return decodeCapabilities(await client.request<unknown>('/price-watch-capabilities', { signal }));
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 404) return ANY_SOURCE;
+        throw error;
+      }
+    },
     async list(tripId: string, cursor?: string | null, signal?: AbortSignal): Promise<Page<Watch>> {
       const { data, meta } = await client.requestWithMeta<unknown, { next_cursor: string | null }>(
         `/trips/${enc(tripId)}/price-watches?${pageQuery(cursor)}`,
