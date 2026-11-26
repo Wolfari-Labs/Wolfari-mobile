@@ -4,8 +4,19 @@ export const lifecycleLabels = { UPCOMING: "Sắp tới", ONGOING: "Đang đi", 
 export function dateLabel(value: string, timezone = "Asia/Ho_Chi_Minh") {
   return new Intl.DateTimeFormat("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: timezone }).format(new Date(value));
 }
-// end_at is exclusive (web stores next-day 00:00), so show the last day the trip covers, like web does (end_at - 1 ms).
-export function tripDates(trip: Trip) { return `${dateLabel(trip.start_at, trip.timezone)} – ${calendarLabel(lastTripDay(trip))}`; }
+export function tripPeriod(trip: Pick<Trip, "start_at" | "end_at" | "timezone">) {
+  const first = dateKey(trip.start_at, trip.timezone);
+  const last = lastTripDay(trip);
+  const [firstYear, firstMonth, firstDay] = first.split("-").map(Number);
+  const [lastYear, lastMonth, lastDay] = last.split("-").map(Number);
+  const endLabel = `${lastDay} tháng ${lastMonth}, ${lastYear}`;
+  let label = endLabel;
+  if (firstYear !== lastYear) label = `${firstDay} tháng ${firstMonth}, ${firstYear} – ${endLabel}`;
+  else if (firstMonth !== lastMonth) label = `${firstDay} tháng ${firstMonth} – ${endLabel}`;
+  else if (firstDay !== lastDay) label = `${firstDay}–${endLabel}`;
+  const days = 1 + (Date.parse(last) - Date.parse(first)) / 86_400_000;
+  return { label, days };
+}
 export function dateKey(value: string, timezone: string) {
   const parts = new Intl.DateTimeFormat("en-CA", { year: "numeric", month: "2-digit", day: "2-digit", timeZone: timezone }).formatToParts(new Date(value));
   const part = (key: string) => parts.find(p => p.type === key)?.value;

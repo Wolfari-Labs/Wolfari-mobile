@@ -209,8 +209,9 @@ try {
   await button("Thêm vào sổ mẫu").click();
   await button("Xem xét Vé tham quan mẫu").click();
   await button("Xác nhận trong bản mẫu").click();
-  await page.getByText(/Số dư khả dụng không đủ/).waitFor();
+  await page.getByTestId("snackbar-error").getByText(/Số dư khả dụng không đủ/).waitFor();
   await button("Giữ nguyên").click();
+  await page.getByTestId("snackbar-error").waitFor({ state: "hidden" });
   await button("Hủy Vé tham quan mẫu").click();
   await button("Xác nhận hủy khoản").click();
   await button("Xem xét Hoàn khoản ứng trước").click();

@@ -54,7 +54,7 @@ export function FundPaymentTools({ fund, timezone }: { fund: Fund; timezone: str
       <Feedback message={journal.error} />
       {!journal.ready && <Button label="Đặt lại sổ mô phỏng" variant="text" disabled={journal.busy} onPress={() => { void journal.clear(); }} />}
     </>}
-    <PaymentQrEntry onSimulatedPayment={complete}
+    <PaymentQrEntry simulationOnly onSimulatedPayment={complete}
       simulationAvailable={totals?.available ?? fund.available_balance}
       simulationSuccessMessage="Đã trừ số dư và lưu khoản chi vào sổ quỹ mô phỏng của chuyến đi. Đóng màn hình để xem lại số dư và lịch sử."
     />

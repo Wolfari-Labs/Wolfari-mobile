@@ -36,7 +36,7 @@ test('QR image is published only when the NAPAS payload and SVG match this instr
   ])
     assert.throws(() => instructionQrImage({ ...instruction, ...change }), JSON.stringify(change));
 });
-test('bank app deeplink pre-fills only this instruction and only for autofill apps', () => {
+test('bank app deeplink pre-fills only this instruction and only for known bank apps', () => {
   const instruction = {
     environment: 'LIVE', bank_code: 'VCB', bank_bin: '970436', account_number: '0001234567',
     amount: '180000', reference: 'TESTREF 01', recipient_name: 'TEST ONLY',
@@ -47,7 +47,7 @@ test('bank app deeplink pre-fills only this instruction and only for autofill ap
     app: 'mb', ba: '0001234567@vcb', am: '180000', tn: 'TESTREF 01', url: 'wolfarimobile://', bn: 'TEST ONLY',
   });
   for (const [change, app] of [
-    [{}, 'vcb'],
+    [{}, 'not-a-bank-app'],
     [{ environment: 'PRODUCTION' }, 'mb'],
     [{ bank_code: 'BNP HN' }, 'mb'],
     [{ account_number: '0001-234' }, 'mb'],
@@ -178,6 +178,16 @@ test('Initial version rejection unlocks for reload but uncertain retry conflict 
     }),
   );
   assert.equal(uncertain.pending.key, intent.key);
+});
+test('a confirmed provider configuration rejection unlocks a new watch but preserves an uncertain retry', async () => {
+  const write = { ...intent, kind: 'watch' };
+  const unavailable = () => { throw new ApiError('SERVICE_UNAVAILABLE', 'unavailable', 503, false, undefined, 'PRICE_PROVIDER_NOT_CONFIGURED'); };
+  const journal = createCommandJournal(memory(), 'watch');
+  await assert.rejects(journal.send(write, unavailable));
+  assert.equal(journal.pending, null);
+  await assert.rejects(journal.send(write, () => { throw new ApiError('NETWORK_ERROR', 'lost', 0, true); }));
+  await assert.rejects(journal.send(undefined, unavailable));
+  assert.equal(journal.pending.key, write.key);
 });
 test('202/recovery does not mean success; only committed matching operation clears the journal', async () => {
   const journal = createCommandJournal(memory(), 'op');

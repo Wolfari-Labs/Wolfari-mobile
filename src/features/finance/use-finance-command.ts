@@ -13,6 +13,7 @@ export function useFinanceCommand(
   tripId: string,
   kind: 'finance' | 'watch',
   onDone: () => Promise<unknown>,
+  onCommitted?: (intent: Pick<WriteIntent, "path" | "method" | "body">) => void,
 ) {
   const api = useApi();
   const journal = useMemo(() => {
@@ -42,15 +43,17 @@ export function useFinanceCommand(
       current = false;
     };
   }, [journal]);
-  const run = async (action: () => Promise<{ done: boolean; result?: unknown }>) => {
+  const run = async (action: () => Promise<{ done: boolean; result?: unknown }>, intent: Pick<WriteIntent, "path" | "method" | "body"> | null = journal.pending) => {
     setBusy(true);
     setMessage(undefined);
     try {
       const result = await action();
       if (result.done) {
         setLastResult(result.result);
-        setMessage('Server đã ghi nhận. Đang tải lại dữ liệu để đối chiếu.');
+        // The watch screen shows the new state itself.
+        setMessage(kind === 'watch' ? undefined : 'Server đã ghi nhận. Đang tải lại dữ liệu để đối chiếu.');
         await onDone();
+        if (intent) onCommitted?.(intent);
       } else
         setMessage(
           'Yêu cầu đang xử lý; chưa xác nhận thay đổi. Kiểm tra trạng thái hoặc gửi lại yêu cầu đã lưu.',
@@ -62,6 +65,8 @@ export function useFinanceCommand(
           ? 'Dữ liệu hoặc trạng thái đã đổi. Tải lại để đối chiếu; không tự ghi đè phiên bản mới. Nếu mất phản hồi, giữ nguyên yêu cầu đã lưu.'
           : errorMessage(e),
       );
+      if (kind === 'watch' && !journal.pending && e instanceof ApiError && e.reason === 'PROVIDER_QUERY_UNSUPPORTED')
+        return { done: false, formError: e };
       return undefined;
     } finally {
       setBusy(false);
@@ -87,6 +92,7 @@ export function useFinanceCommand(
           },
           api.finance.write,
         ),
+        input,
       ),
     retry: () => run(() => journal.send(undefined, api.finance.write)),
     check: () =>

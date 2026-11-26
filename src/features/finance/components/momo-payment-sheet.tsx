@@ -2,6 +2,7 @@ import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, Text } from 'react-native';
 import { openPaymentApp } from '@/features/payments/open-payment-app';
+import { paymentSandboxEnabled } from '@/features/payments/sandbox-config';
 import { useApi } from '@/shared/api/use-api';
 import { useResource } from '@/shared/hooks/use-resource';
 import { typography } from '@/shared/theme/tokens';
@@ -42,14 +43,14 @@ export function MomoPaymentSheet({ attempt, onClose, onUpdate, onRetry }: { atte
     {row && <>
       <Text style={typography.headline}>{labels[row.status] ?? 'Đang đối chiếu thanh toán'}</Text>
       {row.needs_reconciliation && <Text style={typography.body}>Kết quả cần người giữ quỹ đối soát tại công cụ quỹ.</Text>}
-      {row.payment_url && row.status === 'PENDING' && !row.needs_reconciliation && <Button label="Mở MoMo Test" onPress={() => {
+      {paymentSandboxEnabled && row.payment_url && row.status === 'PENDING' && !row.needs_reconciliation && <Button label="Mở MoMo Test" onPress={() => {
         setOpenError(undefined);
         void openPaymentApp(sandboxPaymentUrl(row.payment_url!)).catch(() => setOpenError('Không mở được thanh toán. Kiểm tra đã cài MoMo Test rồi thử lại.'));
       }} />}
       {openError && <Feedback message={openError} />}
       {row.status !== 'SUCCEEDED' && <Button label="Kiểm tra kết quả thanh toán" variant="soft" disabled={resource.loading} onPress={() => { void reload(); }} />}
-      {onRetry && !row.needs_reconciliation && ['FAILED', 'EXPIRED', 'CANCELLED'].includes(row.status) && <Button label="Tạo lần thanh toán mới" variant="soft" onPress={onRetry} />}
+      {paymentSandboxEnabled && onRetry && !row.needs_reconciliation && ['FAILED', 'EXPIRED', 'CANCELLED'].includes(row.status) && <Button label="Tạo lần thanh toán mới" variant="soft" onPress={onRetry} />}
     </>}
-    <Text style={typography.footnote}>Sau khi thanh toán, quay lại đây. App cập nhật khoản góp theo kết quả xác minh từ máy chủ.</Text>
+    {paymentSandboxEnabled && <Text style={typography.footnote}>Sau khi thanh toán, quay lại đây. App cập nhật khoản góp theo kết quả xác minh từ máy chủ.</Text>}
   </Sheet>;
 }

@@ -32,10 +32,12 @@ export function dragPosition(ids: string[], frames: ReadonlyMap<string, OrderFra
   return { translation, index };
 }
 
-export function dragScrollOffset(offset: number, pointerY: number, viewportHeight: number, contentHeight: number) {
+export function dragScrollOffset(offset: number, pointerY: number, viewportHeight: number, contentHeight: number, bottomInset = 0) {
   if (![offset, pointerY, viewportHeight, contentHeight].every(Number.isFinite) || viewportHeight <= 0) return offset;
-  const edge = Math.min(52, viewportHeight / 3);
-  const speed = pointerY < edge ? -9 : pointerY > viewportHeight - edge ? 9 : 0;
+  // The floating action bar covers the bottom of the ScrollView while editing.
+  const visibleHeight = Math.max(0, viewportHeight - bottomInset);
+  const edge = Math.min(52, visibleHeight / 3);
+  const speed = pointerY < edge ? -9 : pointerY > visibleHeight - edge ? 9 : 0;
   return Math.max(0, Math.min(Math.max(0, contentHeight - viewportHeight), offset + speed));
 }
 

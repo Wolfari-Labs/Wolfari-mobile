@@ -117,11 +117,24 @@ export function contributionForm(fund: Fund, row: Contribution, action: Paramete
     receipt: action === "report-transfer" ? { fundId: fund.id, field: "evidence_object_key" } : undefined,
     build: values => commands.contribution(fund, row, action, action === "amount" ? { amount: parseMoney(values.amount ?? "") } : reason ? { reason: text(values.reason ?? "", "Lý do") } : {}) };
 }
-export function expenseForm(fund: Fund, row?: Expense): FinanceFormSpec {
-  return { title: row ? "Sửa khoản chi" : "Tạo khoản chi", review: false, submitLabel: "Lưu khoản chi", description: "Lưu nháp trên máy chủ. Sau đó gửi duyệt; chỉ khi người giữ quỹ xác nhận đã chi mới ghi giảm số dư.",
-    initial: { title: row?.title ?? "", amount: row?.amount ?? "", category: row?.category ?? "", description: row?.description ?? "" },
-    fields: [titleField, amountField, { key: "category", label: "Danh mục (không bắt buộc)", max: 80 }, { key: "description", label: "Mô tả (không bắt buộc)", multiline: true, max: 10000 }], receipt: { fundId: fund.id, field: "receipt_object_key" },
-    build: values => commands.expense(fund, { title: text(values.title ?? "", "Nội dung", 200), amount: parseMoney(values.amount ?? ""), category: values.category?.trim() ? text(values.category, "Danh mục", 80) : null, description: values.description?.trim() ? text(values.description, "Mô tả", 10000) : null }, row) };
+export function expenseForm(fund: Fund, timezone: string, recorder: string, row?: Expense): FinanceFormSpec {
+  const today = dateLabel(new Date().toISOString(), timezone);
+  const initialDate = row?.paid_at ? dateLabel(row.paid_at, timezone) : today;
+  return { title: row ? "Sửa khoản chi" : "Ghi nhận khoản chi", review: false, submitLabel: "Lưu khoản chi", description: "Lưu nháp trên máy chủ. Sau đó gửi duyệt; chỉ khi người giữ quỹ xác nhận đã chi mới ghi giảm số dư.",
+    expense: { available: fund.available_balance, recorder },
+    initial: { title: row?.title ?? "", amount: row?.amount ?? "", category: row?.category ?? "", date: initialDate },
+    receipt: { fundId: fund.id, field: "receipt_object_key" },
+    build: values => {
+      const date = parseDate(values.date ?? "");
+      const now = new Date().toISOString();
+      const paidAt = date && (values.date === today ? now : localTimestamp(date, "12:00", timezone));
+      if (!paidAt) throw new Error("Ngày chi cần theo định dạng DD/MM/YYYY.");
+      if (paidAt > now) throw new Error("Ngày chi không được ở tương lai.");
+      return commands.expense(fund, { title: text(values.title ?? "", "Ghi chú", 200), amount: parseMoney(values.amount ?? ""), category: values.category?.trim() ? text(values.category, "Danh mục", 80) : null,
+        ...(row ? { description: row.description } : {}),
+        // An untouched date keeps the exact time already stored.
+        ...(row && values.date === initialDate ? {} : { paid_at: paidAt }) }, row);
+    } };
 }
 export function expenseActionForm(fund: Fund, row: Expense, action: Parameters<typeof commands.expenseAction>[2], timezone: string): FinanceFormSpec {
   const reason = action === "reject" || action === "reverse";

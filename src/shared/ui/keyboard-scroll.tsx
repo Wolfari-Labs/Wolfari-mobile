@@ -21,11 +21,14 @@ import {
 type KeyboardScrollContextValue = {
   scrollRef: RefObject<ScrollViewInstance | null>;
   keyboardHeight: number;
+  /** Top edge of the keyboard on screen; Infinity while hidden. */
+  keyboardTop: number;
   onScroll: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
+  setBottomInset: (height: number) => void;
   onViewportLayout: (height: number, pageY?: number) => void;
   scrollToField: (fieldNode: ViewInstance | null) => void;
   /** Live page scroll metrics, e.g. for edge auto-scroll while dragging. */
-  metrics: RefObject<{ offset: number; contentHeight: number; viewportHeight: number }>;
+  metrics: RefObject<{ offset: number; contentHeight: number; viewportHeight: number; bottomInset: number }>;
   onContentSizeChange: (width: number, height: number) => void;
 };
 
@@ -35,34 +38,69 @@ export function useKeyboardScroll() {
   return useContext(KeyboardScrollContext);
 }
 
-export function useKeyboardHeight() {
-  const [height, setHeight] = useState(0);
+/** Keyboard height and its top edge on screen (Infinity while hidden). */
+export function useKeyboardFrame() {
+  const [frame, setFrame] = useState({ height: 0, top: Infinity });
   useEffect(() => {
     if (Platform.OS === "web") return;
     const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
     const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
     const showSub = Keyboard.addListener(showEvent, (event) => {
-      setHeight(Math.max(0, event.endCoordinates?.height ?? 0));
+      const height = Math.max(0, event.endCoordinates?.height ?? 0);
+      const top = event.endCoordinates?.screenY;
+      setFrame({ height, top: height > 0 && typeof top === "number" && top > 0 ? top : Infinity });
     });
     const hideSub = Keyboard.addListener(hideEvent, () => {
-      setHeight(0);
+      setFrame({ height: 0, top: Infinity });
     });
     return () => {
       showSub.remove();
       hideSub.remove();
     };
   }, []);
-  return height;
+  return frame;
 }
+
+export function useKeyboardHeight() {
+  return useKeyboardFrame().height;
+}
+
+/**
+ * Android: how much of `ref`'s box the keyboard covers. When the system already resized the
+ * window this is 0, so the layout is never shrunk twice (which left an empty band above the
+ * keyboard); when it did not, it is the overlap to pad away. iOS keeps KeyboardAvoidingView.
+ */
+export function useKeyboardOverlap(ref: RefObject<ViewInstance | null>, keyboardTop: number) {
+  const [overlap, setOverlap] = useState(0);
+  const measure = useCallback(() => {
+    const node = ref.current;
+    if (Platform.OS !== "android" || !Number.isFinite(keyboardTop) || !node || typeof node.measureInWindow !== "function") {
+      setOverlap(0);
+      return;
+    }
+    node.measureInWindow((_x, y, _w, h) => setOverlap(h ? Math.max(0, Math.round(y + h - keyboardTop)) : 0));
+  }, [keyboardTop, ref]);
+  useEffect(() => {
+    measure();
+    // The window resize (if any) lands after the keyboard event; measure again once it has.
+    const settle = setTimeout(measure, 200);
+    return () => clearTimeout(settle);
+  }, [measure]);
+  return { overlap, onLayout: measure };
+}
+
+/** Space kept between the field being typed in and the keyboard (or any bar over the list). */
+const KEYBOARD_GAP = 24;
 
 export function KeyboardScrollProvider({ children }: PropsWithChildren) {
   const scrollRef = useRef<ScrollViewInstance | null>(null);
-  const keyboardHeight = useKeyboardHeight();
+  const keyboard = useKeyboardFrame();
+  const keyboardHeight = keyboard.height;
+  const keyboardTop = useRef(Infinity);
+  useEffect(() => { keyboardTop.current = keyboard.top; }, [keyboard.top]);
   const scrollOffset = useRef(0);
-  const viewportHeight = useRef(0);
-  const viewportTop = useRef(0);
   const focusedNode = useRef<ViewInstance | null>(null);
-  const metrics = useRef({ offset: 0, contentHeight: 0, viewportHeight: 0 });
+  const metrics = useRef({ offset: 0, contentHeight: 0, viewportHeight: 0, bottomInset: 0 });
 
   const onScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     scrollOffset.current = event.nativeEvent.contentOffset.y;
@@ -73,37 +111,39 @@ export function KeyboardScrollProvider({ children }: PropsWithChildren) {
     metrics.current.contentHeight = height;
   }, []);
 
-  const onViewportLayout = useCallback((height: number, pageY = 0) => {
-    viewportHeight.current = height;
-    metrics.current.viewportHeight = height;
-    if (pageY > 0) viewportTop.current = pageY;
+  const setBottomInset = useCallback((height: number) => {
+    metrics.current.bottomInset = height;
   }, []);
 
-  const ensureVisible = useCallback((node: ViewInstance | null, currentKbHeight: number) => {
-    if (!node || !scrollRef.current) return;
-    if (typeof node.measureInWindow !== "function") return;
-    node.measureInWindow((_x, y, _w, h) => {
-      if (!h && !y) return;
-      const windowHeight =
-        viewportHeight.current > 0
-          ? viewportTop.current + viewportHeight.current
-          : 780;
-      const effectiveKb = currentKbHeight > 0 ? currentKbHeight : 280;
-      const visibleBottom = windowHeight - effectiveKb - 36;
-      const fieldBottom = y + Math.max(h, 64) + 48; // Include helper/chips below input
-      if (fieldBottom > visibleBottom) {
-        const delta = fieldBottom - visibleBottom;
-        scrollRef.current?.scrollTo({
-          y: Math.max(0, scrollOffset.current + delta),
-          animated: true,
-        });
-      } else if (y < viewportTop.current + 24) {
-        const delta = viewportTop.current + 24 - y;
-        scrollRef.current?.scrollTo({
-          y: Math.max(0, scrollOffset.current - delta),
-          animated: true,
-        });
-      }
+  // pageY is accepted for older callers; visibility is measured directly in ensureVisible.
+  const onViewportLayout = useCallback((height: number, _pageY?: number) => {
+    metrics.current.viewportHeight = height;
+  }, []);
+
+  /**
+   * Scrolls just enough that the focused field sits inside the part of the list the user can see:
+   * below the list's top and above both the list's bottom (minus any bar over it) and the keyboard.
+   * Both rectangles are measured in window coordinates, so this works the same in a page, in a
+   * sheet, with or without KeyboardAvoidingView resizing the list.
+   */
+  const ensureVisible = useCallback((node: ViewInstance | null) => {
+    const list = scrollRef.current as unknown as ViewInstance | null;
+    if (!node || !list) return;
+    if (typeof node.measureInWindow !== "function" || typeof list.measureInWindow !== "function") return;
+    list.measureInWindow((_lx, listY, _lw, listHeight) => {
+      node.measureInWindow((_x, y, _w, h) => {
+        if (!listHeight || (!h && !y)) return;
+        const top = listY + 12;
+        const bottom = Math.min(listY + listHeight - metrics.current.bottomInset, keyboardTop.current) - KEYBOARD_GAP;
+        if (bottom <= top) return;
+        let delta = 0;
+        // The caret is at the end of what is being typed, so the field's bottom edge wins when
+        // the field is taller than the space left above the keyboard.
+        if (y + h > bottom) delta = y + h - bottom;
+        else if (y < top) delta = y - top;
+        if (Math.abs(delta) < 2) return;
+        scrollRef.current?.scrollTo({ y: Math.max(0, scrollOffset.current + delta), animated: true });
+      });
     });
   }, []);
 
@@ -113,29 +153,35 @@ export function KeyboardScrollProvider({ children }: PropsWithChildren) {
       if (!node) return;
       // Delay slightly so the keyboard animation / layout has started.
       setTimeout(() => {
-        ensureVisible(node, keyboardHeight);
+        if (focusedNode.current === node) ensureVisible(node);
       }, Platform.OS === "ios" ? 90 : 140);
     },
-    [ensureVisible, keyboardHeight],
+    [ensureVisible],
   );
 
+  // When the keyboard opens or changes size the list is resized after the event; check again
+  // once the new layout has settled.
   useEffect(() => {
-    if (keyboardHeight > 0 && focusedNode.current) {
-      ensureVisible(focusedNode.current, keyboardHeight);
-    }
+    if (keyboardHeight <= 0 || !focusedNode.current) return;
+    const node = focusedNode.current;
+    ensureVisible(node);
+    const settle = setTimeout(() => { if (focusedNode.current === node) ensureVisible(node); }, 280);
+    return () => clearTimeout(settle);
   }, [ensureVisible, keyboardHeight]);
 
   const value = useMemo(
     () => ({
       scrollRef,
       keyboardHeight,
+      keyboardTop: keyboard.top,
       onScroll,
       onViewportLayout,
+      setBottomInset,
       scrollToField,
       metrics,
       onContentSizeChange,
     }),
-    [keyboardHeight, onScroll, onViewportLayout, scrollToField, onContentSizeChange],
+    [keyboardHeight, keyboard.top, onScroll, onViewportLayout, setBottomInset, scrollToField, onContentSizeChange],
   );
 
   return (

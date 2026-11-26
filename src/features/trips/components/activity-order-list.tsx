@@ -265,7 +265,7 @@ export function ActivityOrderList({
       const metrics = page?.metrics.current;
       if (!current || current.settling || !metrics?.viewportHeight || Math.abs(current.dy) < 3) return;
       const local = current.pageY - viewportTop.current;
-      const next = dragScrollOffset(metrics.offset, local, metrics.viewportHeight, metrics.contentHeight);
+      const next = dragScrollOffset(metrics.offset, local, metrics.viewportHeight, metrics.contentHeight, metrics.bottomInset);
       if (next !== metrics.offset) {
         metrics.offset = next;
         page?.scrollRef.current?.scrollTo({ y: next, animated: false });

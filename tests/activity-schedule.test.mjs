@@ -7,7 +7,7 @@ import {
   calendarLabel,
   isTripDay,
   lastTripDay,
-  tripDates,
+  tripPeriod,
   tripDays,
 } from "../src/features/trips/utils.ts";
 
@@ -46,9 +46,21 @@ test("an end at local midnight does not add a trip day", () => {
 
 test("trip date label shows the last covered day, matching web (end_at - 1 ms)", () => {
   // Web-created: exclusive end at next-day 00:00 local.
-  assert.equal(tripDates(trip), "01/11/2026 – 02/11/2026");
+  assert.deepEqual(tripPeriod(trip), { label: "1–2 tháng 11, 2026", days: 2 });
   // Mobile-created: end at 23:59 of the last day shows the same day.
-  assert.equal(tripDates({ ...trip, end_at: "2026-11-02T16:59:00Z" }), "01/11/2026 – 02/11/2026");
+  assert.deepEqual(tripPeriod({ ...trip, end_at: "2026-11-02T16:59:00Z" }), tripPeriod(trip));
   // Never shows a day before the start.
-  assert.equal(tripDates({ ...trip, end_at: trip.start_at }), "01/11/2026 – 01/11/2026");
+  assert.deepEqual(tripPeriod({ ...trip, end_at: trip.start_at }), { label: "1 tháng 11, 2026", days: 1 });
+});
+
+test("trip periods retain both months or years when needed and count local calendar days across DST", () => {
+  assert.deepEqual(tripPeriod({ ...trip, start_at: "2026-10-30T17:00:00Z" }), {
+    label: "31 tháng 10 – 2 tháng 11, 2026", days: 3,
+  });
+  assert.deepEqual(tripPeriod({ ...trip, start_at: "2026-12-30T17:00:00Z", end_at: "2027-01-02T17:00:00Z" }), {
+    label: "31 tháng 12, 2026 – 2 tháng 1, 2027", days: 3,
+  });
+  assert.deepEqual(tripPeriod({ start_at: "2026-10-31T04:00:00Z", end_at: "2026-11-02T05:00:00Z", timezone: "America/New_York" }), {
+    label: "31 tháng 10 – 1 tháng 11, 2026", days: 2,
+  });
 });

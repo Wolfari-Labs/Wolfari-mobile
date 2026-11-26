@@ -8,7 +8,9 @@ export type OperationReceipt = Pick<OperationCommand, "kind" | "title" | "target
   key: string; tripId: string; operation?: MembershipOperation; rejection?: string;
 };
 type Pending = OperationReceipt & { command?: OperationCommand };
-type Snapshot = { ready: boolean; busy: boolean; pending?: Pending; error?: string; sendError?: string; result?: unknown };
+type Snapshot = { ready: boolean; busy: boolean; pending?: Pending; error?: string; sendError?: string; result?: unknown;
+  /** The last status check found no record of the request on the server. */
+  notFound?: boolean };
 type Dependencies = {
   tripId: string; storageKey: string;
   storage: { getItem(key: string): Promise<string | null>; setItem(key: string, value: string): Promise<unknown>; removeItem(key: string): Promise<unknown> };
@@ -142,21 +144,38 @@ export function createOperationController(deps: Dependencies) {
       const pending = snapshot.pending;
       if (!pending || snapshot.busy || operationTerminal(pending)) return;
       update({ busy: true });
-      try { await receive(await deps.poll(pending.key)); }
+      try { await receive(await deps.poll(pending.key)); update({ notFound: false }); }
       catch (cause) {
         const notFound = (cause as { status?: number }).status === 404;
+        update({ notFound });
         // A delayed/temporarily invisible request may still commit after a 404.
         update({ error: notFound
           ? "Chưa tìm thấy kết quả. Yêu cầu vẫn được lưu và có thể đang được xử lý. Bạn có thể gửi lại cùng yêu cầu hoặc kiểm tra trạng thái sau."
           : deps.message(cause) });
       } finally { update({ busy: false }); }
     },
+    /**
+     * Drops a request the server has no record of and that this device can no longer resend (its
+     * command is not kept across restarts). Without this the trip stays locked behind it forever.
+     * Never for a request the server knows about or one still waiting for review.
+     */
+    async discard() {
+      const pending = snapshot.pending;
+      if (snapshot.busy || !pending || pending.command || pending.operation || !snapshot.notFound) return false;
+      update({ busy: true });
+      try {
+        await deps.storage.removeItem(deps.storageKey);
+        update({ pending: undefined, error: undefined, sendError: undefined, notFound: false });
+        return true;
+      } catch { update({ error: "Không cập nhật được mã yêu cầu đã lưu. Hãy thử lại." }); return false; }
+      finally { update({ busy: false }); }
+    },
     async acknowledge() {
       if (snapshot.busy || !operationTerminal(snapshot.pending)) return false;
       update({ busy: true });
       try {
         await deps.storage.removeItem(deps.storageKey);
-        update({ pending: undefined, error: undefined, sendError: undefined });
+        update({ pending: undefined, error: undefined, sendError: undefined, notFound: false });
         return true;
       } catch { update({ error: "Không cập nhật được mã yêu cầu đã lưu. Hãy thử lại." }); return false; }
       finally { update({ busy: false }); }

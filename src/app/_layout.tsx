@@ -1,6 +1,7 @@
 import "../../global.css";
 import { Stack } from "expo-router";
 import { useFonts } from "expo-font";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import { SessionProvider } from "@/features/auth/session/session-provider";
 import { NotificationBanner } from "@/features/notifications/notification-banner";
@@ -21,6 +22,7 @@ export default function RootLayout() {
   });
   const { reduceMotion } = useAccessibilityPreferences();
   return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
     <SessionProvider>
       <PushRegistration />
       <NotificationBanner />
@@ -41,5 +43,6 @@ export default function RootLayout() {
         <ToastHost />
       </AppLaunch>
     </SessionProvider>
+    </GestureHandlerRootView>
   );
 }

@@ -1,6 +1,6 @@
 import { assertPublicText } from "./assert-public-text.mjs";
 import assert from "node:assert/strict";
-import { access, mkdir } from "node:fs/promises";
+import { access, mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium } from "playwright-core";
 
@@ -103,13 +103,18 @@ const plan = () => ({
   ],
   permissions: { can_read: true, can_edit: true, can_complete: true },
 });
+// Keep the offline journey fixture independent of the public map tile server.
+await context.route("https://tile.openstreetmap.org/**", route => route.fulfill({
+  contentType: "image/png",
+  body: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGO49fw2AAU7Ap0XhXZrAAAAAElFTkSuQmCC", "base64"),
+}));
 await context.route("**/api/v1/**", async (route) => {
   const request = route.request(),
     url = new URL(request.url()),
     pathname = url.pathname.replace("/api/v1", "");
-  const method = request.method(),
-    body = request.postData() ? request.postDataJSON() : undefined,
-    headers = request.headers();
+  const method = request.method(), headers = request.headers();
+  const body = headers["content-type"]?.includes("application/json") && request.postData()
+    ? request.postDataJSON() : undefined;
   requests.push({ pathname, search: url.search, method, body, headers });
   const cors = {
     "Access-Control-Allow-Origin": appUrl,
@@ -137,6 +142,16 @@ await context.route("**/api/v1/**", async (route) => {
     });
   if (method === "OPTIONS")
     return route.fulfill({ status: 204, headers: cors });
+  if (pathname === `/trips/${tripId}/cover`) {
+    if (method === "POST") {
+      assert.match(headers["content-type"], /^multipart\/form-data; boundary=/);
+      trip = { ...trip, cover_image_available: true };
+      return respond(200, trip);
+    }
+    if (method === "GET" && trip.cover_image_available) return route.fulfill({
+      headers: cors, contentType: "image/jpeg", body: await readFile("assets/figma/d/coast.jpg"),
+    });
+  }
   if (pathname === "/auth/csrf") return fail(401, "UNAUTHENTICATED");
   if (pathname === "/auth/login")
     return respond(200, {
@@ -166,6 +181,8 @@ await context.route("**/api/v1/**", async (route) => {
       "timezone",
     ]);
     assert.equal(body.budget_amount, "6000000");
+    assert.match(body.description, /Điểm đến: Đà Nẵng/);
+    assert.match(body.description, /Phong cách: Khám phá, Ẩm thực/);
     trip = { ...trip, ...body };
     return respond(201, trip);
   }
@@ -370,6 +387,11 @@ try {
   await screenshot("m05-trips.png");
   await click("+ Tạo một hành trình mới");
   await page.getByLabel("Tên chuyến đi", { exact: true }).fill("Đà Nẵng 3N2Đ");
+  await click("Chọn điểm đến");
+  await click("Đà Nẵng");
+  assert.equal(await page.getByLabel("Điểm đến chính", { exact: true }).inputValue(), "Đà Nẵng");
+  await click("Số thành viên dự kiến");
+  await page.getByRole("radio", { name: "4 người", exact: true }).click();
   await page.getByLabel("Ngày đi", { exact: true }).fill("31/02/2026");
   await page.getByLabel("Ngày về", { exact: true }).fill("14/11/2026");
   await click("Tiếp tục");
@@ -388,23 +410,40 @@ try {
   assert.equal(await page.getByLabel("Ngày về", { exact: true }).inputValue(), "14/11/2026");
   await screenshot("m06-create-info.png");
   await click("Tiếp tục");
-  await page
-    .getByLabel("Lời nhắn cho nhóm", { exact: true })
-    .fill("Cùng nhau khám phá Đà Nẵng");
+  const budget = page.getByLabel("Ngân sách dự kiến (VND)", { exact: true });
+  assert.equal(await budget.getAttribute("inputmode"), "numeric");
+  await budget.fill("VND 6.000.000 ₫");
+  await budget.fill("1234567890123");
+  await page.getByRole("alert").filter({ hasText: "12 chữ số" }).waitFor();
+  assert.equal(await budget.inputValue(), "6.000.000");
+  await budget.fill("0006000000");
+  await budget.press("End");
+  await budget.press("x");
+  assert.equal(await budget.inputValue(), "6.000.000");
+  await page.getByText(/1.500.000\s*₫ \/ người · 4 thành viên/).waitFor();
+  await page.getByRole("checkbox", { name: "Khám phá", exact: true }).click();
+  await page.getByRole("checkbox", { name: "Ẩm thực", exact: true }).click();
+  await page.getByRole("radio", { name: "Ảnh bìa Bờ biển", exact: true }).click();
   await screenshot("m07-create-details.png");
+  await click("Lời nhắn cho nhóm");
+  await page.getByLabel("Nội dung lời nhắn", { exact: true }).fill("Cùng nhau khám phá Đà Nẵng");
   // Going back to step 1 keeps step-2 input; the budget is saved with the trip.
-  await page.getByLabel("Ngân sách dự kiến (VND)", { exact: true }).fill("6000000");
   await page.getByRole("tab", { name: "1  Thông tin", exact: true }).click();
   await page.getByLabel("Tên chuyến đi", { exact: true }).waitFor();
   await click("Tiếp tục");
   assert.equal(await page.getByLabel("Ngân sách dự kiến (VND)", { exact: true }).inputValue(), "6.000.000");
+  assert.equal(await page.getByRole("radio", { name: "Ảnh bìa Bờ biển", exact: true }).isChecked(), true);
   assert.equal(
     requests.filter((r) => r.pathname === "/trips" && r.method === "POST").length,
     0,
   );
   await click("Tạo chuyến đi");
+  await button("Mở chuyến đi").waitFor();
+  await screenshot("p01-trip-created.png");
+  await click("Mở chuyến đi");
   await page.getByRole("tab", { name: "Tổng quan", exact: true }).waitFor();
   await screenshot("m08-overview.png");
+  assert.equal(requests.filter(r => r.pathname === `/trips/${tripId}/cover` && r.method === "POST").length, 1);
   assert.equal(
     requests.find((r) => r.pathname === "/trips" && r.method === "POST").body
       .start_at,
@@ -416,6 +455,10 @@ try {
   await page
     .getByLabel("Địa điểm / hoạt động", { exact: true })
     .fill("Bãi biển Mỹ Khê");
+  await click("Di chuyển");
+  await page.getByRole("radio", { name: "Ô tô", exact: true }).click();
+  await page.getByLabel("Thời gian dự kiến (phút)", { exact: true }).fill("15");
+  await click("Xong");
   await screenshot("m29-add-activity.png");
   await click("Thêm vào lịch trình");
   await page
@@ -424,11 +467,13 @@ try {
     })
     .waitFor();
   await click("Thêm vào lịch trình");
+  await click("Về lịch trình");
   await button("Bãi biển Mỹ Khê, 08:00").waitFor();
   const creates = requests.filter(
     (r) => r.pathname.endsWith("/activities") && r.method === "POST",
   );
   assert.equal(creates.length, 2);
+  assert.equal(creates[1].body.description, "Di chuyển: Ô tô · 15 phút");
   assert.equal(
     creates[0].headers["idempotency-key"],
     creates[1].headers["idempotency-key"],
@@ -468,6 +513,7 @@ try {
   assert.equal(await page.getByLabel("Địa điểm / hoạt động", { exact: true }).inputValue(), "Bãi biển Mỹ Khê");
   await page.getByLabel("Địa điểm / hoạt động", { exact: true }).fill("Mỹ Khê lúc bình minh");
   await click("Lưu thay đổi");
+  await click("Về lịch trình");
   await button("Mỹ Khê lúc bình minh, 08:00, đã hoàn thành").waitFor();
   // PLAN-03: timed → day-only sends both timestamps null with the calendar date.
   await click("Mỹ Khê lúc bình minh, 08:00, đã hoàn thành");
@@ -480,6 +526,7 @@ try {
     .waitFor();
   await page.getByLabel("Ngày", { exact: true }).fill("12/11/2026");
   await click("Lưu thay đổi");
+  await click("Về lịch trình");
   await button("Mỹ Khê lúc bình minh, Chưa định giờ, đã hoàn thành").waitFor();
   const dayOnly = requests
     .filter((r) => /\/activities\/.+$/.test(r.pathname) && r.method === "PATCH")
@@ -514,30 +561,36 @@ try {
     .fill("friend@example.test");
   await screenshot("m17-invite.png");
   await click("Gửi lời mời");
-  await page.getByText(/Lời mời cho friend@example.test đã được tạo/).waitFor();
-  await click("Xem bạn đồng hành");
+  await page.getByText(/Đã tạo lời mời cho friend@example.test/).waitFor();
+  await click("Xem thành viên");
   await page.getByText("friend@example.test", { exact: true }).waitFor();
   await click("Quyền của nhóm");
-  await page.getByRole("radio", { name: "Cả nhóm", exact: true }).click();
-  await click("Lưu quyền của nhóm");
-  await page
-    .getByText("Đã cập nhật quyền chỉnh sửa của nhóm.", { exact: true })
-    .waitFor();
+  await page.getByRole("switch", { name: "Cùng chỉnh sửa lịch", exact: true }).click();
+  await click("Lưu cài đặt");
+  await page.getByRole("heading", { name: "Đã lưu cài đặt" }).waitFor();
+  await click("Tiếp tục chỉnh sửa");
   await screenshot("m20-settings.png");
   await click("Chỉnh sửa thông tin");
   await page
     .getByLabel("Mô tả cho nhóm", { exact: true })
     .fill("Kỷ niệm cùng bạn bè");
   await click("Lưu thay đổi");
+  await click("Về cài đặt");
   await button("Chỉnh sửa thông tin").waitFor();
   assert.equal(trip.description, "Kỷ niệm cùng bạn bè");
   await click("Quay lại");
-  await page.getByRole("tab", { name: "Chuyến đi", exact: true }).click();
+  // Settings ends in its own save bar, so step back to a page with the tab bar.
+  const tripsTab = page.getByRole("tab", { name: "Chuyến đi", exact: true });
+  for (let step = 0; step < 6 && !(await tripsTab.isVisible()); step++) {
+    await click("Quay lại");
+    await page.waitForTimeout(500);
+  }
+  await tripsTab.click();
   await button(`Mở chuyến đi ${trip.name}`).waitFor();
   await click(`Mở chuyến đi ${trip.name}`);
   await page.getByRole("tab", { name: "Tiện ích", exact: true }).click();
   await click("Hành lý");
-  await page.getByText('Cả nhóm đã chuẩn bị', { exact: true }).waitFor();
+  await page.getByText('Sẵn sàng lên đường', { exact: true }).waitFor();
   assert.equal(await button('Danh sách đã sẵn sàng!').count(), 0, 'Packing completion stays inline without a popup.');
   await screenshot("m13-packing.png");
   await page.getByRole("tab", { name: "Tài khoản", exact: true }).click();
@@ -546,8 +599,8 @@ try {
   await page.getByLabel("Họ và tên", { exact: true }).fill("Minh Anh Nguyễn");
   await screenshot("m32-edit-profile.png");
   await click("Lưu thay đổi");
+  await click("Về tài khoản");
   await button("Thông tin cá nhân").waitFor();
-  await page.getByText("Đã cập nhật thông tin cá nhân.", { exact: true }).waitFor();
   assert.equal(profile.full_name, "Minh Anh Nguyễn");
   await screenshot("m22-profile.png");
   await page.setViewportSize({ width: 360, height: 740 });

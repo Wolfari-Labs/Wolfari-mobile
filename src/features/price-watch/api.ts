@@ -3,7 +3,7 @@ import { decodeRow, object, pageQuery, validateMoney } from '../finance/api.ts';
 import { money, type Page } from '../finance/extended-model.ts';
 import { calendarLabel, dateKey, localTimestamp, parseDate, timeLabel } from '../trips/utils.ts';
 export type WatchInput = {
-  /** Omitted on create: the server fills its configured source (TRAVELPAYOUTS_CACHE or MOCK_FLIGHT). */
+  /** The server selects the provider on create. Edits retain the watch's original provider. */
   provider?: string;
   origin: string;
   destination: string;
@@ -37,10 +37,17 @@ export type Observation = {
   provider: string;
   observed_at: string;
   fetched_at: string;
-  /** Real sources: data_kind CACHED_REFERENCE, source_freshness FRESH_REFERENCE | STALE | UNKNOWN, provider_found_at. */
   fare_metadata?: Record<string, string | null> | null;
 };
-export type Observations = Page<Observation> & { stale: boolean; last_error: string | null };
+type ObservationMeta = {
+  next_cursor: string | null;
+  stale: boolean;
+  last_error: string | null;
+  last_checked_at?: string | null;
+  next_check_at?: string | null;
+  last_check_status?: string | null;
+};
+export type Observations = Page<Observation> & ObservationMeta;
 /** Airports offered as one-tap chips; any other 3-letter IATA code can still be typed. */
 export const QUICK_AIRPORTS = ['SGN', 'HAN', 'DAD', 'CXR', 'PQC', 'HPH'] as const;
 export const WATCH_TIMEZONE = 'Asia/Ho_Chi_Minh';
@@ -139,8 +146,14 @@ export function createPriceWatchApi(client: ApiClient) {
       return {
         items: data.map((item) => {
           const w = decodeRow<Watch>(item, { field: 'trip_id', id: tripId });
-          object(w.normalized_query);
+          const query = object(w.normalized_query);
+          const passengers = object(query.passengers);
           validateMoney(w.threshold_price);
+          if (w.last_alert_price != null) validateMoney(w.last_alert_price);
+          if (typeof query.provider !== 'string' || typeof query.departure_date !== 'string' ||
+              typeof query.departure_at !== 'string' || !Number.isFinite(Date.parse(query.departure_at)) ||
+              ![passengers.adults, passengers.children, passengers.infants].every(Number.isInteger))
+            throw new ApiError('INVALID_RESPONSE', 'Thông tin chặng bay không hợp lệ.');
           if (!['ACTIVE', 'PAUSED', 'EXPIRED', 'STOPPED'].includes(w.status))
             throw new ApiError('INVALID_RESPONSE', 'Trạng thái theo dõi không hợp lệ.');
           return w;
@@ -153,21 +166,26 @@ export function createPriceWatchApi(client: ApiClient) {
       cursor?: string | null,
       signal?: AbortSignal,
     ): Promise<Observations> {
-      const { data, meta } = await client.requestWithMeta<
-        unknown,
-        { next_cursor: string | null; stale: boolean; last_error: string | null }
-      >(`/price-watches/${enc(id)}/observations?${pageQuery(cursor)}`, { signal });
+      const { data, meta } = await client.requestWithMeta<unknown, ObservationMeta>(
+        `/price-watches/${enc(id)}/observations?${pageQuery(cursor)}`, { signal },
+      );
       if (
         !Array.isArray(data) ||
         typeof meta.stale !== 'boolean' ||
         (meta.last_error !== null && typeof meta.last_error !== 'string') ||
-        (meta.next_cursor !== null && typeof meta.next_cursor !== 'string')
+        (meta.next_cursor !== null && typeof meta.next_cursor !== 'string') ||
+        (meta.last_check_status != null && typeof meta.last_check_status !== 'string') ||
+        [meta.last_checked_at, meta.next_check_at].some(
+          date => date != null && (typeof date !== 'string' || !Number.isFinite(Date.parse(date))),
+        )
       )
         throw new ApiError('INVALID_RESPONSE', 'Lịch sử giá không hợp lệ.');
       return {
         items: data.map((item) => {
           const r = decodeRow<Observation>(item);
           validateMoney(r.price);
+          if (r.price === '0' || r.currency !== 'VND' || typeof r.provider !== 'string')
+            throw new ApiError('INVALID_RESPONSE', 'Giá vé từ máy chủ không hợp lệ.');
           return r;
         }),
         ...meta,

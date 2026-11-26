@@ -1,7 +1,7 @@
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
-import { router, useLocalSearchParams } from "expo-router";
-import { useContext, useRef, useState, useSyncExternalStore, type PropsWithChildren, type ReactNode } from "react";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
+import { useCallback, useContext, useEffect, useRef, useState, useSyncExternalStore, type PropsWithChildren, type ReactNode } from "react";
 import { BlurTargetView } from "expo-blur";
 import {
   KeyboardAvoidingView,
@@ -14,7 +14,7 @@ import {
   View,
   type ViewInstance,
 } from "react-native";
-import Animated from "react-native-reanimated";
+import Animated, { useSharedValue } from "react-native-reanimated";
 import {
   SafeAreaView,
   useSafeAreaInsets,
@@ -25,8 +25,11 @@ import { colors, fonts, gradients, shadows, typography } from "@/shared/theme/to
 import { designIcons } from "./design-assets";
 import { DesignIcon } from "./design-icon";
 import { BottomTabBar, TabBarHostContext, type TabKey } from "./bottom-tab-bar";
-import { GlassSurface } from "./glass-surface";
-import { KeyboardScrollProvider, useKeyboardScroll } from "./keyboard-scroll";
+import { BottomBarSurface } from "./bottom-bar-surface";
+import { SnackbarHost } from "./feedback";
+import { WolfiRefresh } from "./brand/wolfi-refresh";
+import { setToastTop } from "./toast";
+import { KeyboardScrollProvider, useKeyboardOverlap, useKeyboardScroll } from "./keyboard-scroll";
 import { webSafeArea } from "./web-safe-area";
 
 const ScreenArea = Platform.OS === "web" ? View : SafeAreaView;
@@ -49,6 +52,10 @@ type Props = PropsWithChildren<{
   /** A full-width opening section supplies its own accessible navigation. */
   immersive?: boolean;
   scrollEnabled?: boolean;
+  /** Figma D · M19/M20: larger header title and a floating action over a fade. */
+  clay?: boolean;
+  /** Round action above the tab bar or the bottom edge. */
+  floating?: ReactNode;
 }>;
 
 function ScreenBackButton({ onPress }: { onPress: () => void }) {
@@ -96,16 +103,37 @@ function ScreenInner({
   onBack,
   immersive = false,
   scrollEnabled = true,
+  clay = false,
+  floating,
 }: Props) {
   const insets = useSafeAreaInsets();
   const [headerHeight, setHeaderHeight] = useState(56);
   const [ownTabHeight, setTabHeight] = useState(0);
+  const [footerHeight, setFooterHeight] = useState(0);
   // Inside the tabs layout the persistent bar belongs to the host; pages above draw their own.
   const tabHost = useContext(TabBarHostContext);
   const tabHeight = tabHost ? tabHost.height : ownTabHeight;
   const blurTarget = useRef<ViewInstance>(null);
   const keyboardScroll = useKeyboardScroll();
   const keyboardHeight = keyboardScroll?.keyboardHeight ?? 0;
+  const insetFrame = useRef<ViewInstance | null>(null);
+  // App-wide toasts drop in just under this screen's app bar (or the status bar when it has none).
+  const toastTop = insets.top + (immersive ? 0 : headerHeight + 4) + 8;
+  useFocusEffect(useCallback(() => { setToastTop(toastTop); }, [toastTop]));
+  const scrollY = useSharedValue(0);
+  const keyboardInset = useKeyboardOverlap(insetFrame, keyboardScroll?.keyboardTop ?? Infinity);
+  const showTab = !!tab && keyboardHeight === 0;
+  const tabClearance = showTab ? tabHeight || 74 + Math.max(insets.bottom, 12) : 0;
+  const footerBottom = tabClearance + 8;
+  // With the keyboard open the action bar joins the end of the form instead of floating
+  // over it, so the fields stay visible and the button is one scroll away.
+  const footerInline = !!footer && keyboardHeight > 0;
+  const barClearance = footer && !footerInline
+    ? footerBottom + (footerHeight || 64 + Math.max(insets.bottom, 16))
+    : tabClearance;
+  const setBottomInset = keyboardScroll?.setBottomInset;
+  useEffect(() => { setBottomInset?.(barClearance); }, [setBottomInset, barClearance]);
+  const contentBottom = Math.max(bottomPadding, barClearance ? barClearance + 16 : insets.bottom + 24) + (floating ? 76 : 0);
   const { preview } = useLocalSearchParams<{ preview?: string }>();
   const hydrated = useSyncExternalStore(subscribeToHydration, clientSnapshot, serverSnapshot);
   // Opt-in browser preview chrome mirrors Figma. Native devices use real OS bars.
@@ -135,7 +163,7 @@ function ScreenInner({
                 <DesignIcon name="wifi" />
               </View>
               <Image
-                source={designIcons.battery}
+                source={designIcons.battery.line}
                 style={{ width: 22, height: 22 }}
                 contentFit="contain"
               />
@@ -154,7 +182,7 @@ function ScreenInner({
               <Text
                 accessibilityRole="header"
                 numberOfLines={2}
-                style={[typography.headline, styles.headerTitle]}
+                style={[typography.headline, styles.headerTitle, clay && styles.clayTitle]}
               >
                 {title}
               </Text>
@@ -162,72 +190,82 @@ function ScreenInner({
             </>
           )}
         </View>}
+        <View ref={insetFrame} onLayout={keyboardInset.onLayout} style={[styles.viewport, { paddingBottom: keyboardInset.overlap }]}>
         <KeyboardAvoidingView
           style={styles.viewport}
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          enabled={Platform.OS === "ios"}
           keyboardVerticalOffset={insets.top + (immersive ? 0 : headerHeight)}
         >
-          <BlurTargetView
-            ref={blurTarget}
-            style={styles.viewport}
-            onLayout={(e) => keyboardScroll?.onViewportLayout(e.nativeEvent.layout.height, insets.top + (immersive ? 0 : headerHeight))}
-          >
-            <ScrollView
-              ref={keyboardScroll?.scrollRef}
-              onScroll={keyboardScroll?.onScroll}
-              onContentSizeChange={keyboardScroll?.onContentSizeChange}
-              scrollEventThrottle={16}
-              scrollEnabled={scrollEnabled}
-              contentContainerStyle={[
-                styles.content,
-                immersive && styles.immersiveContent,
-                {
-                  paddingBottom: Math.max(
-                    bottomPadding,
-                    tab
-                      ? Math.max(tabHeight, 74 + Math.max(insets.bottom, 12)) + 16
-                      : footer
-                        ? 24
-                        : insets.bottom + 24,
-                  ) + (keyboardHeight > 0 ? Math.min(keyboardHeight, 220) : 0),
-                },
-                !tab && !footer && webSafeArea.content(bottomPadding),
-              ]}
-              keyboardShouldPersistTaps="handled"
-              contentInsetAdjustmentBehavior="automatic"
-              automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
-              keyboardDismissMode={
-                Platform.OS === "ios" ? "interactive" : "on-drag"
-              }
-              showsVerticalScrollIndicator={false}
-              refreshControl={
-                onRefresh ? (
-                  <RefreshControl
-                    refreshing={refreshing}
-                    onRefresh={onRefresh}
-                    tintColor={colors.teal}
-                  />
-                ) : undefined
-              }
-            >
-              {children}
-            </ScrollView>
-          </BlurTargetView>
-          {footer && (
-            <GlassSurface
-              variant="prominent"
-              blurTarget={blurTarget}
-              style={[
-                styles.footer,
-                { paddingBottom: Math.max(insets.bottom, 16) },
-                webSafeArea.footer,
-              ]}
-            >
-              {footer}
-            </GlassSurface>
-          )}
+          <View style={styles.viewport}>
+            <SnackbarHost top={8}>
+              <BlurTargetView
+                ref={blurTarget}
+                style={styles.viewport}
+                onLayout={(e) => keyboardScroll?.onViewportLayout(e.nativeEvent.layout.height, insets.top + (immersive ? 0 : headerHeight))}
+              >
+                <WolfiRefresh enabled={scrollEnabled !== false} refreshing={refreshing} onRefresh={onRefresh} scrollY={scrollY}>
+                <ScrollView
+                  ref={keyboardScroll?.scrollRef}
+                  onScroll={(event) => { scrollY.set(event.nativeEvent.contentOffset.y); keyboardScroll?.onScroll(event); }}
+                  bounces={!onRefresh}
+                  onContentSizeChange={keyboardScroll?.onContentSizeChange}
+                  scrollEventThrottle={16}
+                  scrollEnabled={scrollEnabled}
+                  contentContainerStyle={[
+                    styles.content,
+                    immersive && styles.immersiveContent,
+                    {
+                      paddingBottom: contentBottom + (keyboardHeight > 0 ? Math.min(keyboardHeight, 220) : 0),
+                    },
+                    !tab && !footer && webSafeArea.content(bottomPadding),
+                  ]}
+                  keyboardShouldPersistTaps="handled"
+                  contentInsetAdjustmentBehavior="automatic"
+                  automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
+                  keyboardDismissMode={
+                    Platform.OS === "ios" ? "interactive" : "on-drag"
+                  }
+                  showsVerticalScrollIndicator={false}
+                  // Web keeps the browser's own pull behaviour; native screens use WolfiRefresh.
+                  refreshControl={
+                    onRefresh && Platform.OS === "web" ? (
+                      <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.teal} />
+                    ) : undefined
+                  }
+                >
+                  {children}
+                  {footerInline && <View testID="screen-action-bar" style={styles.inlineFooter}>{footer}</View>}
+                </ScrollView>
+                </WolfiRefresh>
+              </BlurTargetView>
+              {floating && keyboardHeight === 0 && <View pointerEvents="box-none" style={[styles.floating, { bottom: Math.max(barClearance, insets.bottom) + 16 }]}>{floating}</View>}
+              {footer && clay && !footerInline && (
+                <View testID="screen-action-bar" pointerEvents="box-none" onLayout={event => setFooterHeight(event.nativeEvent.layout.height)}
+                  style={[styles.clayFooter, { paddingBottom: Math.max(insets.bottom, 24) }]}>
+                  <LinearGradient pointerEvents="none" colors={["rgba(233,251,243,0)", colors.mintCanvas, colors.mintCanvas]} locations={[0, 0.45, 1]} style={StyleSheet.absoluteFill} />
+                  {footer}
+                </View>
+              )}
+              {footer && !clay && !footerInline && (
+                <BottomBarSurface
+                  blurTarget={blurTarget}
+                  testID="screen-action-bar"
+                  onLayout={event => setFooterHeight(event.nativeEvent.layout.height)}
+                  style={[
+                    styles.footer,
+                    { bottom: footerBottom, paddingBottom: Math.max(insets.bottom, 16) },
+                    webSafeArea.footer,
+                  ]}
+                >
+                  {footer}
+                </BottomBarSurface>
+              )}
+            </SnackbarHost>
+          </View>
         </KeyboardAvoidingView>
-        {tab && !tabHost && keyboardHeight === 0 && <BottomTabBar page activeTab={tab} onHeightChange={setTabHeight} blurTarget={blurTarget} />}
+        </View>
+        {showTab && !tabHost && <BottomTabBar page activeTab={tab} onHeightChange={setTabHeight} blurTarget={blurTarget} />}
         {devicePreview && <View style={styles.homeIndicator} />}
       </ScreenArea>
     </View>
@@ -281,13 +319,17 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: 24, paddingTop: 20, gap: 20 },
   immersiveContent: { paddingHorizontal: 0, paddingTop: 0, gap: 0 },
   footer: {
-    paddingHorizontal: 24,
-    paddingTop: 12,
-    marginHorizontal: 12,
-    marginBottom: 8,
-    borderRadius: 22,
+    position: "absolute",
+    left: 16,
+    right: 16,
+    paddingHorizontal: 16,
+    paddingTop: 10,
     gap: 8,
   },
+  floating: { position: "absolute", right: 24 },
+  inlineFooter: { gap: 8, paddingTop: 4 },
+  clayTitle: { fontSize: 20, lineHeight: 28 },
+  clayFooter: { position: "absolute", left: 0, right: 0, bottom: 0, paddingHorizontal: 24, paddingTop: 48, gap: 8 },
   homeIndicator: {
     position: "absolute",
     bottom: 9,

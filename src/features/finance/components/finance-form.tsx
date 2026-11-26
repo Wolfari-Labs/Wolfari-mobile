@@ -1,11 +1,12 @@
 import * as ImagePicker from "expo-image-picker";
 import { Image } from "expo-image";
 import { useEffect, useRef, useState } from "react";
-import { Platform, Pressable, Text, View } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { useApi } from "@/shared/api/use-api";
 import { errorMessage } from "@/shared/api/errors";
 import type { OperationCommand } from "@/shared/operations/controller";
-import { colors, typography } from "@/shared/theme/tokens";
+import { colors, fonts, typography } from "@/shared/theme/tokens";
+import { DesignIcon } from "@/shared/ui/design-icon";
 import { Button } from "@/shared/ui/button";
 import { Details } from "@/shared/ui/details";
 import { Feedback } from "@/shared/ui/feedback";
@@ -19,6 +20,7 @@ import type { PaymentQr } from "@/features/payments/model/payment-qr";
 import { money } from "../model";
 import { bankDisplayName } from "../bank-names";
 import { BankPicker } from "./bank-picker";
+import { ExpenseLayout } from "./expense-layout";
 import { QrFill } from "./qr-fill";
 
 const QUICK_AMOUNTS = [
@@ -40,6 +42,8 @@ export type FormValues = Record<string, string>;
 export type FinanceFormSpec = {
   title: string; description: string; initial?: FormValues; destructive?: boolean;
   review?: boolean; submitLabel?: string;
+  /** Full-page expense entry instead of the generic sheet. */
+  expense?: { available: string; recorder: string };
   fields?: { key: string; label: string; numeric?: boolean; money?: boolean; multiline?: boolean; max?: number;
     mode?: "date" | "time";
     options?: { value: string; label: string }[]; multiple?: boolean }[];
@@ -64,6 +68,16 @@ export function FinanceForm({ spec, busy, onSubmit, onClose }: {
   const active = useRef(true), lock = useRef(false), uploaded = useRef<string | undefined>(undefined);
   const disabled = busy || working;
   const review = spec.review ?? !!spec.fields?.length;
+  // The QR reader sits right above the bank fields it fills.
+  const scanAt = spec.scan ? (spec.fields ?? []).findIndex(field => field.key === "bank_code") : -2;
+  const scanBlock = spec.scan && <View style={{ gap: 10 }}>
+    {scanAt >= 0 && <Text style={styles.section}>Tài khoản nhận tiền</Text>}
+    <QrFill disabled={disabled} onBusy={setScanning} onRead={payment => {
+      try { const next = spec.scan!.fill(payment); setValues(current => ({ ...current, ...next })); setFilled(true); setError(undefined); return undefined; }
+      catch (cause) { return errorMessage(cause); }
+    }} />
+    {filled && <Feedback success message="Đã điền từ VietQR. Kiểm tra lại từng trường trước khi tiếp tục." />}
+  </View>;
   const release = (asset?: ImagePicker.ImagePickerAsset) => {
     if (Platform.OS === "web" && asset?.uri.startsWith("blob:")) URL.revokeObjectURL(asset.uri);
   };
@@ -115,30 +129,31 @@ export function FinanceForm({ spec, busy, onSubmit, onClose }: {
     try { if (await onSubmit(prepared)) onClose(); }
     finally { lock.current = false; if (active.current) setWorking(false); }
   }
+  const removePhoto = () => { release(assetRef.current); assetRef.current = undefined; uploaded.current = undefined; setPhoto(undefined); };
+  if (spec.expense) return <ExpenseLayout title={spec.title} values={values} set={set} available={spec.expense.available} recorder={spec.expense.recorder} error={error} disabled={disabled}
+    photo={photo?.uri} onChoosePhoto={() => { void choose(); }} onRemovePhoto={removePhoto} onSubmit={() => { void prepare(); }} onClose={onClose} />;
   return <Sheet visible title={prepared ? "Xác nhận thao tác" : spec.title} dismissible={!disabled} onClose={() => { if (!disabled) onClose(); }}>
     {prepared || !review ? <Text style={typography.body}>{spec.description}</Text> : <Details title="Thông tin thao tác"><Text style={typography.footnote}>{spec.description}</Text></Details>}
     {error && <Feedback message={error} />}
-    {!prepared && spec.scan && (scanning
-      ? <QrFill onClose={() => setScanning(false)} onRead={payment => {
-        try { const next = spec.scan!.fill(payment); setValues(current => ({ ...current, ...next })); setScanning(false); setFilled(true); setError(undefined); return undefined; }
-        catch (cause) { return errorMessage(cause); }
-      }} />
-      : <Button label={spec.scan.label} icon="wallet" variant="soft" disabled={disabled} onPress={() => { setFilled(false); setScanning(true); }} />)}
-    {filled && !prepared && <Feedback success message="Đã điền từ VietQR. Kiểm tra lại từng trường trước khi tiếp tục." />}
-    {spec.fields?.map(field => prepared ? <FadeInView key={field.key}>
+    {!prepared && scanAt < 0 && scanBlock}
+    {spec.fields?.map((field, index) => <View key={field.key} style={{ gap: 12 }}>{!prepared && index === scanAt && scanBlock}{prepared ? <FadeInView key={field.key}>
       <Text style={typography.footnote}>{field.label}</Text>
       <Text selectable style={typography.body}>{field.key === "bank_code" ? bankDisplayName(values[field.key] ?? "") : field.options ? field.options.filter(option => (values[field.key] ?? "").split(",").includes(option.value)).map(option => option.label).join(" · ") || "Không chọn" : field.money && moneyPreview(values[field.key]) ? moneyPreview(values[field.key]) : values[field.key] || "Để trống"}</Text>
     </FadeInView> : field.options ? <View key={field.key} style={ui.stack}>
-      <Text style={typography.headline}>{field.label}</Text>
+      <Text style={styles.section}>{field.label}</Text>
       {!field.options.length && <Notice>Chưa có lựa chọn hợp lệ. Kiểm tra thành viên hoặc xác nhận tài khoản nhận trước.</Notice>}
       {field.options.map(option => {
         const selected = (values[field.key] ?? "").split(",").includes(option.value);
         return <Pressable key={option.value} accessibilityRole={field.multiple ? "checkbox" : "radio"} accessibilityLabel={`${field.label}: ${option.label}`} accessibilityState={{ checked: selected, disabled }} disabled={disabled}
-          style={[ui.card, { borderWidth: 1, borderColor: selected ? colors.teal : colors.line, minHeight: 48 }]}
+          style={[styles.option, selected && styles.optionOn]}
           onPress={() => {
             const current = (values[field.key] ?? "").split(",").filter(Boolean);
             set(field.key, field.multiple ? (selected ? current.filter(value => value !== option.value) : [...current, option.value]).join(",") : option.value);
-          }}><Text style={typography.body}>{selected ? "✓ " : "○ "}{option.label}</Text></Pressable>;
+          }}>
+          <View style={[styles.initial, selected && styles.initialOn]}><Text style={[styles.initialText, selected && { color: colors.surface }]}>{initialOf(option.label)}</Text></View>
+          <Text style={[typography.body, { flex: 1 }]} numberOfLines={2}>{option.label}</Text>
+          <View style={[field.multiple ? styles.box : styles.radio, selected && styles.markOn]}>{selected && <DesignIcon name="check" size={14} tintColor={colors.surface} />}</View>
+        </Pressable>;
       })}
     </View> : field.key === "bank_code" ? <BankPicker key={field.key} value={values[field.key] ?? ""} onChange={value => set(field.key, value)} disabled={disabled} /> : field.mode ? <DateTimeField key={field.key} mode={field.mode} label={field.label} value={values[field.key] ?? ""} onChangeText={value => set(field.key, value)} editable={!disabled} /> : <View key={field.key} style={{ gap: 8 }}>
       {field.money
@@ -153,11 +168,11 @@ export function FinanceForm({ spec, busy, onSubmit, onClose }: {
           </Pressable>)}
         </View>
       </>}
-    </View>)}
+    </View>}</View>)}
     {photo && <Image source={{ uri: photo.uri }} style={{ height: 180, width: "100%" }} contentFit="contain" cachePolicy="none" accessibilityLabel="Ảnh chứng từ đã chọn" />}
     {!prepared && spec.receipt && <>
       <Button label={photo ? "Đổi ảnh chứng từ" : "Đính kèm ảnh chứng từ"} variant="soft" disabled={disabled} onPress={() => { void choose(); }} />
-      {photo && <Button label="Bỏ ảnh đã chọn" variant="soft" disabled={disabled} onPress={() => { release(assetRef.current); assetRef.current = undefined; uploaded.current = undefined; setPhoto(undefined); }} />}
+      {photo && <Button label="Bỏ ảnh đã chọn" variant="soft" disabled={disabled} onPress={removePhoto} />}
       <Text style={typography.footnote}>Ảnh JPEG/PNG · tối đa 10 MiB</Text>
     </>}
     {prepared ? <>
@@ -166,3 +181,16 @@ export function FinanceForm({ spec, busy, onSubmit, onClose }: {
     </> : <Button label={review ? "Tiếp tục" : spec.submitLabel ?? spec.title} variant={spec.destructive ? "destructive" : "primary"} loading={disabled} disabled={scanning} onPress={() => { void prepare(); }} />}
   </Sheet>;
 }
+
+const initialOf = (label: string) => (label.trim().split(/\s+/).pop()?.[0] ?? "?").toUpperCase();
+const styles = StyleSheet.create({
+  section: { fontFamily: fonts.heading, fontSize: 16, lineHeight: 22, color: colors.ink, marginTop: 4 },
+  option: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 56, paddingVertical: 10, paddingHorizontal: 12, borderRadius: 18, borderCurve: "continuous", borderWidth: 1.5, borderColor: colors.line, backgroundColor: colors.surface },
+  optionOn: { borderColor: colors.blue, backgroundColor: colors.tealSoft },
+  initial: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center", backgroundColor: colors.fill },
+  initialOn: { backgroundColor: colors.blue },
+  initialText: { fontFamily: fonts.heading, fontSize: 15, color: colors.blue },
+  radio: { width: 24, height: 24, borderRadius: 12, borderWidth: 2, borderColor: colors.line, alignItems: "center", justifyContent: "center" },
+  box: { width: 24, height: 24, borderRadius: 7, borderWidth: 2, borderColor: colors.line, alignItems: "center", justifyContent: "center" },
+  markOn: { backgroundColor: colors.blue, borderColor: colors.blue },
+});

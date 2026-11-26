@@ -47,6 +47,28 @@ function crc16(value: string): string {
   return crc.toString(16).toUpperCase().padStart(4, "0");
 }
 
+const tlv = (id: string, value: string) => id + String(value.length).padStart(2, "0") + value;
+/** Printable ASCII for the QR note: bank apps read tag 62/08 as plain text. */
+export function asciiNote(value: string) {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D")
+    .replace(/[^\x20-\x7e]/g, " ").replace(/\s+/g, " ").trim().slice(0, 25);
+}
+
+/**
+ * A dynamic VietQR (NAPAS 247, account transfer) with amount and note, for any bank app's
+ * "scan QR from photo" when its deeplink cannot fill the transfer in.
+ */
+export function vietQrPayload(payment: { bankBin: string; account: string; amount: string; note: string }) {
+  if (!/^\d{6}$/.test(payment.bankBin) || !/^[A-Za-z0-9]{1,19}$/.test(payment.account) || !/^[1-9]\d{0,12}$/.test(payment.amount))
+    throw new Error("Không tạo được mã QR cho giao dịch này.");
+  const beneficiary = tlv("00", payment.bankBin) + tlv("01", payment.account);
+  const provider = tlv("00", "A000000727") + tlv("01", beneficiary) + tlv("02", "QRIBFTTA");
+  const note = asciiNote(payment.note);
+  const body = "000201010212" + tlv("38", provider) + tlv("53", "704") + tlv("54", payment.amount) + tlv("58", "VN")
+    + (note ? tlv("62", tlv("08", note)) : "") + "6304";
+  return body + crc16(body);
+}
+
 export function parsePaymentQr(input: string): PaymentQrResult {
   if (input.length > MAX_PAYMENT_QR_LENGTH) return { ok: false, message: invalid };
   const value = input.trim();

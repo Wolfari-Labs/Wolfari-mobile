@@ -1,5 +1,6 @@
+import { DesignPopup } from "@/shared/ui/design-popup";
 import { useCallback, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Platform, StyleSheet, Text, View } from "react-native";
 
 import { collectPages } from "@/features/trips/api/pagination";
 import { dateLabel } from "@/features/trips/utils";
@@ -47,6 +48,7 @@ export default function SessionsScreen() {
       [api],
     ),
   );
+  const [deviceInfo, setDeviceInfo] = useState(false);
   const currentId = currentSessionId();
   const current = resource.data?.find((session) => session.id === currentId);
   const others = (resource.data ?? []).filter((session) => session.id !== currentId);
@@ -97,11 +99,13 @@ export default function SessionsScreen() {
             icon="user"
             tone="mint"
             title="Đang dùng"
+            onPress={() => setDeviceInfo(true)}
             subtitle={`Đăng nhập ${dateLabel(current.created_at)} · Hết hạn ${timeLeft(current.expires_at)}`}
             right={<View style={styles.live}><View style={styles.liveDot} /><Text style={styles.liveText}>Hoạt động</Text></View>}
           />
         </SettingsGroup>
       )}
+      {deviceInfo && current && <DesignPopup kind="device" message={`${Platform.OS === "web" ? "Trình duyệt này" : Platform.OS === "ios" ? "Thiết bị iOS này" : "Thiết bị Android này"} · Phiên hiện tại. Bạn đã đăng nhập ngày ${dateLabel(current.created_at)}.`} onPrimary={() => setDeviceInfo(false)} onClose={() => setDeviceInfo(false)} />}
       {others.length > 0 && (
         <SettingsGroup title={current ? "Thiết bị khác" : "Các phiên"} footer="Đăng xuất từ xa có hiệu lực ngay ở lần thiết bị đó gọi máy chủ.">
           {others.map((session, index) => (
@@ -123,6 +127,7 @@ export default function SessionsScreen() {
       {resource.data && !resource.data.length && (
         <EmptyState
           title="Không có phiên hoạt động"
+          scene="quiet"
           message="Tải lại để kiểm tra trạng thái mới nhất."
           icon="lock"
         />

@@ -1,4 +1,4 @@
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
@@ -14,6 +14,7 @@ import { Snackbar, toast } from "@/shared/ui/toast";
 import { ActivityOrderList, type DragStatus } from "../components/activity-order-list";
 import { ActivityRow } from "../components/activity-row";
 import { ActivityScheduleSheet } from "../components/activity-schedule-sheet";
+import { DayWeather } from "../components/day-weather";
 import { TripNavigation } from "../components/trip-navigation";
 import { useItineraryEditor } from "../hooks/use-itinerary-editor";
 import { useTrip } from "../hooks/use-trip";
@@ -32,6 +33,7 @@ export default function ItineraryScreen() {
   const resource = useTrip(editing),
     command = useCommand();
   const { data, api, id } = resource;
+  const { day: linkedDay } = useLocalSearchParams<{ day?: string }>();
   const [day, setDay] = useState<string>();
   const [selectedId, setSelectedId] = useState<string>();
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -42,7 +44,7 @@ export default function ItineraryScreen() {
   const trip = data?.trip,
     plan = data?.plan;
   const days = trip ? tripDays(trip) : [];
-  const activeDay = day ?? (trip && plan ? firstBusyDay(trip, plan, days) : undefined) ?? "unscheduled";
+  const activeDay = day ?? (linkedDay && (days.includes(linkedDay) || linkedDay === "unscheduled") ? linkedDay : undefined) ?? (trip && plan ? firstBusyDay(trip, plan, days) : undefined) ?? "unscheduled";
   const editor = useItineraryEditor({
     tripId: id,
     trip,
@@ -196,6 +198,7 @@ export default function ItineraryScreen() {
               if (!editor.isDragging) setDay(value);
             }}
           />
+          {!editing && activeDay !== "unscheduled" && <DayWeather api={api} trip={trip} plan={plan} day={activeDay} />}
           <View style={[ui.row, styles.toolbar]}>
             {editing ? (
               <View style={{ flex: 1, gap: 8 }}>
@@ -263,7 +266,7 @@ export default function ItineraryScreen() {
           {editing ? (
             <>
               {draft.plan && !draft.plan.permissions.can_edit && (
-                <Feedback message="Bạn chỉ có quyền xem. Người tổ chức quản lý quyền chỉnh sửa của nhóm." />
+                <Feedback inline message="Bạn chỉ có quyền xem. Người tổ chức quản lý quyền chỉnh sửa của nhóm." />
               )}
               {editor.activities.length ? (
                 <ActivityOrderList
@@ -280,6 +283,7 @@ export default function ItineraryScreen() {
               ) : (
                 <EmptyState
                   title="Ngày này đang trống"
+                  scene="greet"
                   message={`Chạm vào giờ của một hoạt động ở ngày khác để chuyển nó sang ${dayLabel}.`}
                   icon="calendar"
                 />
@@ -290,8 +294,8 @@ export default function ItineraryScreen() {
                   ngày). Chạm vào giờ để đặt lại.
                 </Text>
               )}
-              {editor.timeError && <Feedback message={editor.timeError} />}
-              {draft.error && <Feedback message={draft.error} />}
+              {editor.timeError && <Feedback inline message={editor.timeError} />}
+              {draft.error && <Feedback inline message={draft.error} />}
               {(draft.conflict || (draft.error && !draft.uncertain)) && (
                 <Button
                   label="Bỏ bản nháp, tải bản mới"
@@ -342,6 +346,7 @@ export default function ItineraryScreen() {
               {!activities.length && (
                 <EmptyState
                   title="Chừa chỗ cho điều thú vị"
+                  scene="tripDone"
                   message={
                     activeDay === "unscheduled"
                       ? "Các hoạt động chưa chọn giờ sẽ xuất hiện ở đây."

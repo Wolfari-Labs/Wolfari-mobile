@@ -87,6 +87,11 @@ export function FormField({
             keyboardScroll?.scrollToField(null);
             onBlur?.(event);
           }}
+          onContentSizeChange={(event) => {
+            // A multiline field grows while typing; keep the new line above the keyboard.
+            if (focused && input.multiline) keyboardScroll?.scrollToField(fieldRef.current);
+            input.onContentSizeChange?.(event);
+          }}
         />
         {secureTextEntry && (
           <Pressable

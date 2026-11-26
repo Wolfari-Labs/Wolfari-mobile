@@ -5,15 +5,19 @@ import Animated, { Extrapolation, interpolate, useAnimatedStyle } from "react-na
 import { springs } from "@/shared/theme/tokens";
 import { useAmbientLoop, useEntrance } from "./motion";
 
+// Wolfi in the brand art. Travel moods use the map pose, cheerful moods the wave;
+// add dedicated scooter, walk or sunset art to assets/brand/poses/ when it exists.
+const wave = require("@/assets/brand/poses/wolfi-wave.png");
+const map = require("@/assets/brand/poses/wolfi-map.png");
 export const wolfiPoses = {
-  map: require("@/assets/carto/wolfi-map.png"),
-  scooter: require("@/assets/carto/wolfi-scooter.png"),
-  wink: require("@/assets/carto/wolfi-wink.png"),
-  starry: require("@/assets/carto/wolfi-starry.png"),
-  walk: require("@/assets/carto/wolfi-walk.png"),
-  front: require("@/assets/carto/wolfi-front.png"),
-  happy: require("@/assets/carto/wolfi-happy.png"),
-  sunset: require("@/assets/carto/wolfi-sunset.png"),
+  map,
+  scooter: map,
+  wink: wave,
+  starry: wave,
+  walk: map,
+  front: wave,
+  happy: wave,
+  sunset: map,
 };
 
 export type WolfiPose = keyof typeof wolfiPoses;

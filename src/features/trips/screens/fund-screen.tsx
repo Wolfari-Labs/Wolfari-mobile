@@ -4,6 +4,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import * as Linking from 'expo-linking';
 import * as Clipboard from 'expo-clipboard';
 import { useSession } from '@/features/auth/session/session-provider';
+import { paymentSandboxEnabled } from '@/features/payments/sandbox-config';
 import {
   historyActionLabel,
   historyActorLabel,
@@ -280,7 +281,7 @@ function FundTools({ id, userId }: { id: string; userId: string }) {
           )}
           <Segments
             scroll
-            items={tabs}
+            items={paymentSandboxEnabled ? tabs : tabs.filter(option => option.value !== 'momo')}
             value={tab}
             onChange={(v) => {
               setTab(v as Tab);
@@ -532,7 +533,7 @@ function FundTools({ id, userId }: { id: string; userId: string }) {
               );
             }}
           />
-          {activeAttempt.payment_url && (
+          {paymentSandboxEnabled && activeAttempt.payment_url && (
             <Button
               label="Mở trang MoMo Sandbox"
               onPress={() => {

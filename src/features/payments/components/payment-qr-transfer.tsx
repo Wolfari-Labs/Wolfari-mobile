@@ -20,6 +20,7 @@ import type { QrSandboxCheckout, QrSandboxInput } from '../api';
 import type { PaymentQr } from '../model/payment-qr';
 import { paymentTransfer, sandboxAmount, scannedBankDeeplink, type PaymentTransfer } from '../model/payment-transfer';
 import { openPaymentApp } from '../open-payment-app';
+import { paymentSandboxEnabled } from '../sandbox-config';
 import { PaymentSimulation } from './payment-simulation';
 
 export type PaymentSimulationOptions = {
@@ -38,6 +39,7 @@ export function PaymentQrTransfer({ payment, tripId, simulationOnly = false, onS
   const [message, setMessage] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [sandboxDisabled, setSandboxDisabled] = useState(false);
+  const showSandbox = !simulationOnly && paymentSandboxEnabled && !!tripId;
   const scrollRef = useKeyboardScroll()?.scrollRef;
   const lock = useRef(false), active = useRef(true);
   const request = useRef<QrSandboxInput | undefined>(undefined);
@@ -57,7 +59,7 @@ export function PaymentQrTransfer({ payment, tripId, simulationOnly = false, onS
   }
 
   async function startSandbox() {
-    if (lock.current || !prepared || !tripId || sandboxDisabled) return;
+    if (lock.current || !prepared || !tripId || !showSandbox || sandboxDisabled) return;
     lock.current = true; setBusy(true); setMessage(undefined);
     try {
       sandboxAmount(prepared.amount);
@@ -91,7 +93,7 @@ export function PaymentQrTransfer({ payment, tripId, simulationOnly = false, onS
       {/^[1-9]\d{0,12}$/.test(amount) && <Text style={typography.headline}>{money(amount)}</Text>}
       <FormField icon="edit" label="Nội dung chuyển khoản" value={note} onChangeText={value => { setNote(value); setMessage(undefined); }} maxLength={150} placeholder="Ví dụ: Thanh toan bua toi" />
       <Button label="Chọn ứng dụng thanh toán" onPress={() => {
-        try { const next = paymentTransfer(payment, amount, note); Keyboard.dismiss(); setPrepared(next); setSelected(simulationOnly ? 'simulation' : tripId && !sandboxDisabled ? 'momo' : undefined); setMessage(undefined); }
+        try { const next = paymentTransfer(payment, amount, note); Keyboard.dismiss(); setPrepared(next); setSelected(simulationOnly ? 'simulation' : showSandbox && !sandboxDisabled ? 'momo' : undefined); setMessage(undefined); }
         catch (cause) { setMessage(errorMessage(cause)); }
       }} />
     </> : <>
@@ -100,16 +102,16 @@ export function PaymentQrTransfer({ payment, tripId, simulationOnly = false, onS
       <Text selectable style={typography.body}>{prepared.note}</Text>
       {sandboxDisabled && <Notice>MoMo Test chưa được bật. Chọn ngân hàng để tiếp tục chuyển khoản.</Notice>}
       <View accessibilityRole="radiogroup" accessibilityLabel="Ứng dụng thanh toán" style={{ borderWidth: 1, borderColor: colors.line, borderRadius: 16, overflow: 'hidden' }}>
-      <Pressable cssInterop={false} accessibilityRole="radio" accessibilityLabel="Mô phỏng trong app" accessibilityState={{ checked: selected === 'simulation', disabled: busy || !onSimulatedPayment }} aria-checked={selected === 'simulation'} disabled={busy || !onSimulatedPayment}
+      {onSimulatedPayment && <Pressable cssInterop={false} accessibilityRole="radio" accessibilityLabel="Mô phỏng trong app" accessibilityState={{ checked: selected === 'simulation', disabled: busy }} aria-checked={selected === 'simulation'} disabled={busy}
         onPress={() => { setSelected('simulation'); setMessage(undefined); }} style={{ minHeight: 52, flexDirection: 'row', alignItems: 'center', padding: 12, gap: 12, backgroundColor: selected === 'simulation' ? colors.mint : colors.surface }}>
         <Text style={[typography.body, { flex: 1 }]}>Mô phỏng trong app · Miễn phí</Text><Text style={typography.body}>{selected === 'simulation' ? '●' : '○'}</Text>
-      </Pressable>
+      </Pressable>}
       {!simulationOnly && <>
-      <Pressable cssInterop={false} accessibilityRole="radio" accessibilityLabel="MoMo Test" accessibilityState={{ checked: selected === 'momo', disabled: busy || !tripId || sandboxDisabled }} aria-checked={selected === 'momo'} aria-disabled={busy || !tripId || sandboxDisabled} disabled={busy || !tripId || sandboxDisabled}
+      {showSandbox && <Pressable cssInterop={false} accessibilityRole="radio" accessibilityLabel="MoMo Test" accessibilityState={{ checked: selected === 'momo', disabled: busy || sandboxDisabled }} aria-checked={selected === 'momo'} aria-disabled={busy || sandboxDisabled} disabled={busy || sandboxDisabled}
         onPress={() => { setSelected('momo'); setMessage(undefined); }} style={{ minHeight: 52, flexDirection: 'row', alignItems: 'center', padding: 12, gap: 12, backgroundColor: selected === 'momo' ? colors.mint : colors.surface }}>
         <Text style={[typography.body, { flex: 1 }]}>{sandboxDisabled ? 'MoMo Test · Chưa được bật' : 'MoMo Test · Thanh toán thử'}</Text><Text style={typography.body}>{selected === 'momo' ? '●' : '○'}</Text>
-      </Pressable>
-      <View style={{ paddingHorizontal: 12 }}><Details key={sandboxDisabled ? 'momo-disabled' : 'normal'} title="Chuyển bằng ngân hàng" defaultOpen={sandboxDisabled}>
+      </Pressable>}
+      <View style={{ paddingHorizontal: 12 }}><Details key={sandboxDisabled ? 'momo-disabled' : 'normal'} title="Chuyển bằng ngân hàng" defaultOpen={!showSandbox || sandboxDisabled}>
       {AUTOFILL_BANK_APPS.map(app => <Pressable cssInterop={false} key={app.id} accessibilityRole="radio"
         accessibilityLabel={`Chọn ${app.name}`} accessibilityState={{ checked: selected === app.id, disabled: busy || !resolveVietQrBank(payment.bankBin) }} aria-checked={selected === app.id} aria-disabled={busy || !resolveVietQrBank(payment.bankBin)} disabled={busy || !resolveVietQrBank(payment.bankBin)}
         onPress={() => { setSelected(app.id); setMessage(undefined); }} style={{ minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderBottomWidth: 1, borderBottomColor: colors.line, backgroundColor: selected === app.id ? colors.mint : colors.surface }}>

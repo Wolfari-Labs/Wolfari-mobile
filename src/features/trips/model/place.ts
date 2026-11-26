@@ -12,14 +12,14 @@ export type MapRegion = LatLng & { latitudeDelta: number; longitudeDelta: number
 
 /** Search groups offered as chips; values are the server's `category` filter. */
 export const POI_GROUPS = [
+  { value: "all", label: "Tất cả", icon: "✨" },
   { value: "tourism", label: "Tham quan", icon: "🏛️" },
   { value: "restaurant", label: "Ăn uống", icon: "🍜" },
-  { value: "cafe", label: "Cà phê", icon: "☕" },
   { value: "accommodation", label: "Lưu trú", icon: "🏨" },
+  { value: "cafe", label: "Cà phê", icon: "☕" },
   { value: "shopping", label: "Mua sắm", icon: "🛍️" },
   { value: "entertainment", label: "Vui chơi", icon: "🎡" },
   { value: "nightlife", label: "Về đêm", icon: "🌙" },
-  { value: "all", label: "Tất cả", icon: "✨" },
 ] as const;
 
 /** The server's default search centre (Đà Nẵng), used until the group saves a place. */

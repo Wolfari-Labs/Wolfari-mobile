@@ -6,7 +6,9 @@ import { typography } from "@/shared/theme/tokens";
 import { Button } from "@/shared/ui/button";
 import { EmptyState, FadeInView, ResourceFeedback, ui } from "@/shared/ui/journal";
 
-export function PagedRecords<T extends { id: string }>({ load, render, title, version }: {
+export function PagedRecords<T extends { id: string }>({ load, render, title, version, plain = false }: {
+  /** The caller draws its own cards. */
+  plain?: boolean;
   /** Reloads the current page when the fund version changes. */
   version?: number;
   title: string; load: (cursor: string | undefined, signal: AbortSignal) => Promise<Page<T>>; render: (row: T) => ReactNode;
@@ -23,8 +25,8 @@ export function PagedRecords<T extends { id: string }>({ load, render, title, ve
   }, [version, reload]);
   return <FadeInView>
     <ResourceFeedback {...resource} hasData={!!resource.data} onRetry={() => { void resource.reload(); }} />
-    {!resource.loading && resource.data && !resource.data.items.length && <EmptyState title={`Chưa có ${title}`} message="Khi có, mục này sẽ hiện ở đây." icon="wallet" />}
-    {resource.data?.items.map(row => <View key={row.id} style={ui.record}>{render(row)}</View>)}
+    {!resource.loading && resource.data && !resource.data.items.length && <EmptyState title={`Chưa có ${title}`} message="Khi có, mục này sẽ hiện ở đây." icon="wallet" scene="waiting" />}
+    {resource.data?.items.map(row => <View key={row.id} style={plain ? undefined : ui.record}>{render(row)}</View>)}
     {/* Page controls only when there is more than one page. */}
     {resource.data && (!!resource.data.next_cursor || cursors.length > 1) && <View style={ui.recordHeader}>
       <Text style={typography.footnote}>Trang {cursors.length}</Text>

@@ -1,4 +1,4 @@
-import type { PropsWithChildren } from "react";
+import { useRef, type PropsWithChildren } from "react";
 import {
   KeyboardAvoidingView,
   Modal,
@@ -8,14 +8,16 @@ import {
   StyleSheet,
   Text,
   View,
+  type ViewInstance,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 import { useAccessibilityPreferences } from "@/shared/hooks/use-accessibility-preferences";
 import { colors, typography } from "@/shared/theme/tokens";
+import { SnackbarHost } from "./feedback";
 import { GlassSurface } from "./glass-surface";
-import { KeyboardScrollProvider, useKeyboardScroll } from "./keyboard-scroll";
+import { KeyboardScrollProvider, useKeyboardOverlap, useKeyboardScroll } from "./keyboard-scroll";
 import { webSafeArea } from "./web-safe-area";
 
 type Props = PropsWithChildren<{
@@ -48,7 +50,10 @@ function SheetInner({
   const { reduceMotion } = useAccessibilityPreferences();
   const keyboardScroll = useKeyboardScroll();
   const keyboardHeight = keyboardScroll?.keyboardHeight ?? 0;
+  const insetFrame = useRef<ViewInstance | null>(null);
+  const keyboardInset = useKeyboardOverlap(insetFrame, keyboardScroll?.keyboardTop ?? Infinity);
   const nativeSheet = Platform.OS === "ios";
+  // Float above short dialogs and keep the actions at the bottom of tall sheets clear.
   const close = () => {
     if (dismissible) onClose();
   };
@@ -58,92 +63,97 @@ function SheetInner({
       visible={visible}
       transparent={!nativeSheet}
       presentationStyle={nativeSheet ? "pageSheet" : "overFullScreen"}
-      animationType={reduceMotion ? "none" : "slide"}
+      animationType={reduceMotion ? "none" : "fade"}
       allowSwipeDismissal={dismissible && allowSwipeDismissal}
       onRequestClose={close}
       statusBarTranslucent={!nativeSheet}
     >
       <GestureHandlerRootView style={{ flex: 1 }}>
-      <KeyboardAvoidingView
-        style={[
-          styles.overlay,
-          nativeSheet && styles.nativeOverlay,
-          !nativeSheet && keyboardHeight > 0 && { paddingBottom: keyboardHeight },
-        ]}
-        behavior={nativeSheet ? "padding" : undefined}
-      >
-        {!nativeSheet && (
-          <Pressable
-            style={StyleSheet.absoluteFill}
-            onPress={close}
-            disabled={!dismissible}
-            accessibilityLabel="Đóng hộp thoại"
-            accessibilityRole="button"
-          />
-        )}
-        <View
-          accessibilityViewIsModal
-          style={[styles.sheet, nativeSheet && styles.nativeSheet]}
-          onLayout={(e) => keyboardScroll?.onViewportLayout(e.nativeEvent.layout.height)}
+        <View ref={insetFrame} onLayout={keyboardInset.onLayout} style={{ flex: 1 }}>
+        <KeyboardAvoidingView
+          style={[
+            styles.overlay,
+            nativeSheet && styles.nativeOverlay,
+            !nativeSheet && keyboardHeight > 0 && { paddingBottom: Platform.OS === "android" ? keyboardInset.overlap : keyboardHeight },
+          ]}
+          behavior={nativeSheet ? "padding" : undefined}
         >
-          {!nativeSheet && <View style={styles.handle} />}
-          <GlassSurface variant="regular" style={styles.header}>
-            <Text
-              accessibilityRole="header"
-              style={[typography.headline, styles.title]}
-            >
-              {title}
-            </Text>
+          {!nativeSheet && (
             <Pressable
-              cssInterop={false}
+              style={StyleSheet.absoluteFill}
               onPress={close}
               disabled={!dismissible}
+              accessibilityLabel="Đóng hộp thoại"
               accessibilityRole="button"
-              accessibilityLabel="Đóng"
-              accessibilityState={{ disabled: !dismissible }}
-              style={({ pressed }) => [
-                styles.close,
-                (pressed || !dismissible) && { opacity: 0.4 },
-              ]}
-            >
-              <Text style={styles.closeText}>Đóng</Text>
-            </Pressable>
-          </GlassSurface>
-          {scrollable ? (
-            <ScrollView
-              ref={keyboardScroll?.scrollRef}
-              onScroll={keyboardScroll?.onScroll}
-              scrollEventThrottle={16}
-              keyboardShouldPersistTaps="handled"
-              automaticallyAdjustKeyboardInsets={nativeSheet}
-              keyboardDismissMode={nativeSheet ? "interactive" : "on-drag"}
-              showsVerticalScrollIndicator={false}
-              style={styles.scroll}
-              contentContainerStyle={[
-                styles.content,
-                {
-                  paddingBottom:
-                    Math.max(insets.bottom, 24) +
-                    (keyboardHeight > 0 ? Math.min(keyboardHeight * 0.5, 180) : 0),
-                },
-                webSafeArea.sheetContent,
-              ]}
-            >
-              {children}
-            </ScrollView>
-          ) : (
-            <View
-              style={[
-                styles.content,
-                { flexShrink: 1, paddingBottom: Math.max(insets.bottom, 24) },
-                webSafeArea.sheetContent,
-              ]}
-            >
-              {children}
-            </View>
+            />
           )}
+          <View accessibilityViewIsModal pointerEvents="box-none" style={styles.sheetViewport}>
+            <SnackbarHost top={nativeSheet ? 12 : insets.top + 12}>
+              <View style={[styles.sheet, nativeSheet && styles.nativeSheet]} onLayout={event => {
+                const { height } = event.nativeEvent.layout;
+                keyboardScroll?.onViewportLayout(height);
+              }}>
+                {!nativeSheet && <View style={styles.handle} />}
+                <GlassSurface variant="regular" style={styles.header}>
+                  <Text
+                    accessibilityRole="header"
+                    style={[typography.headline, styles.title]}
+                  >
+                    {title}
+                  </Text>
+                  <Pressable
+                    cssInterop={false}
+                    onPress={close}
+                    disabled={!dismissible}
+                    accessibilityRole="button"
+                    accessibilityLabel="Đóng"
+                    accessibilityState={{ disabled: !dismissible }}
+                    style={({ pressed }) => [
+                      styles.close,
+                      (pressed || !dismissible) && { opacity: 0.4 },
+                    ]}
+                  >
+                    <Text style={styles.closeText}>Đóng</Text>
+                  </Pressable>
+                </GlassSurface>
+                {scrollable ? (
+                  <ScrollView
+                    ref={keyboardScroll?.scrollRef}
+                    onScroll={keyboardScroll?.onScroll}
+                    scrollEventThrottle={16}
+                    keyboardShouldPersistTaps="handled"
+                    automaticallyAdjustKeyboardInsets={nativeSheet}
+                    keyboardDismissMode={nativeSheet ? "interactive" : "on-drag"}
+                    showsVerticalScrollIndicator={false}
+                    style={styles.scroll}
+                    contentContainerStyle={[
+                      styles.content,
+                      {
+                        paddingBottom:
+                          Math.max(insets.bottom, 24) +
+                          (keyboardHeight > 0 ? Math.min(keyboardHeight * 0.5, 180) : 0),
+                      },
+                      webSafeArea.sheetContent,
+                    ]}
+                  >
+                    {children}
+                  </ScrollView>
+                ) : (
+                  <View
+                    style={[
+                      styles.content,
+                      { flexShrink: 1, paddingBottom: Math.max(insets.bottom, 24) },
+                      webSafeArea.sheetContent,
+                    ]}
+                  >
+                    {children}
+                  </View>
+                )}
+              </View>
+            </SnackbarHost>
+          </View>
+        </KeyboardAvoidingView>
         </View>
-      </KeyboardAvoidingView>
       </GestureHandlerRootView>
     </Modal>
   );
@@ -152,11 +162,12 @@ function SheetInner({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(23, 63, 99, 0.38)",
+    backgroundColor: "rgba(31, 49, 84, 0.26)",
     justifyContent: "flex-end",
     alignItems: "center",
   },
   nativeOverlay: { backgroundColor: colors.canvas },
+  sheetViewport: { flex: 1, alignSelf: "stretch", justifyContent: "flex-end", alignItems: "center" },
   sheet: {
     backgroundColor: colors.canvas,
     borderTopLeftRadius: 28,
@@ -166,9 +177,9 @@ const styles = StyleSheet.create({
     maxWidth: 480,
     flexShrink: 1,
     overflow: "hidden",
-    borderWidth: 1.5,
+    borderWidth: StyleSheet.hairlineWidth,
     borderBottomWidth: 0,
-    borderColor: colors.ink,
+    borderColor: colors.line,
   },
   nativeSheet: {
     flex: 1,

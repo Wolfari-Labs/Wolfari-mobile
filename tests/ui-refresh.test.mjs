@@ -6,7 +6,7 @@ import { reminderPresets } from "../src/features/trips/model/reminders.ts";
 import { dressPalette } from "../src/features/trips/model/dress-suggestions.ts";
 import { prettyAttribution } from "../src/features/trips/model/place.ts";
 import { relativeTime, timeLeft } from "../src/shared/relative-time.ts";
-import { freshnessLabel, priceKind, priceKindLabel } from "../src/features/price-watch/labels.ts";
+import { freshnessLabel, priceKind, priceKindLabel, priceProviderLabel } from "../src/features/price-watch/labels.ts";
 import { ApiError, createApiClient } from "../src/shared/api/api-client.ts";
 import { errorMessage } from "../src/shared/api/errors.ts";
 
@@ -108,11 +108,18 @@ test("POI data credits are shown once and spelled properly", () => {
 test("price source and freshness labels separate real cached fares from simulation", () => {
   assert.equal(priceKind("TRAVELPAYOUTS_CACHE"), "real");
   assert.equal(priceKind("MOCK_FLIGHT"), "mock");
-  assert.equal(priceKindLabel("TRAVELPAYOUTS_CACHE"), "Giá vé thật");
+  assert.equal(priceKindLabel("TRAVELPAYOUTS_CACHE"), "Giá tham khảo");
+  assert.equal(priceProviderLabel("SEARCHAPI_GOOGLE_FLIGHTS"), "Google Flights (SearchApi)");
+  assert.equal(priceKindLabel("UNRECOGNIZED"), "Giá");
   const now = Date.parse("2026-11-23T10:00:00Z");
   assert.equal(freshnessLabel({ source_freshness: "FRESH_REFERENCE", provider_found_at: "2026-11-23T07:00:00Z" }, now), "Mới · tìm thấy 3 giờ trước");
   assert.equal(freshnessLabel({ source_freshness: "STALE", provider_found_at: "2026-11-20T10:00:00Z" }, now), "Đã cũ · tìm thấy 3 ngày trước");
   assert.equal(freshnessLabel(null, now), "");
+  const fresh = { data_kind: "FLIGHT_SEARCH", source_freshness: "FRESH_REFERENCE", provider_found_at: "2026-11-23T07:00:00Z" };
+  assert.match(freshnessLabel(fresh, Date.parse(fresh.provider_found_at) + 48 * 3600000), /^Mới/);
+  assert.match(freshnessLabel(fresh, Date.parse(fresh.provider_found_at) + 48 * 3600000 + 1), /^Đã cũ/);
+  assert.match(freshnessLabel({ ...fresh, provider_expires_at: new Date(now).toISOString() }, now), /^Đã cũ/);
+  assert.equal(freshnessLabel({ ...fresh, provider_found_at: null }, now), "Chưa xác định độ mới");
 });
 
 test("price source errors keep their reason and read as actionable Vietnamese", async () => {

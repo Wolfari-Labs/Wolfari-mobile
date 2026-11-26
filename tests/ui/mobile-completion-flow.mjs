@@ -41,7 +41,13 @@ await context.route("**/api/v1/**", async route => {
     reminders = [row]; return respond(row, 201);
   }
   if (path.includes("/reminders/") && method === "DELETE") { assert.equal(request.postData(), null); reminders[0].status = "CANCELLED"; return respond(reminders[0]); }
-  if (path.startsWith("/operations/")) { const key = path.split("/").at(-1); return operations.has(key) ? respond({ operation_id: key, trip_id: tripId, state: "SUCCEEDED", outcome: { status: "COMMITTED" } }) : fail(404, "RESOURCE_NOT_FOUND"); }
+  if (path.startsWith("/operations/")) {
+    const key = path.split("/").at(-1);
+    // The operation lookup also lags until the client can replay the lost reply.
+    const attempts = writes.filter(write => write.key === key);
+    if (attempts.length === 1 && attempts[0].path.endsWith("/ownership")) return fail(404, "RESOURCE_NOT_FOUND");
+    return operations.has(key) ? respond({ operation_id: key, trip_id: tripId, state: "SUCCEEDED", outcome: { status: "COMMITTED" } }) : fail(404, "RESOURCE_NOT_FOUND");
+  }
   if (["POST", "DELETE"].includes(method) && path.startsWith(`/trips/${tripId}`)) {
     const key = request.headers()["idempotency-key"], body = request.postDataJSON();
     writes.push({ key, body, path, method });
@@ -74,14 +80,25 @@ try {
   await button("Hủy lịch nhắc Đi dạo").click();
   await page.getByText("Đã hủy", { exact: true }).waitFor();
   await open(`/trip/${tripId}/export`);
+  for (const [card, action] of [["Xuất bản PDF", "Xem bản xuất"], ["Liên kết chia sẻ", "Mở bản xem trước"]]) {
+    await button(card).click();
+    const popup = page.getByRole("dialog");
+    if (card === "Liên kết chia sẻ") await popup.getByText(/chưa có liên kết công khai/).waitFor();
+    const preview = page.waitForResponse(response => response.url().endsWith("/plan.pdf") && response.status() === 200);
+    await popup.getByRole("button", { name: action, exact: true }).click();
+    await preview;
+  }
   const download = page.waitForEvent("download");
-  await button("Xuất kế hoạch PDF").click();
+  await button("Chia sẻ kế hoạch").click();
   assert.equal((await download).suggestedFilename(), "wolfari-plan-Chuy-n--i-ho-n-thi-n.pdf");
 
   await open(`/trip/${tripId}/manage`);
   await field("Lý do thay đổi").fill("Lưu kế hoạch đã xong");
   await button("Lưu trữ chuyến đi").click();
-  await button("Xác nhận thay đổi chuyến đi").click();
+  await button("Hủy").click();
+  assert.equal(writes.filter(write => write.path.endsWith("/archive")).length, 0);
+  await button("Lưu trữ chuyến đi").click();
+  await button("Lưu trữ").click();
   await page.getByText(/Cần chốt quỹ trước/).waitFor();
   await button("Tải lại dữ liệu").click();
   await page.getByRole("radio", { name: "Chuyển chủ", exact: true }).click();

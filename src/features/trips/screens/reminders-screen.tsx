@@ -1,3 +1,4 @@
+import { router } from "expo-router";
 import { errorMessage } from "@/shared/api/errors";
 import { useCallback, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
@@ -9,13 +10,14 @@ import { Details } from "@/shared/ui/details";
 import { DateTimeField } from "@/shared/ui/date-time-field";
 import { Feedback } from "@/shared/ui/feedback";
 import { FormField } from "@/shared/ui/form-field";
-import { Notice, ResourceFeedback, Segments } from "@/shared/ui/journal";
+import { ResourceFeedback, Segments } from "@/shared/ui/journal";
 import { Screen } from "@/shared/ui/screen";
 import { RowIcon } from "@/shared/ui/settings-list";
 import { toast } from "@/shared/ui/toast";
 import type { PersonalReminder } from "@/features/notifications/api";
 import { useTrip } from "../hooks/use-trip";
 import { defaultReminderTime, reminderInput, reminderPresets, reminderSources } from "../model/reminders";
+import { TIMEZONES } from "../model/timezones";
 import { dateLabel, timeLabel } from "../utils";
 
 const PAGE = 6;
@@ -42,12 +44,24 @@ export default function RemindersScreen() {
   const [error, setError] = useState<string>();
   const [shown, setShown] = useState(PAGE);
   const sources = data ? reminderSources(data.plan) : [];
-  const visible = sources.filter(item => item.type === type && item.label.toLocaleLowerCase("vi").includes(query.trim().toLocaleLowerCase("vi")));
-  const source = sources.find(item => item.id === selected && item.type === type);
+  const packing = type === "PACKING";
+  const available = sources.filter(item => item.type === type);
+  const search = query.trim().toLocaleLowerCase("vi");
+  const visible = available.filter(item => item.label.toLocaleLowerCase("vi").includes(search));
+  const source = available.find(item => item.id === selected);
   const tz = data?.trip.timezone ?? "Asia/Ho_Chi_Minh";
-  const page = [...visible].sort((a, b) => Date.parse(a.at) - Date.parse(b.at)).slice(0, shown);
+  const timezoneLabel = TIMEZONES.find(zone => zone.value === tz)?.label ?? tz;
+  const page = visible.slice(0, shown);
   const groups = [...new Set(page.map(item => dateLabel(item.at, tz)))];
   const presets = source ? reminderPresets(source, tz) : [];
+  function clearFeedback() {
+    setError(undefined);
+    command.clearError();
+  }
+  function resetSelection() {
+    setSelected("");
+    clearFeedback();
+  }
   function choose(item: (typeof sources)[number]) {
     setSelected(item.id);
     const options = reminderPresets(item, tz);
@@ -55,30 +69,32 @@ export default function RemindersScreen() {
     const pick = options.find(option => option.key === "1h") ?? options[0];
     const value = pick ? { date: pick.date, time: pick.time } : defaultReminderTime(item, tz);
     setPreset(pick?.key ?? "custom");
-    setDate(value.date); setTime(value.time); setError(undefined);
+    setDate(value.date); setTime(value.time);
+    clearFeedback();
   }
-  const enabled = !!data && data.trip.lifecycle !== "ARCHIVED" && !trip.loading && !trip.error;
+  const archived = data?.trip.lifecycle === "ARCHIVED";
+  const enabled = !!data && !archived && !trip.loading && !trip.error;
   async function create() {
     if (!enabled || !data || command.busy) return;
-    setError(undefined);
+    clearFeedback();
     try {
       const input = reminderInput(source, date, time, data.trip.timezone);
       const result = await command.run(input, key => api.notifications.createReminder(id, input, key));
       if (result) {
         setSelected("");
-        toast.success(`Sẽ nhắc bạn lúc ${time} · ${date}.`, { title: "Đã lưu lịch nhắc", icon: "bell" });
+        toast.success(`Sẽ nhắc bạn lúc ${time} · ${date}.`, { title: "Đã lưu lịch nhắc", icon: "reminderOk" });
         await reminders.reload();
       }
     } catch (cause) { setError(errorMessage(cause, "Kiểm tra giờ nhắc.")); }
   }
   async function cancel(row: PersonalReminder) {
+    setError(undefined);
     const result = await command.run({ cancel: row.id }, () => api.notifications.cancelReminder(id, row.id));
     if (result) { toast.info("Đã hủy lịch nhắc."); await reminders.reload(); }
   }
-  const labelOf = (row: PersonalReminder) => sources.find(item => item.id === row.source_id && item.type === row.source_type)?.label
-    ?? data?.plan.activities.find(item => item.id === row.source_id)?.title
-    ?? data?.plan.packing_items.find(item => item.id === row.source_id)?.name
-    ?? (row.source_type === "PACKING" ? "Nhắc hành lý" : "Nhắc hoạt động");
+  const labelOf = (row: PersonalReminder) => row.source_type === "PACKING"
+    ? data?.plan.packing_items.find(item => item.id === row.source_id)?.name ?? "Nhắc hành lý"
+    : data?.plan.activities.find(item => item.id === row.source_id)?.title ?? "Nhắc hoạt động";
   const rows = [...(reminders.data ?? [])].sort((a, b) => Date.parse(a.remind_at) - Date.parse(b.remind_at));
   const upcoming = rows.filter(row => row.status === "PENDING" || row.status === "PROCESSING");
   const past = rows.filter(row => !upcoming.includes(row)).reverse();
@@ -90,41 +106,51 @@ export default function RemindersScreen() {
       <RowIcon icon="bell" tone="peach" size={46} />
       <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
         <Text style={typography.headline}>{upcoming.length ? `${upcoming.length} lịch nhắc đang chờ` : "Chưa có lịch nhắc nào chờ"}</Text>
-        <Text style={typography.footnote} numberOfLines={2}>
-          {next ? `Sắp tới: ${labelOf(next)} · ${timeLabel(next.remind_at, tz)} ${dateLabel(next.remind_at, tz)}` : `${data?.trip.name ?? "Chuyến đi"} · giờ ${tz}`}
-        </Text>
+        <Text style={typography.footnote}>{data?.trip.name ?? "Chuyến đi"} · {timezoneLabel}</Text>
+        {next && <Text style={typography.footnote} numberOfLines={2}>
+          Sắp tới: {labelOf(next)} · {timeLabel(next.remind_at, tz)} {dateLabel(next.remind_at, tz)}
+        </Text>}
       </View>
     </View>
 
     <ResourceFeedback {...reminders} hasData={!!reminders.data} onRetry={() => { void reminders.reload(); }} />
     {upcoming.map(row => <ReminderRow key={row.id} row={row} label={labelOf(row)} tz={tz} busy={command.busy} onCancel={() => { void cancel(row); }} />)}
 
-    {enabled && <View style={styles.card}>
+    {archived && <Text style={typography.footnote}>Chuyến đi đã lưu trữ. Bạn có thể xem lại các lịch nhắc đã đặt.</Text>}
+    {data && !archived && <View style={styles.card}>
       <Text accessibilityRole="header" style={typography.section}>Đặt lịch nhắc mới</Text>
-      <Segments value={type} items={[{ value: "ACTIVITY", label: "Hoạt động" }, { value: "PACKING", label: "Hành lý" }]} onChange={value => { if (!command.busy) { setType(value); setSelected(""); setShown(PAGE); setError(undefined); } }} />
+      <Segments value={type} items={[{ value: "ACTIVITY", label: "Hoạt động" }, { value: "PACKING", label: "Hành lý" }]} onChange={value => {
+        if (command.busy || value === type) return;
+        setType(value);
+        setShown(PAGE);
+        resetSelection();
+      }} />
       {source ? <>
         <View style={styles.chosen}>
           <View style={{ flex: 1 }}>
             <Text style={typography.headline}>{source.label}</Text>
             <Text style={typography.footnote}>{source.type === "PACKING" ? "Hạn chuẩn bị" : "Bắt đầu"} {timeLabel(source.at, tz)} · {dateLabel(source.at, tz)}</Text>
           </View>
-          <Button label="Đổi mục" compact variant="text" disabled={command.busy} onPress={() => setSelected("")} />
+          <Button label="Đổi mục" compact variant="text" disabled={command.busy} onPress={resetSelection} />
         </View>
         <Text style={styles.label}>Nhắc tôi</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
-          {presets.map(option => <Chip key={option.key} label={option.label} hint={`${option.time} · ${option.date}`} active={preset === option.key}
-            onPress={() => { setPreset(option.key); setDate(option.date); setTime(option.time); setError(undefined); }} />)}
-          <Chip label="Tùy chỉnh" active={preset === "custom"} onPress={() => setPreset("custom")} />
+          {presets.map(option => <Chip key={option.key} label={option.label} hint={`${option.time} · ${option.date}`} active={preset === option.key} disabled={command.busy}
+            onPress={() => { setPreset(option.key); setDate(option.date); setTime(option.time); clearFeedback(); }} />)}
+          <Chip label="Tùy chỉnh" active={preset === "custom"} disabled={command.busy} onPress={() => { setPreset("custom"); clearFeedback(); }} />
         </ScrollView>
         {preset === "custom" ? <>
           <DateTimeField label="Ngày nhắc" mode="date" value={date} onChangeText={setDate} editable={!command.busy} />
           <DateTimeField label="Giờ nhắc" mode="time" value={time} onChangeText={setTime} editable={!command.busy} />
         </> : <Text style={typography.footnote}>Nhắc lúc {time} · {date}</Text>}
-        {(error || command.error) && <Feedback message={error ?? command.error!} />}
-        <Button label="Lưu lịch nhắc" loading={command.busy} onPress={() => { void create(); }} />
-      </> : <>
-        <FormField label="Tìm hoạt động hoặc vật dụng" icon="search" value={query} onChangeText={value => { setQuery(value); setShown(PAGE); }} maxLength={200} />
-        {!visible.length && <Notice>Chưa có mục phù hợp có giờ bắt đầu/hạn chuẩn bị trong tương lai. Hãy cập nhật lịch trình hoặc hành lý trước.</Notice>}
+        {error && <Feedback inline message={error} />}
+        <Button label="Lưu lịch nhắc" icon="bell" disabled={!enabled} loading={command.busy} onPress={() => { void create(); }} />
+      </> : available.length ? <>
+        <FormField label={packing ? "Tìm vật dụng" : "Tìm hoạt động"} icon="search" value={query} onChangeText={value => { setQuery(value); setShown(PAGE); }} maxLength={200} />
+        {!visible.length && <View style={styles.empty}>
+          <Text style={typography.headline}>Không tìm thấy {packing ? "vật dụng" : "hoạt động"}</Text>
+          <Button label="Xóa tìm kiếm" compact variant="text" onPress={() => { setQuery(""); setShown(PAGE); }} />
+        </View>}
         {groups.map(group => <View key={group} style={styles.group}>
           <Text style={styles.groupTitle}>{group}</Text>
           {page.filter(item => dateLabel(item.at, tz) === group).map(item => <Pressable key={item.id} cssInterop={false}
@@ -137,9 +163,16 @@ export default function RemindersScreen() {
           </Pressable>)}
         </View>)}
         {visible.length > shown && <Button label={`Xem thêm ${Math.min(PAGE, visible.length - shown)} mục`} compact variant="text" onPress={() => setShown(value => value + PAGE)} />}
-        {command.error && <Feedback message={command.error} />}
-      </>}
+      </> : <View style={styles.empty}>
+        <Text style={typography.headline}>{packing ? "Chưa có vật dụng cần nhắc" : "Chưa có hoạt động sắp tới"}</Text>
+        <Text style={typography.footnote}>{packing ? "Thêm hạn chuẩn bị để đặt lịch nhắc." : "Thêm giờ bắt đầu để đặt lịch nhắc."}</Text>
+        <Button label={packing ? "Mở hành lý" : "Mở lịch trình"} compact variant="text" icon="chevron" onPress={() => router.push({
+          pathname: packing ? "/trip/[id]/packing" : "/trip/[id]/itinerary",
+          params: { id },
+        })} />
+      </View>}
     </View>}
+    {command.error && <Feedback message={command.error} />}
 
     {past.length > 0 && <>
       <Text accessibilityRole="header" style={styles.pastTitle}>Đã qua hoặc đã hủy</Text>
@@ -166,8 +199,8 @@ function ReminderRow({ row, label, tz, busy, onCancel }: { row: PersonalReminder
   </View>;
 }
 
-function Chip({ label, hint, active, onPress }: { label: string; hint?: string; active: boolean; onPress: () => void }) {
-  return <Pressable cssInterop={false} accessibilityRole="radio" accessibilityLabel={hint ? `${label}, ${hint}` : label} accessibilityState={{ checked: active }} onPress={onPress}
+function Chip({ label, hint, active, disabled, onPress }: { label: string; hint?: string; active: boolean; disabled: boolean; onPress: () => void }) {
+  return <Pressable cssInterop={false} accessibilityRole="radio" accessibilityLabel={hint ? `${label}, ${hint}` : label} accessibilityState={{ checked: active, disabled }} disabled={disabled} onPress={onPress}
     style={({ pressed }) => [styles.chip, active && styles.chipActive, pressed && { opacity: 0.75 }]}>
     <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
     {hint && <Text style={[styles.chipHint, active && styles.chipTextActive]}>{hint}</Text>}
@@ -177,6 +210,7 @@ function Chip({ label, hint, active, onPress }: { label: string; hint?: string; 
 const styles = StyleSheet.create({
   summary: { flexDirection: "row", alignItems: "center", gap: 14, padding: 16, borderRadius: radii.card, backgroundColor: colors.surface, ...shadows.glass },
   card: { gap: 12, padding: 16, borderRadius: radii.card, backgroundColor: colors.surface, ...shadows.card },
+  empty: { gap: 6, alignItems: "flex-start", padding: 14, borderRadius: radii.control, backgroundColor: colors.fill },
   label: { ...typography.eyebrow, textTransform: "uppercase" },
   group: { gap: 6 },
   groupTitle: { color: colors.muted, fontSize: 13, fontFamily: fonts.bold },

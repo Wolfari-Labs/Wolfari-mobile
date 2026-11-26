@@ -101,7 +101,7 @@ await context.route("**/api/v1/**", async (route) => {
     assert.equal(body.expected_plan_version, version);
     const place = results.find((p) => p.selection_token === body.selection_token);
     assert.ok(place, "Search results are saved by their selection token");
-    const row = { id: uid(12), name: place.name, address: place.address, latitude: place.coordinates.latitude.toFixed(6), longitude: place.coordinates.longitude.toFixed(6), source: "WOLFARI", metadata: {}, plan_version: ++version };
+    const row = { id: uid(12), provider_place_id: place.id, name: place.name, address: place.address, latitude: place.coordinates.latitude.toFixed(6), longitude: place.coordinates.longitude.toFixed(6), source: "WOLFARI", metadata: {}, plan_version: ++version };
     locations.push(row);
     return respond(row, 201);
   }
@@ -139,7 +139,15 @@ const shot = async (name) => {
 try {
   await page.goto(`${appUrl}/trip/${tripId}/places`, { waitUntil: "networkidle" });
   // The group's places, with how many activities use each one.
-  await tab("Của nhóm · 2").waitFor();
+  await page.getByRole("heading", { name: "Ngày 1 · 2 điểm dừng" }).waitFor();
+  await page.getByRole("radio", { name: "Bản đồ giấy" }).click();
+  await button("Hiện toàn bộ điểm trên bản đồ").click();
+  await button("Xem chi tiết Chợ Cồn").click();
+  await page.getByRole("heading", { name: "Trong lịch của bạn" }).waitFor();
+  await button("Chỉnh sửa").waitFor();
+  await shot("place-detail-scheduled.png");
+  await button("Quay lại").click();
+  await tab("Của nhóm · 2").click();
   await page.getByText("Chợ Cồn", { exact: true }).waitFor();
   await page.getByText("Đã gắn với 1 hoạt động", { exact: true }).first().waitFor();
   await page.getByLabel("Bản đồ các địa điểm của hành trình", { exact: true }).waitFor();
@@ -161,6 +169,15 @@ try {
   assert.equal(await page.getByText(/^Dữ liệu: /).count(), 0, "No per-card data source line");
   await page.getByText("ⓘ Ảnh: Nguyễn An · CC BY-SA 4.0 · Wikimedia Commons", { exact: true }).waitFor();
   assert.equal(await page.getByAltText("Ảnh Bãi biển Mỹ Khê", { exact: true }).count(), 0, "No photo, no placeholder pretending to be one");
+  await button("Xem chi tiết Bảo tàng Điêu khắc Chăm").click();
+  await page.getByRole("heading", { name: "Bảo tàng Điêu khắc Chăm" }).waitFor();
+  await page.getByText("Ảnh: Nguyễn An · CC BY-SA 4.0 · Wikimedia Commons", { exact: true }).waitFor();
+  await button("Thêm vào lịch trình").waitFor();
+  await shot("place-detail-photo.png");
+  await page.reload({ waitUntil: "networkidle" });
+  await page.getByRole("heading", { name: "Bảo tàng Điêu khắc Chăm" }).waitFor();
+  assert.ok(imageRequests.some(p => p.endsWith("/1280.webp")), "Detail uses the full licensed photo");
+  await button("Quay lại").click();
   await tab("Ăn uống").click();
   await page.getByText("Bãi biển Mỹ Khê", { exact: true }).waitFor();
   assert.equal(searches.at(-1).category, "restaurant");
@@ -175,7 +192,12 @@ try {
   await page.getByText("Đã lưu “Bãi biển Mỹ Khê” cho cả nhóm.", { exact: true }).waitFor();
   assert.deepEqual(saves[0], { selection_token: "token-mykhe", expected_plan_version: 4 });
   await page.getByText("✓ Đã lưu cho nhóm", { exact: true }).waitFor();
-  await tab("Của nhóm · 3").waitFor();
+  await tab("Của nhóm · 3").click();
+  await button("Xem chi tiết Bãi biển Mỹ Khê").click();
+  await page.getByText("~2 giờ", { exact: true }).waitFor();
+  await page.getByText("Bãi biển", { exact: true }).waitFor();
+  await button("Quay lại").click();
+  await tab("Tìm quanh đây").click();
 
   // Quick add: pick a day and take the suggested slot (after the day's last timed activity).
   await button("Thêm hoạt động tại Bãi biển Mỹ Khê").click();

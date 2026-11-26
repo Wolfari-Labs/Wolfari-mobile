@@ -15,15 +15,31 @@ test("mobile branding uses Wolfari instead of Expo template assets", () => {
   assert.equal(expo.ios.icon, expo.icon);
   assert.equal(expo.android.icon ?? expo.icon, expo.icon);
   assert.equal(expo.android.adaptiveIcon.foregroundImage, "./assets/images/wolfari-adaptive-foreground.png");
-  assert.equal(expo.android.adaptiveIcon.backgroundColor, "#DDF7EF");
+  assert.equal(expo.android.adaptiveIcon.backgroundColor, "#EAF0FF");
   assert.equal(expo.android.adaptiveIcon.backgroundImage, undefined);
-  assert.equal(expo.android.adaptiveIcon.monochromeImage, undefined);
-  assert.equal(splash.image, "./assets/figma/mascot.png");
-  assert.equal(splash.imageWidth, 176);
+  assert.equal(expo.android.adaptiveIcon.monochromeImage, "./assets/images/wolfari-adaptive-monochrome.png");
+  assert.equal(splash.image, "./assets/images/wolfari-splash-icon.png");
+  assert.equal(splash.imageWidth, 152);
   assert.equal(splash.resizeMode, "contain");
-  // The pastel morning sky of the JS launch cover (SPLASH_BASE) starts from this colour.
-  assert.equal(splash.backgroundColor, "#E6EEFF");
+  assert.equal(splash.backgroundColor, expo.android.adaptiveIcon.backgroundColor);
   assert.deepEqual(splash.dark, { backgroundColor: splash.backgroundColor, image: splash.image });
+});
+
+test("Android notification and themed launcher icons have a transparent white stencil", async () => {
+  const notifications = expo.plugins.find(plugin => Array.isArray(plugin) && plugin[0] === "expo-notifications")[1];
+  for (const [asset, size] of [[notifications.icon, 96], [expo.android.adaptiveIcon.monochromeImage, 1024]]) {
+    const icon = await getPngInfo(join(root, asset));
+    assert.equal(icon.width, size);
+    assert.equal(icon.height, size);
+    assert.equal(icon.data[3], 0);
+    let opaque = 0;
+    for (let offset = 0; offset < icon.data.length; offset += 4) {
+      if (!icon.data[offset + 3]) continue;
+      assert.equal(icon.data[offset] + icon.data[offset + 1] + icon.data[offset + 2], 765);
+      opaque++;
+    }
+    assert.ok(opaque > size * size * 0.1);
+  }
 });
 
 test("the iOS app icon is a 1024px square with no alpha channel", async () => {

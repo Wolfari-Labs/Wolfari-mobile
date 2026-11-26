@@ -155,30 +155,66 @@ const button = (name) => page.getByRole("button", { name, exact: true });
 const field = (name) => page.getByLabel(name, { exact: true });
 const open = async () => {
   await page.goto(`${appUrl}/trip/${tripId}/packing`, { waitUntil: "networkidle" });
-  await page.getByText(/Cả nhóm đã chuẩn bị/).waitFor();
+  await page.getByText(/Sẵn sàng lên đường/).waitFor();
 };
 try {
   await open();
   await button("Thêm vật dụng").click();
-  await button("Lưu cho cả nhóm").click();
+  await button("Thêm vào danh sách").click();
   await page.getByText("Nhập tên vật dụng.", { exact: true }).waitFor();
   assert.equal(writes.length, 0);
   await field("Tên vật dụng").fill("Nước uống");
   await field("Số lượng").fill("1.25");
-  await button("Lưu cho cả nhóm").click();
-  await page.getByText("Đã lưu vật dụng cho cả nhóm.", { exact: true }).waitFor();
-  await button("Hoàn thành Nước uống").click();
-  await button("Bỏ hoàn thành Nước uống").waitFor();
+  await button("Chọn đơn vị").click();
+  await page.getByRole("radio", { name: "chai", exact: true }).click();
+  await button("Người chuẩn bị").click();
+  await page.getByRole("radio", { name: /· Tôi$/ }).click();
+  await field("Hạn chuẩn bị").fill("01/12/2026");
+  await field("Ghi chú").fill("Dùng chung khi đi bộ");
+  await field("Ghi chú").blur();
+  await page.screenshot({ path: ".cache/visual/m30-them-vat-dung.png" });
+  await page.setViewportSize({ width: 320, height: 690 });
+  await page.waitForFunction(() => document.querySelector('input[aria-label="Số lượng"]')?.getBoundingClientRect().width >= 80);
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+  await page.setViewportSize({ width: 390, height: 844 });
+  await button("Thêm vào danh sách").click();
+  await page.getByRole("heading", { name: "Đã lưu vật dụng" }).waitFor();
+  await page.screenshot({ path: ".cache/visual/p03-da-luu-vat-dung.png" });
+  await button("Tiếp tục chỉnh sửa").click();
+  await field("Ghi chú").fill("Mang theo bình nước");
+  await button("Lưu thay đổi").click();
+  await button("Về hành lý").click();
+  assert.deepEqual(writes.map(write => write.method), ["POST", "PATCH"]);
+  assert.equal(writes[0].body.unit, "chai");
+  assert.equal(writes[0].body.assigned_member_id, memberId);
+  assert.equal(writes[0].body.due_at, "2026-12-01T16:59:00.000Z");
+  await page.getByRole("checkbox", { name: "Hoàn thành Nước uống", exact: true }).click();
+  await page.getByRole("heading", { name: "Sẵn sàng lên đường!" }).waitFor();
+  await page.screenshot({ path: ".cache/visual/p15-san-sang.png" });
+  await button("Tuyệt, đi thôi!").click();
   await page.reload({ waitUntil: "networkidle" });
-  await button("Bỏ hoàn thành Nước uống").waitFor();
+  assert.equal(await page.getByRole("checkbox", { name: "Bỏ hoàn thành Nước uống", exact: true }).isChecked(), true);
   await page.screenshot({ path: ".cache/visual/packing-shared.png" });
+  for (const width of [320, 360]) {
+    await page.setViewportSize({ width, height: 740 });
+    for (const name of ["Khám phá", "Chuyến đi", "Thông báo", "Tài khoản"]) {
+      const tab = page.getByRole("tab", { name, exact: true });
+      const label = tab.getByText(name, { exact: true });
+      const bounds = await label.boundingBox();
+      assert.ok(bounds && bounds.x >= 0 && bounds.x + bounds.width <= width);
+      const target = await tab.boundingBox();
+      assert.ok(target.width >= 44 && target.height >= 44);
+    }
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  assert.equal(await button("Tuyệt, đi thôi!").count(), 0);
   conflict = true;
   await button("Sửa Nước uống").click();
   await field("Tên vật dụng").fill("Nước mới");
-  await button("Lưu cho cả nhóm").click();
+  await button("Lưu thay đổi").click();
   await button("Tải kế hoạch mới nhất").click();
-  await button("Sửa Nước uống").waitFor();
-  // Delete lives inside the edit sheet, so rows stay uncluttered.
+  await field("Tên vật dụng").waitFor();
+  await button("Hủy").click();
   await button("Sửa Nước uống").click();
   await button("Xóa vật dụng này").click();
   await button("Xóa vật dụng").click();
@@ -186,22 +222,40 @@ try {
   // A custom category: typed once, then offered as a chip like the presets.
   await button("Thêm vật dụng").click();
   await field("Tên vật dụng").fill("Kem chống nắng");
+  await button("Danh mục").click();
   await button("Thêm danh mục mới").click();
   await field("Tên danh mục mới").fill("  Đồ   đi biển ");
-  await button("Lưu cho cả nhóm").click();
-  await page.getByText("Đã lưu vật dụng cho cả nhóm.", { exact: true }).waitFor();
+  await button("Thêm vào danh sách").click();
+  await page.getByRole("heading", { name: "Đã lưu vật dụng" }).waitFor();
+  await button("Về hành lý").click();
   assert.equal(writes.at(-1).body.category, "Đồ đi biển");
-  await page.getByRole("button", { name: "Đồ đi biển, đã chuẩn bị 0/1 món", exact: true }).waitFor();
+  await page.getByText(/Đồ đi biển/).first().waitFor();
+  await button("Tùy chọn hành lý").click();
+  await page.getByRole("radio", { name: "Đồ đi biển", exact: true }).click();
+  await button("Đồ đi biển · Bỏ lọc").click();
   await page.screenshot({ path: ".cache/visual/packing-custom-category.png" });
   await button("Sửa Kem chống nắng").click();
-  await button("Chọn Đồ đi biển").waitFor();
+  await button("Danh mục").click();
+  assert.ok(await page.getByRole("radio", { name: "Đồ đi biển", exact: true }).isChecked());
   editable = false;
+  rows = [
+    { ...rows[0], id: uid(11), name: "Áo khoác mỏng", category: "Quần áo", assigned_member_id: memberId, status: "COMPLETED" },
+    { ...rows[0], id: uid(12), name: "Sạc dự phòng", category: "Điện tử", assigned_member_id: memberId },
+    { ...rows[0], id: uid(13), name: "Băng cá nhân", category: "Y tế", assigned_member_id: null, status: "COMPLETED" },
+  ];
   await open();
   assert.equal(await button("Thêm vật dụng").count(), 0);
+  await page.getByText("67%", { exact: true }).waitFor();
+  await page.screenshot({ path: ".cache/visual/m13-packing-filters.png" });
+  await page.getByRole("tab", { name: "Của tôi", exact: true }).click();
+  assert.equal(await page.getByText("Băng cá nhân", { exact: true }).count(), 0);
+  await page.getByRole("tab", { name: "Chưa xong", exact: true }).click();
+  await page.getByText("Sạc dự phòng", { exact: true }).waitFor();
+  assert.equal(await page.getByText("Áo khoác mỏng", { exact: true }).count(), 0);
   assert.deepEqual(errors, []);
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
   console.log(
-    "PASS shared packing UI: validation, create, completion, reload, version conflict, delete from edit sheet, custom category, viewer permissions. HTTP fixtures only.",
+    "PASS shared packing UI: validation, create, completion, reload, version conflict, delete from editor, custom category, viewer permissions. HTTP fixtures only.",
   );
 } catch (error) {
   console.error(

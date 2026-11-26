@@ -110,7 +110,7 @@ Nếu dùng tunnel cho Expo, tunnel đó chỉ chuyển bundle JS; backend cũng
   mỗi xác nhận. Chốt quỹ chỉ khi số dư 0 và không còn nghĩa vụ/đối soát chờ.
 - **Theo dõi giá**: tạo SGN → DAD, ngày tương lai, 1 người lớn, ngưỡng 2000000.
   Xem lịch sử; chấp nhận trường hợp chưa có quan sát nếu worker chưa chạy. Kiểm tra
-  nhãn MOCK_FLIGHT, giá cũ khi nguồn lỗi, sửa ngưỡng, tạm dừng/tiếp tục/dừng. App
+  tên nguồn trên từng chặng, giá cũ khi nguồn lỗi, sửa ngưỡng, tạm dừng/tiếp tục/dừng. App
   không tạo giá hoặc cảnh báo giả để lấp dữ liệu thiếu.
 - **Quét QR thanh toán** trong Quỹ nhóm: từ chối camera rồi dán QR; CRC đúng mới
   được đọc. Đọc được 180.000 ₫ không phải đã thanh toán và không tăng số dư.

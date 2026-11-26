@@ -70,7 +70,8 @@ Finance and Price Watch now call the real Gateway. Fund setup, destinations,
 contributions, expenses, refunds, outside-fund notes, ledger, closure snapshots,
 member audit history and Sandbox payment commands are connected. Price Watch has
 create/edit/pause/resume/stop, per-user thresholds, observation history and stale
-source labels. The provider remains `MOCK_FLIGHT`, not live airline prices.
+source labels. Automation uses its configured price source for new watches.
+Fare history identifies Google Flights (SearchApi), Aviasales (Travelpayouts), or the test provider selected by Automation, and shows the last check and the next scheduled check when available.
 Private drafts remain available from separate links; they never alter server balances.
 Export and notification-preference integration are outside this increment.
 

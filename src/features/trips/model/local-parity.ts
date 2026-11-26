@@ -34,7 +34,7 @@ export type CreateDraft = {
   name: string; start: string; end: string; description: string; destination: string;
   members: string; budget: string; style: string; template: string; cover: string; timezone?: string;
 };
-export const emptyCreateDraft: CreateDraft = { name: "", start: "", end: "", description: "", destination: "", members: "2", budget: "", style: "explore", template: "blank", cover: "tripCover" };
+export const emptyCreateDraft: CreateDraft = { name: "", start: "", end: "", description: "", destination: "", members: "2", budget: "", style: "", template: "blank", cover: "tripCover" };
 export function isCreateDraft(value: unknown): value is CreateDraft {
   return isRecord(value) && (value.timezone === undefined || (typeof value.timezone === "string" && value.timezone.length <= 64)) && Object.keys(emptyCreateDraft).every(key => typeof value[key] === "string" && (value[key] as string).length <= 5000);
 }

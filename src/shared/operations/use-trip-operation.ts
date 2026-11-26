@@ -21,7 +21,11 @@ export function useTripOperation(tripId: string) {
     if (!value) {
       value = createOperationController({ tripId, storageKey: `wolfari.operation.v1:${scope}`, storage: AsyncStorage,
         uuid: randomUUID, execute: (input, key) => api.finance.execute(input, key),
-        poll: key => api.trips.operation(key), message: errorMessage });
+        poll: key => api.trips.operation(key), message: cause => {
+          // Shown in the Metro terminal while developing, so a failed write can be traced.
+          if (__DEV__) console.warn("[Wolfari] Thao tác quỹ lỗi:", cause instanceof Error ? `${cause.name}: ${cause.message}` : cause, (cause as { status?: number; code?: string })?.status, (cause as { code?: string })?.code);
+          return errorMessage(cause);
+        } });
       controllers.set(scope, value);
     }
     return value;

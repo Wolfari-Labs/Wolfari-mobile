@@ -29,7 +29,7 @@ test('missing/invalid amounts and transfer content never become handoff links', 
   for (const note of ['', ' ', 'Dinner\nInjected', 'x'.repeat(151)])
     assert.throws(() => paymentTransfer(payment, '150000', note));
   assert.throws(() => scannedBankDeeplink(paymentTransfer({ ...payment, bankBin: '999999' }, '150000', 'Dinner'), 'mb'));
-  assert.throws(() => scannedBankDeeplink(paymentTransfer(payment, '150000', 'Dinner'), 'vcb'));
+  assert.throws(() => scannedBankDeeplink(paymentTransfer(payment, '150000', 'Dinner'), 'not-a-bank-app'));
   assert.equal(sandboxAmount('1000'), '1000');
   assert.equal(sandboxAmount('50000000'), '50000000');
   for (const value of ['999', '50000001', '1500000000000']) assert.throws(() => sandboxAmount(value));

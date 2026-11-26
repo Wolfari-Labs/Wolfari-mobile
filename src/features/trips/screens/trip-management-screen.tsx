@@ -1,4 +1,5 @@
-import { router } from "expo-router";
+import { DesignPopup } from "@/shared/ui/design-popup";
+import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSession } from "@/features/auth/session/session-provider";
@@ -29,7 +30,8 @@ export default function TripManagementScreen() {
 function ManagementWorkspace({ resource }: { resource: ReturnType<typeof useTrip> }) {
   const { data, id, api } = resource;
   const operation = useTripOperation(id);
-  const [action, setAction] = useState<Action>("ARCHIVE");
+  const { action: requested } = useLocalSearchParams<{ action?: string }>();
+  const [action, setAction] = useState<Action>(requested === "TRANSFER" || requested === "DELETE" ? requested : "ARCHIVE");
   const [reason, setReason] = useState("");
   const [target, setTarget] = useState("");
   const [name, setName] = useState("");
@@ -38,7 +40,7 @@ function ManagementWorkspace({ resource }: { resource: ReturnType<typeof useTrip
   const archived = data?.trip.lifecycle === "ARCHIVED";
   const members = useResource(useCallback((signal: AbortSignal) => collectPages(cursor => api.trips.members(id, cursor, signal), signal), [api, id]), !!owner && action === "TRANSFER");
   const eligible = members.data?.filter(m => !m.left_at && m.role !== "OWNER") ?? [];
-  const selectedAction = archived && action === "ARCHIVE" ? "REOPEN" : action;
+  const selectedAction = archived && action !== "DELETE" ? "REOPEN" : action;
   const allowed = !!owner && !resource.loading && !resource.error && !operation.locked && !!reason.trim() && (selectedAction !== "TRANSFER" || (!archived && !members.loading && !members.error && eligible.some(m => m.id === target))) && (selectedAction !== "DELETE" || name === data?.trip.name);
   async function submit() {
     if (!allowed || !data) return;
@@ -100,7 +102,9 @@ function ManagementWorkspace({ resource }: { resource: ReturnType<typeof useTrip
     {!(operationCommitted(operation.pending) && operation.pending?.targetId === "DELETE") && <SettingsGroup footer="Lưu trữ và xóa cần quỹ nhóm đã đóng.">
       <SettingsRow last icon="wallet" tone="mint" title="Kiểm tra quỹ và nghĩa vụ" onPress={() => router.push({ pathname: "/trip/[id]/fund", params: { id } })} />
     </SettingsGroup>}
-    <Sheet visible={confirm} title={`Xác nhận ${labels[selectedAction].toLowerCase()}?`} onClose={() => setConfirm(false)} dismissible={!operation.busy}>
+    {confirm && selectedAction === "ARCHIVE" && <DesignPopup kind="archive" message={`${data?.trip.name} sẽ chuyển sang chỉ xem. Lịch trình và các kỷ niệm được giữ lại. Lý do: ${reason.trim()}`}
+      disabled={!allowed} busy={operation.busy} onPrimary={() => { void submit(); }} onClose={() => setConfirm(false)} />}
+    <Sheet visible={confirm && selectedAction !== "ARCHIVE"} title={`Xác nhận ${labels[selectedAction].toLowerCase()}?`} onClose={() => setConfirm(false)} dismissible={!operation.busy}>
       <Text style={typography.body}>{data?.trip.name}</Text>
       {selectedAction === "TRANSFER" && <Text style={typography.body}>Chủ mới: {eligible.find(m => m.id === target) ? memberName(eligible.find(m => m.id === target)!) : ""}</Text>}
       <Text style={typography.body}>Lý do: {reason.trim()}</Text>

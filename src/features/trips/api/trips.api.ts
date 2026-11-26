@@ -27,6 +27,10 @@ import type {
   TravelRouteMeta,
   SelectedLocation,
   Trip,
+  Recommendation,
+  RecommendationType,
+  WeatherDay,
+  WeatherMeta,
 } from "../types";
 
 const invitationBody = (secret: string) =>
@@ -277,6 +281,19 @@ export function createTripsApi(client: ApiClient) {
       client.request<SelectedLocation>(`/trips/${id(tripId)}/selected-locations`, write("POST", input, key)),
     route: (coordinates: { latitude: number; longitude: number }[], mode: RouteMode, signal?: AbortSignal) =>
       client.requestWithMeta<TravelRoute, TravelRouteMeta>("/travel/route", { method: "POST", body: { coordinates, mode }, signal }),
+    /** Daily forecast; data is null outside the 16-day window (meta.warnings FORECAST_OUT_OF_RANGE). */
+    weather: (point: { latitude: number; longitude: number }, date: string, signal?: AbortSignal) =>
+      client.requestWithMeta<WeatherDay | null, WeatherMeta>(
+        `/travel/weather?${new URLSearchParams({ latitude: String(point.latitude), longitude: String(point.longitude), date })}`,
+        { signal },
+      ),
+    /** Stores a preview on the server; nothing in the Plan changes until apply. */
+    previewRecommendation: (tripId: string, input: { type: RecommendationType; date?: string; activity_ids?: string[] }, signal?: AbortSignal) =>
+      client.request<Recommendation>(`/trips/${id(tripId)}/recommendations`, { method: "POST", body: input, signal }),
+    applyRecommendation: (recommendationId: string, input: { item_ids: string[]; expected_plan_version: number }, key: string) =>
+      client.request<Recommendation>(`/recommendations/${id(recommendationId)}/apply`, write("POST", input, key)),
+    ignoreRecommendation: (recommendationId: string) =>
+      client.request<Recommendation>(`/recommendations/${id(recommendationId)}/ignore`, { method: "POST", body: {} }),
     searchPlaces: (tripId: string, q: string, signal?: AbortSignal) =>
       client.requestWithMeta<TravelPlace[], TravelMeta>(
         `/travel/places?${new URLSearchParams({ trip_id: tripId, q: q.trim() })}`,

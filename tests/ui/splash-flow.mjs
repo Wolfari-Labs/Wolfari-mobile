@@ -34,7 +34,7 @@ async function run({ reduced = false, brokenImage = false, deepLink = false } = 
     await authGate;
     return route.fulfill({ status: 401, headers, contentType: "application/json", body: JSON.stringify({ error: { code: "UNAUTHENTICATED", message: "Fixture", retryable: false }, meta: {} }) });
   });
-  if (brokenImage) await context.route(/\/mascot\.[^/]+\.png$/, route => route.abort());
+  if (brokenImage) await context.route(/\/wolfari-splash-icon\.[^/]+\.png$/, route => route.abort());
   const page = await context.newPage();
   page.setDefaultTimeout(12_000);
   page.on("pageerror", error => errors.push(error.message));
@@ -66,7 +66,7 @@ async function run({ reduced = false, brokenImage = false, deepLink = false } = 
       assert.notEqual(after, before, "The mascot entrance must actually animate");
     }
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
-    if (reduced) assert.equal(await page.getByText("Những kỷ niệm đẹp đang chờ bạn").count(), 0, "Omit the footer on compact screens to avoid overlapping the tagline");
+    if (reduced) assert.ok(await splash.getByTestId("splash-wordmark").isVisible());
     await page.screenshot({ path: path.join(output, `${suffix}.png`) });
     await splash.waitFor({ state: "hidden", timeout: 5000 });
     releaseAuth();

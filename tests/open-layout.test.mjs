@@ -87,6 +87,7 @@ test("trip previews use rounded clay cards but the overview is not a self-naviga
   assert.match(stylesIn(card).get("card"), /borderRadius: radii.cardLarge/);
   assert.match(stylesIn(card).get("card"), /shadows.card/);
   assert.match(card, /if \(!interactive\) return <View/);
-  assert.match(card, /GlassSurface variant="subtle"/);
+  assert.match(card, /<View style=\{styles.badge\}>/);
+  assert.match(stylesIn(card).get("badge"), /backgroundColor: colors.surface/);
   assert.match(await source("features/trips/screens/trip-overview-screen.tsx"), /<TripCard trip=\{trip\} interactive=\{false\}/);
 });

@@ -2,6 +2,7 @@ export const privateFileTypes = {
   "application/pdf": "pdf",
   "image/jpeg": "jpg",
   "image/png": "png",
+  "text/calendar": "ics",
 } as const;
 export function privateFileName(blob: Blob, name: string) {
   const extension = privateFileTypes[blob.type as keyof typeof privateFileTypes];

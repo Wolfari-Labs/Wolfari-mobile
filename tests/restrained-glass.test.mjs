@@ -4,7 +4,7 @@ import test from "node:test";
 
 const source = path => readFile(new URL(`../src/${path}`, import.meta.url), "utf8");
 
-test("reading summaries stay on clay; floating glass keeps a legible veil", async () => {
+test("reading summaries stay opaque and floating glass keeps a legible veil", async () => {
   const intro = await source("shared/ui/page-intro.tsx");
   assert.doesNotMatch(intro, /GlassSurface/);
   assert.match(intro, /backgroundColor: colors.surface/);
@@ -15,7 +15,11 @@ test("reading summaries stay on clay; floating glass keeps a legible veil", asyn
   assert.match(glass, /androidSolid: "rgba\(255,255,255,0\.9\d\)"/);
   assert.match(glass, /backgroundColor: veil/);
   const screen = await source("shared/ui/screen.tsx");
-  assert.match(screen, /variant="prominent"\s+blurTarget=\{blurTarget\}/);
+  assert.match(screen, /<BottomBarSurface\s+blurTarget=\{blurTarget\}/);
+  const bottomBar = await source("shared/ui/bottom-bar-surface.tsx");
+  assert.match(bottomBar, /!reduceTransparency/);
+  assert.match(bottomBar, /opacity: cover.get\(\)/);
+  assert.doesNotMatch(bottomBar, /translateY|SlideIn/);
 });
 
 test("frequent controls have bounded press feedback, not bouncing or staggered navigation", async () => {

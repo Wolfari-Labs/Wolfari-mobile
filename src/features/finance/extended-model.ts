@@ -81,12 +81,30 @@ export const AUTOFILL_BANK_APPS: readonly { id: string; name: string }[] = [
   { id: 'acb', name: bankDisplayName('ACB') },
   { id: 'ocb', name: bankDisplayName('OCB') },
 ];
+/**
+ * Bank apps the same deeplink only opens (autofill=0 in the lists above): the person pastes the
+ * transfer note Wolfari copied. Kept to widely used apps so the picker stays short.
+ */
+export const OPEN_ONLY_BANK_APPS: readonly { id: string; name: string }[] = [
+  { id: 'vcb', name: bankDisplayName('VCB') },
+  { id: 'tcb', name: bankDisplayName('TCB') },
+  { id: 'vpb', name: bankDisplayName('VPB') },
+  { id: 'tpb', name: bankDisplayName('TPB') },
+  { id: 'vib', name: bankDisplayName('VIB') },
+  { id: 'shb', name: bankDisplayName('SHB') },
+  { id: 'hdb', name: bankDisplayName('HDB') },
+  { id: 'seab', name: bankDisplayName('SEAB') },
+  { id: 'lpb', name: bankDisplayName('LPB') },
+  { id: 'eib', name: bankDisplayName('EIB') },
+  { id: 'cake', name: bankDisplayName('CAKE') },
+  { id: 'timo', name: 'Timo' },
+];
 /** https://dl.vietqr.io/pay deeplink for this instruction. The user still confirms in the bank app. */
 export function bankAppDeeplink(instruction: Pick<PaymentInstruction, 'environment' | 'bank_code' | 'account_number' | 'amount' | 'reference' | 'recipient_name'>, appId: string, returnUrl: string): string {
   const bank = instruction.bank_code.trim().toLowerCase();
   if (
     instruction.environment !== 'LIVE' ||
-    !AUTOFILL_BANK_APPS.some(app => app.id === appId) ||
+    ![...AUTOFILL_BANK_APPS, ...OPEN_ONLY_BANK_APPS].some(app => app.id === appId) ||
     !/^[a-z0-9]{1,20}$/.test(bank) ||
     !/^[A-Za-z0-9]{1,19}$/.test(instruction.account_number) ||
     !/^[1-9]\d{0,12}$/.test(instruction.amount) ||

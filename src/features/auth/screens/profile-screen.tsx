@@ -1,3 +1,4 @@
+import { DesignPopup } from "@/shared/ui/design-popup";
 import Constants from "expo-constants";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
@@ -16,7 +17,6 @@ import { DesignIcon } from "@/shared/ui/design-icon";
 import { Feedback } from "@/shared/ui/feedback";
 import { Screen } from "@/shared/ui/screen";
 import { SettingsGroup, SettingsRow } from "@/shared/ui/settings-list";
-import { Sheet } from "@/shared/ui/sheet";
 import { ProfileAvatar } from "../components/profile-avatar";
 import { useSession } from "../session/session-provider";
 
@@ -113,12 +113,8 @@ export default function ProfileScreen() {
 
       {error && <Feedback message={error} />}
       <Button label="Đăng xuất" variant="destructive" onPress={() => { setError(undefined); setConfirm(true); }} />
-      <Sheet visible={confirm} title="Đăng xuất khỏi Wolfari?" dismissible={!busy} onClose={() => setConfirm(false)}>
-        <Text style={typography.body}>Thiết bị này sẽ ngừng nhận thông báo đẩy. Các thiết bị khác vẫn giữ đăng nhập.</Text>
-        {error && <Feedback message={error} />}
-        <Button label="Xác nhận đăng xuất" variant="destructive" loading={busy} onPress={() => { void logout(); }} />
-        <Button label="Ở lại" variant="soft" disabled={busy} onPress={() => setConfirm(false)} />
-      </Sheet>
+      {confirm && <DesignPopup kind="logout" message="Bạn có thể đăng nhập lại để tiếp tục chuẩn bị các chuyến đi. Thiết bị này sẽ ngừng nhận thông báo đẩy." error={error}
+        busy={busy} onPrimary={() => { void logout(); }} onClose={() => setConfirm(false)} />}
     </Screen>
   );
 }

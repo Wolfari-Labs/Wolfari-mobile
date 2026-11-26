@@ -36,6 +36,10 @@ const tripId = uid(1),
 let actor = ownerId,
   loseConfirmation = true,
   stale = true;
+let noFare = false;
+let observedPrice = '1800000';
+const checkedAt = new Date().toISOString();
+const nextCheckAt = new Date(Date.now() + 6 * 3600000).toISOString();
 let receiptMode = "image";
 const calls = [],
   errors = [],
@@ -118,12 +122,12 @@ await context.route('**/api/v1/**', async (route) => {
       contentType: 'application/json',
       body: JSON.stringify({ data, meta }),
     });
-  const fail = (status, code) =>
+  const fail = (status, code, reason) =>
     route.fulfill({
       status,
       headers,
       contentType: 'application/json',
-      body: JSON.stringify({ error: { code, message: code, retryable: false }, meta: {} }),
+      body: JSON.stringify({ error: { code, message: code, retryable: false, details: { reason } }, meta: {} }),
     });
   if (method === 'OPTIONS') return route.fulfill({ status: 204, headers });
   const body = req.postData() ? req.postDataJSON() : undefined,
@@ -215,26 +219,35 @@ await context.route('**/api/v1/**', async (route) => {
   }
   if (p.endsWith('/observations'))
     return ok(
-      [
+      noFare ? [] : [
         {
           id: uid(300),
-          price: '1800000',
+          price: observedPrice,
           currency: 'VND',
-          provider: 'MOCK_FLIGHT',
-          observed_at: '2026-11-01T00:00:00Z',
-          fetched_at: '2026-11-01T00:00:00Z',
+          provider: 'SEARCHAPI_GOOGLE_FLIGHTS',
+          observed_at: checkedAt,
+          fetched_at: checkedAt,
+          fare_metadata: { data_kind: 'FLIGHT_SEARCH', provider_found_at: checkedAt, source_freshness: 'FRESH_REFERENCE' },
         },
+        ...[2000000, 1850000, 1900000, 2000000].map((price, i) => {
+          const at = new Date(Date.parse(checkedAt) - (i + 1) * 86400000).toISOString();
+          return { id: uid(301 + i), price: String(price), currency: 'VND', provider: 'SEARCHAPI_GOOGLE_FLIGHTS', observed_at: at, fetched_at: at,
+            fare_metadata: { data_kind: 'FLIGHT_SEARCH', provider_found_at: at, source_freshness: 'FRESH_REFERENCE' } };
+        }),
       ],
-      { next_cursor: null, stale, last_error: stale ? 'PROVIDER_TIMEOUT' : null },
+      { next_cursor: null, stale, last_error: stale ? 'PROVIDER_TIMEOUT' : null,
+        last_checked_at: checkedAt, next_check_at: nextCheckAt,
+        last_check_status: stale ? 'FAILED' : noFare ? 'NO_RESULT' : 'SUCCEEDED' },
     );
   if (p.endsWith('/price-watches')) {
     if (method === 'GET')
       return ok(
-        watches.filter((w) => w.user_id === actor),
+        watches,
         { next_cursor: null },
       );
-    // The server chooses the source; this fixture server is configured for MOCK_FLIGHT.
+    // The deployment chooses Google Flights even when there are no watches yet.
     assert.equal('provider' in body, false);
+    if (body.passengers.adults !== 1) return fail(400, 'VALIDATION_FAILED', 'PROVIDER_QUERY_UNSUPPORTED');
     assert.equal(typeof body.threshold_price, 'string');
     const { threshold_price, ...query } = body;
     const w = {
@@ -249,7 +262,7 @@ await context.route('**/api/v1/**', async (route) => {
       expires_at: body.departure_at,
       last_alert_price: null,
       last_alert_at: null,
-      normalized_query: { ...query, provider: 'MOCK_FLIGHT', transport_type: 'FLIGHT' },
+      normalized_query: { ...query, provider: 'SEARCHAPI_GOOGLE_FLIGHTS', transport_type: 'FLIGHT' },
     };
     watches.push(w);
     receipts.set(key, structuredClone(w));
@@ -257,7 +270,8 @@ await context.route('**/api/v1/**', async (route) => {
   }
   if (p.startsWith('/price-watches/')) {
     const w = watches.find((w) => p.includes(w.id));
-    if (!w || actor !== w.user_id) return fail(404, 'RESOURCE_NOT_FOUND');
+    if (!w) return fail(404, 'RESOURCE_NOT_FOUND');
+    if (actor !== w.user_id && !(actor === ownerId && method === 'DELETE')) return fail(403, 'PERMISSION_DENIED');
     assert.equal(body.expected_version, w.version);
     if (method === 'PATCH') {
       const { expected_version: _v, threshold_price, ...query } = body;
@@ -325,7 +339,7 @@ const button = (name) => page.getByRole('button', { name, exact: true }),
 const tab = (name) => page.getByRole('tab', { name, exact: true });
 const goto = async (feature = 'fund-tools') => {
   await page.goto(`${appUrl}/trip/${tripId}/${feature}`, { waitUntil: 'networkidle' });
-  await page.getByText('Finance & Price Watch', { exact: true }).first().waitFor();
+  await page.getByText(feature === 'fund' ? 'QUỸ CÒN LẠI' : feature === 'price-watch' ? 'Bay với giá tốt hơn' : 'Finance & Price Watch', { exact: true }).first().waitFor();
 };
 const save = async () => {
   await button('Xác nhận lưu').click();
@@ -338,11 +352,11 @@ try {
   const starts = (name) => page.getByRole('button', { name: new RegExp(`^${name}`) });
   const fundTab = async () => {
     await goto('fund');
-    await tab('Đợt góp').click();
+    await tab('Đóng góp').click();
     await page.getByText(/^(Khoản đóng của bạn|Bạn đồng hành)/).first().waitFor();
   };
   const confirmSheet = async () => {
-    const sheet = page.getByRole('dialog');
+    const sheet = page.getByRole('dialog').filter({ has: button('Đóng hộp thoại') });
     await sheet.waitFor();
     assert.equal(await sheet.getByRole('button', { name: 'Tiếp tục', exact: true }).count(), 0);
     await sheet.getByRole('button').last().click();
@@ -353,8 +367,8 @@ try {
     assert.equal(await button('Tải lại quỹ').count(), 0);
   };
   await goto('fund');
-  await page.getByText('Số dư đã ghi nhận', { exact: true }).waitFor();
-  await tab('Đợt góp').click();
+  await page.getByText('QUỸ CÒN LẠI', { exact: true }).waitFor();
+  await tab('Đóng góp').click();
   await page.getByText(/^Bạn đồng hành/).first().waitFor();
   assert.equal(await starts('Xác nhận đã nhận đủ').count(), 0, 'Owner does not gain Holder rights');
   actor = memberId;
@@ -405,13 +419,14 @@ try {
   await page.getByText('+300.000 ₫', { exact: true }).waitFor();
   await assertPublicText(page);
   await page.screenshot({ path: path.join(shots, 'fund-ledger.png'), fullPage: true });
-  await tab('Khoản chi').click();
-  await button('Tạo khoản chi').click();
-  await field('Nội dung').fill('Bữa trưa thử nghiệm');
+  await tab('Chi tiêu').click();
+  await button('Ghi nhận khoản chi').click();
+  await field('Ghi chú').fill('Bữa trưa thử nghiệm');
   await field('Số tiền (VND)').fill('100000');
-  await confirmSheet();
-  await settle();
-  await page.getByText('Bữa trưa thử nghiệm · 100.000 ₫', { exact: true }).waitFor();
+  await button('Lưu khoản chi').click();
+  await page.getByRole('heading', { name: 'Đã lưu khoản chi' }).waitFor();
+  await button('Về quỹ nhóm').click();
+  await page.getByText('Bữa trưa thử nghiệm', { exact: true }).waitFor();
   assert.equal(fund.current_balance, '500000', 'Draft expense has no ledger effect');
   await button('Xem chứng từ').click();
   await page.getByLabel('Ảnh chứng từ khoản chi', { exact: true }).waitFor();
@@ -431,7 +446,8 @@ try {
   await page.getByText('Không tìm thấy chứng từ (có thể đã được thay).', { exact: true }).waitFor();
 
   // Side links live on the overview tab; record tabs show records only.
-  await tab('Tổng quan').click();
+  await button('Tùy chọn quỹ').click();
+  await button('Tài khoản & ngân sách').click();
   assert.equal(await button('Công cụ quỹ mở rộng').count(), 0, 'Secondary tools stay collapsed by default.');
   await button('Công cụ và hướng dẫn').click();
   await button('Công cụ quỹ mở rộng').click();
@@ -453,9 +469,19 @@ try {
   await field('Ngày bay').fill(`${date.slice(8)}/${date.slice(5, 7)}/${date.slice(0, 4)}`);
   await field('Giờ khởi hành (giờ Việt Nam)').fill('19:00');
   await field('Ngưỡng giá riêng (VND)').fill('2000000');
+  await field('Người lớn').fill('2');
+  await button('Xác nhận lưu').click();
+  await page.getByRole('dialog').getByText(/Hãy chỉnh lại chuyến bay/).waitFor();
+  assert.equal(await field('Ngưỡng giá riêng (VND)').inputValue(), '2.000.000');
+  await field('Người lớn').fill('1');
   await save();
-  await page.getByText('SGN → DAD', { exact: true }).waitFor();
+  await page.getByRole('dialog').getByText(/2.000.000/).waitFor();
+  await button('Hoàn tất').click();
+  await page.getByLabel('SGN → DAD', { exact: true }).waitFor();
+  await page.getByText('Nguồn giá · Google Flights (SearchApi)', { exact: true }).waitFor();
   await button('Xem lịch sử giá').click();
+  await page.getByText(/Kiểm tra gần nhất ·/).waitFor();
+  await page.getByText(/Dự kiến kiểm tra lại ·/).waitFor();
   await page.getByText(/Giá cũ · Nguồn giá/).waitFor();
   assert.equal(
     await page.getByText(/Dưới ngưỡng riêng/).count(),
@@ -465,18 +491,49 @@ try {
   await assertPublicText(page);
   await page.screenshot({ path: path.join(shots, 'price-stale.png'), fullPage: true });
   stale = false;
-  await button('Làm mới lịch sử giá').click();
+  noFare = true;
+  await button('Làm mới giá').click();
+  await page.getByText('Lần kiểm tra gần nhất chưa tìm thấy vé phù hợp').waitFor();
+  assert.equal(await page.getByText(/Dưới ngưỡng riêng/).count(), 0);
+  noFare = false;
+  observedPrice = watches[0].threshold_price;
+  await button('Làm mới giá').click();
+  await page.getByText('Đã tìm thấy giá vé').waitFor();
+  assert.equal(await page.getByText(/Dưới ngưỡng riêng/).count(), 0, 'An equal fare does not cross the threshold');
+  observedPrice = '1800000';
+  await button('Làm mới giá').click();
   await page.getByText(/Dưới ngưỡng riêng/).waitFor();
+  // M18: the week's line, then the threshold saved in place.
+  await page.getByRole('img', { name: /^Giá 7 ngày qua/ }).waitFor();
+  await page.getByText('−10% · 7 ngày', { exact: true }).waitFor();
+  await button('Ẩn lịch sử giá').click();
+  await page.screenshot({ path: path.join(shots, 'm18.png'), fullPage: true });
   await button('Sửa theo dõi giá').click();
-  await field('Ngưỡng giá riêng (VND)').fill('1700000');
-  await save();
+  assert.equal(await field('Mã sân bay đi').inputValue(), 'SGN');
+  await button('Đóng').click();
+  assert.equal(await button('Lưu ngưỡng giá').isDisabled(), true, 'Nothing to save yet');
+  await field('Báo tôi khi giá thấp hơn').fill('1700000');
+  await button('Lưu ngưỡng giá').click();
+  await page.getByRole('dialog').getByText(/1.700.000/).waitFor();
+  await button('Hoàn tất').click();
   assert.equal(watches[0].threshold_price, '1700000');
-  await button('Tạm dừng theo dõi').click();
-  await save();
+  const toggle = page.getByRole('switch', { name: 'Thông báo giá vé' });
+  await toggle.click();
+  await page.getByText('Đang tạm dừng theo dõi giá').waitFor();
   assert.equal(watches[0].status, 'PAUSED');
-  await button('Tiếp tục theo dõi').click();
-  await save();
+  await toggle.click();
+  await page.getByText('Đang theo dõi', { exact: true }).waitFor();
   assert.equal(watches[0].status, 'ACTIVE');
+  actor = holderId;
+  await goto('price-watch');
+  await page.getByText('Yêu cầu của thành viên khác').waitFor();
+  assert.equal(await button('Dừng theo dõi').count(), 0);
+  actor = ownerId;
+  await goto('price-watch');
+  await page.getByText('Yêu cầu của thành viên khác').waitFor();
+  assert.equal(await button('Sửa theo dõi giá').count(), 0);
+  assert.equal(await toggle.count(), 0);
+  assert.equal(await button('Lưu ngưỡng giá').count(), 0);
   await button('Dừng theo dõi').click();
   await save();
   assert.equal(watches[0].status, 'STOPPED');
@@ -487,7 +544,7 @@ try {
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
   assert.deepEqual(errors, []);
   console.log(
-    'PASS mobile UI HTTP fixtures: role permissions on the main Fund screen; report/reject/re-report; lost-reply same-key replay; 500000 VND/2 IN; expense/notes; watch create/edit/pause/resume/stop; stale history. Not physical iOS evidence.',
+    'PASS mobile UI HTTP fixtures: fund permissions and recovery; Google Flights watch validation, thresholds, history and owner stop.',
   );
 } finally {
   await browser.close();

@@ -154,6 +154,7 @@ export default function MembersScreen() {
       {members.data && !members.data.length && (
         <EmptyState
           title="Chưa có thành viên"
+          scene="groupReady"
           message="Tải lại để cập nhật những người đang tham gia chuyến đi."
           icon="users"
         />
