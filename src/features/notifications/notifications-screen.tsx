@@ -101,7 +101,7 @@ function Inbox({ filter, setFilter }: { filter: "all" | "unread"; setFilter(valu
           return <Pressable key={item.id} cssInterop={false} disabled={busy} accessibilityRole="button" accessibilityLabel={item.title + (item.read_at ? "" : ", chưa đọc")}
             onPress={() => { void open(item); }} style={({ pressed }) => [styles.card, !item.read_at && { backgroundColor: pastelTones[tone].surface }, pressed && { opacity: 0.8 }]}>
             <CardIcon tone={tone} icon={icon} /><View style={styles.copy}><Text style={typography.headline}>{item.title}</Text>
-              <Text style={typography.body}>{item.type === "TRIP_INVITATION" ? "Mở lời mời và nhập mã người tổ chức đã gửi bạn." : item.body}</Text>
+              <Text style={typography.body}>{item.type === "TRIP_INVITATION" ? "Mở để xem lời mời đang chờ và trả lời." : item.body}</Text>
               <Text style={[typography.eyebrow, { color: colors.tealPressed }]}>{timeLabel(item.created_at).toLocaleUpperCase("vi-VN")}</Text></View>
             {!item.read_at && <View style={styles.dot} />}
           </Pressable>;

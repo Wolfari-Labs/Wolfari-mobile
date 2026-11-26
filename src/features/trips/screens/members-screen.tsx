@@ -26,6 +26,7 @@ import { collectPages } from "../api/pagination";
 import { useTrip } from "../hooks/use-trip";
 import type { Invitation } from "../types";
 import { dateLabel } from "../utils";
+import { invitationUsesLabel } from "../model/invitation-labels";
 
 export default function MembersScreen() {
   const resource = useTrip();
@@ -35,7 +36,7 @@ export default function MembersScreen() {
   const owner = data?.trip.current_membership.role === "OWNER";
   const archived = data?.trip.lifecycle === "ARCHIVED";
   const canManage = owner && !archived && !resource.loading && !resource.error;
-  // Owner and plan editors may invite; only the Owner manages everyone's invitations here.
+  // Only the Owner invites (SRS FR-TR03); older servers omit can_invite.
   const inviter = !!data && !archived && (data.trip.permissions.can_invite ?? owner);
   // An archived trip still shows its pending invitations, read-only.
   // Owner manages every invitation; other inviters manage only the ones they created.
@@ -180,7 +181,7 @@ export default function MembersScreen() {
                 {invitation.email ?? (invitation.code_hint ? `Mã mời ••••-${invitation.code_hint}` : "Lời mời bằng mã")}
               </Text>
               <Text style={typography.footnote}>
-                Hết hạn {dateLabel(invitation.expires_at)}
+                {invitation.invitation_type === "LINK" ? `${invitationUsesLabel(invitation)} · ` : ""}Hết hạn {dateLabel(invitation.expires_at)}
               </Text>
               {!owner && invitation.invited_by_user_id === profile?.id && (
                 <Text style={typography.footnote}>Lời mời do bạn tạo</Text>
