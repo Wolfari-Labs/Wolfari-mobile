@@ -20,7 +20,8 @@ export function MomoPendingGate({ item, children, onOpen, locked }: {
   onOpen(item: Contribution): void;
   locked: boolean;
 }) {
-  const watch = item.status === "PENDING" && item.destination_type === "MOMO_SANDBOX" && !!item.latest_payment_attempt_id;
+  // MoMo Sandbox attempts, and payOS attempts on VietQR destinations, both lock manual actions.
+  const watch = item.status === "PENDING" && !!item.latest_payment_attempt_id;
   return watch ? <AttemptGate item={item} onOpen={onOpen} locked={locked}>{children}</AttemptGate> : <>{children}</>;
 }
 
@@ -33,10 +34,13 @@ function AttemptGate({ item, children, onOpen, locked }: {
   const api = useApi();
   const attemptId = item.latest_payment_attempt_id!;
   const attempt = useResource(useCallback((signal: AbortSignal) => api.finance.attempt(attemptId, signal), [api, attemptId]));
-  if (attempt.loading && !attempt.data) return <Text style={typography.footnote}>Đang kiểm tra thanh toán MoMo…</Text>;
-  if (!momoInFlight(attempt.data?.status)) return <>{children}</>;
+  if (attempt.loading && !attempt.data) return <Text style={typography.footnote}>Đang kiểm tra thanh toán…</Text>;
+  const row = attempt.data;
+  // The server keeps an attempt that awaits reconciliation in flight as well.
+  if (!momoInFlight(row?.status) && !(row?.needs_reconciliation && row.status !== "SUCCEEDED")) return <>{children}</>;
+  const provider = row?.provider === "PAYOS" ? "payOS" : "MoMo";
   return <>
-    <Text style={[typography.footnote, { color: colors.amber }]}>Đang chờ kết quả MoMo. Các thao tác khác tạm khóa cho đến khi MoMo trả kết quả.</Text>
-    <Button label="Xem thanh toán MoMo" compact variant="soft" disabled={locked} onPress={() => onOpen(item)} />
+    <Text style={[typography.footnote, { color: colors.amber }]}>Đang chờ kết quả {provider}. Các thao tác khác tạm khóa cho đến khi {provider} trả kết quả.</Text>
+    <Button label={`Xem thanh toán ${provider}`} compact variant="soft" disabled={locked} onPress={() => onOpen(item)} />
   </>;
 }

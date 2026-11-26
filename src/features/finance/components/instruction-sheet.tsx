@@ -26,7 +26,7 @@ function deeplinkFor(row: PaymentInstruction, appId: string): string | undefined
   try { return bankAppDeeplink(row, appId, RETURN_URL); } catch { return undefined; }
 }
 
-export function InstructionSheet({ contributionId, onClose }: { contributionId: string; onClose(): void }) {
+export function InstructionSheet({ contributionId, onClose, onPayos }: { contributionId: string; onClose(): void; onPayos?: () => void }) {
   const api = useApi();
   const [consent, setConsent] = useState(false), [failed, setFailed] = useState(false);
   const [openError, setOpenError] = useState<string>();
@@ -46,6 +46,10 @@ export function InstructionSheet({ contributionId, onClose }: { contributionId: 
   return <Sheet visible title="Góp quỹ bằng VietQR" onClose={onClose}>
     <ResourceFeedback {...resource} hasData={!!row} onRetry={() => { void resource.reload(); }} />
     {row && <>
+      {onPayos && row.online_payment_providers.includes("PAYOS") && <>
+        <Button label="Thanh toán qua payOS" accessibilityLabel={`Thanh toán ${money(row.amount)} qua payOS`} onPress={onPayos} />
+        <Text style={typography.footnote}>Tự xác nhận khi tiền về tài khoản của người giữ quỹ. Hoặc quét mã bên dưới rồi báo đã chuyển.</Text>
+      </>}
       <QrImage url={row.qr_image} onError={() => setFailed(true)} />
       {failed && <Feedback message="Không hiển thị được mã QR. Dùng thông tin bên dưới để chuyển thủ công." />}
       <Text selectable style={typography.headline}>{money(row.amount)}</Text>
