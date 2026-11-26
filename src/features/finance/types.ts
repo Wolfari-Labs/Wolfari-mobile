@@ -113,6 +113,8 @@ export type PaymentInstruction = {
   contribution_id: string; amount: Money; currency: "VND"; reference: string;
   recipient_name: string; bank_code: string; bank_bin: string; account_number: string;
   bank_name: string; qr_payload: string; qr_svg: string; environment: "LIVE"; warning: string;
+  /** Online checkouts that pay into exactly this destination; PAYOS moves real money. */
+  online_payment_providers: "PAYOS"[];
 };
 export type Receipt = { object_key: string; mime_type: string; size_bytes: number };
 export type FinanceCollections = {
@@ -150,8 +152,9 @@ export type AuditEntry = {
 export type PaymentAttempt = {
   id: string;
   contribution_id: string;
-  provider: 'MOMO_SANDBOX';
-  environment: 'SANDBOX';
+  /** MOMO_SANDBOX is a test wallet; PAYOS is a real VietQR payment link (LIVE). */
+  provider: 'MOMO_SANDBOX' | 'PAYOS';
+  environment: 'SANDBOX' | 'LIVE';
   amount: string;
   currency: 'VND';
   status: string;

@@ -10,6 +10,7 @@ import type {
   BankTransfer, BankTransferResolution, ClosureReadiness,
 } from './types';
 import type { OperationCommand } from '../../shared/operations/controller';
+import { PAYOS_ATTEMPT_TITLE } from './payos.ts';
 
 export function object(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value))
@@ -129,6 +130,8 @@ function command(title: string, path: string, body: Record<string, unknown>, met
 // All callers supply a snapshot. Retry must keep this entire command unchanged.
 export const financeCommands = {
   paymentAttempt: (fund: Fund, row: Contribution) => command('Góp quỹ qua MoMo Test', `/contributions/${id(row.id)}/payment-attempts`, { provider: 'MOMO_SANDBOX', ...versions(fund, row) }),
+  // Real money: payOS pays into the Holder account; return_url is the Gateway page back to the app.
+  payosAttempt: (fund: Fund, row: Contribution, return_url: string) => command(PAYOS_ATTEMPT_TITLE, `/contributions/${id(row.id)}/payment-attempts`, { provider: 'PAYOS', return_url, ...versions(fund, row) }),
   enable: (tripId: string, holder_user_id: string, destination: DestinationInput, budget_amount?: string) =>
     command("Mở quỹ nhóm", `/trips/${id(tripId)}/fund`, { holder_user_id, currency: "VND", destination, ...(budget_amount !== undefined ? { budget_amount } : {}) }),
   budget: (fund: Fund, budget_amount: string | null) => command("Cập nhật ngân sách", `/funds/${id(fund.id)}/budget`, { budget_amount, ...versions(fund) }, "PATCH"),
@@ -221,7 +224,14 @@ export function createFinanceApi(client: ApiClient) {
         typeof row.bank_name !== 'string'
       )
         throw new ApiError('INVALID_RESPONSE', 'Hướng dẫn chuyển khoản không hợp lệ.');
-      return row as PaymentInstruction;
+      // Older servers omit the field; only checkouts this app knows are ever offered.
+      const providers = row.online_payment_providers ?? [];
+      if (!Array.isArray(providers))
+        throw new ApiError('INVALID_RESPONSE', 'Hướng dẫn chuyển khoản không hợp lệ.');
+      return {
+        ...row,
+        online_payment_providers: providers.includes('PAYOS') ? ['PAYOS'] : [],
+      } as PaymentInstruction;
     },
     async attempt(id: string, signal?: AbortSignal) {
       return decodeRow<PaymentAttempt>(await client.request(`/payment-attempts/${enc(id)}`, { signal }));

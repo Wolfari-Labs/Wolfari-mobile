@@ -37,6 +37,10 @@ import { userNamer } from "../trips/model/member-name";
 import { FinanceForm, type FinanceFormSpec } from "./components/finance-form";
 import { InstructionSheet } from "./components/instruction-sheet";
 import { MomoPaymentSheet } from "./components/momo-payment-sheet";
+import { PayosPaymentSheet } from "./components/payos-payment-sheet";
+import { PAYOS_ATTEMPT_TITLE, payosReturnPage } from "./payos";
+import { createURL } from "expo-linking";
+import { getApiBaseUrl } from "@/shared/config/env";
 import { DestinationCard } from "./components/destination-card";
 import { FundIntro } from "./components/fund-intro";
 import { bankDisplayName } from "./bank-names";
@@ -139,8 +143,10 @@ function FundWorkspace({ tripId, userId }: { tripId: string; userId: string }) {
   const [more, setMore] = useState(false);
   const [form, setForm] = useState<FinanceFormSpec>();
   const [expenseSaved, setExpenseSaved] = useState<{ row?: Expense }>();
-  const [instruction, setInstruction] = useState<string>();
+  const [instruction, setInstruction] = useState<Contribution>();
   const [momoAttempt, setMomoAttempt] = useState<PaymentAttempt>();
+  const [payosAttempt, setPayosAttempt] = useState<PaymentAttempt>();
+  const [payosContribution, setPayosContribution] = useState<Contribution>();
   const [momoContribution, setMomoContribution] = useState<Contribution>();
   const [momoError, setMomoError] = useState<string>();
   const [momoLoading, setMomoLoading] = useState(false);
@@ -194,11 +200,13 @@ function FundWorkspace({ tripId, userId }: { tripId: string; userId: string }) {
     if (completed.title.startsWith(QUICK_TRANSFER_TITLE)) return;
     completedKey.current = completed.key;
     const payment = completed.title === 'Góp quỹ qua MoMo Test' && operation.result && typeof operation.result === 'object' && 'provider' in operation.result && operation.result.provider === 'MOMO_SANDBOX' ? operation.result as PaymentAttempt : undefined;
+    const payos = completed.title === PAYOS_ATTEMPT_TITLE && operation.result && typeof operation.result === 'object' && 'provider' in operation.result && operation.result.provider === 'PAYOS' ? operation.result as PaymentAttempt : undefined;
     // Only a known committed result can release the saved request automatically.
     // Pending, rejected and uncertain requests keep their existing recovery UI.
     void (async () => {
       if (await acknowledge()) {
         if (payment) setMomoAttempt(payment);
+        if (payos) setPayosAttempt(payos);
         await reload();
         if (completed.title === "Ghi nhận khoản chi" || completed.title === "Sửa khoản chi" || completed.title === "Tạo khoản chi") {
           const row = operation.result;
@@ -236,14 +244,26 @@ function FundWorkspace({ tripId, userId }: { tripId: string; userId: string }) {
       setMomoLoading(true);
       try {
         const previous = await api.finance.attempt(item.latest_payment_attempt_id);
-        if (previous.contribution_id !== item.id || previous.amount !== item.amount || previous.provider !== 'MOMO_SANDBOX' || previous.environment !== 'SANDBOX') throw Error('Thông tin thanh toán không khớp khoản góp.');
-        setMomoAttempt(previous);
+        if (previous.contribution_id !== item.id || previous.amount !== item.amount) throw Error('Thông tin thanh toán không khớp khoản góp.');
+        // A VietQR contribution's latest attempt is a payOS checkout; reopen it in its own sheet.
+        if (previous.provider === 'PAYOS' && previous.environment === 'LIVE') { setPayosContribution(item); setPayosAttempt(previous); }
+        else if (previous.provider === 'MOMO_SANDBOX' && previous.environment === 'SANDBOX') setMomoAttempt(previous);
+        else throw Error('Thông tin thanh toán không khớp khoản góp.');
       } catch { setMomoError('Không tải được lần thanh toán trước. Tải lại quỹ rồi thử lại.'); }
       finally { setMomoLoading(false); }
     } else if (paymentSandboxEnabled) {
       setMomoAttempt(undefined);
       await operation.run(financeCommands.paymentAttempt(fund, item));
     }
+  }
+  /** Real money via payOS; the server reopens a still-valid link instead of creating another. */
+  async function payPayos(item: Contribution) {
+    if (locked || !fund || !actor?.writable) return;
+    setMomoError(undefined); setInstruction(undefined); setPayosAttempt(undefined); setPayosContribution(item);
+    let returnUrl: string;
+    try { returnUrl = payosReturnPage(getApiBaseUrl(), createURL("payment-return")); }
+    catch { setMomoError("Không tạo được trang quay lại ứng dụng cho payOS."); return; }
+    await operation.run(financeCommands.payosAttempt(fund, item, returnUrl));
   }
   return <Screen key={section ?? "fund"} clay title={section ? tabs.find(item => item.value === section)!.label : "Quỹ nhóm"} onBack={section ? closeSection : undefined} tab="trips" onRefresh={() => { void reload(); }} refreshing={resource.loading && !!resource.data}
     headerRight={fund && !section ? <ClayIconButton icon="more" label="Tùy chọn quỹ" onPress={() => setMore(true)} /> : undefined}>
@@ -302,7 +322,10 @@ function FundWorkspace({ tripId, userId }: { tripId: string; userId: string }) {
         onPress={() => { setMore(false); setTab(value); }} />)}
     </Sheet>
     {form && <FinanceForm spec={form} busy={operation.busy} onSubmit={operation.run} onClose={() => setForm(undefined)} />}
-    {instruction && <InstructionSheet contributionId={instruction} onClose={() => setInstruction(undefined)} />}
+    {instruction && <InstructionSheet contributionId={instruction.id} onClose={() => setInstruction(undefined)}
+      onPayos={!locked && actor?.writable && instruction.member_user_id === userId ? () => { void payPayos(instruction); } : undefined} />}
+    {payosAttempt && <PayosPaymentSheet key={payosAttempt.id} attempt={payosAttempt} onClose={() => setPayosAttempt(undefined)} onUpdate={reload}
+      onRetry={payosContribution && !locked && actor?.writable ? () => { void payPayos(payosContribution); } : undefined} />}
     {momoAttempt && <MomoPaymentSheet key={momoAttempt.id} attempt={momoAttempt} onClose={() => setMomoAttempt(undefined)} onUpdate={reload} onRetry={momoContribution && !locked && actor?.writable ? () => { void payMomo(momoContribution, true); } : undefined} />}
     {closureId && <ClosureSheet closureId={closureId} owner={!!owner} userId={userId} who={who} writable={!archived && !trip?.current_membership.left_at} busy={operation.busy} blockedReason={closureBlockedReason} onClose={() => setClosureId(undefined)} onAction={(row, action) => { void actOnClosure(row, action); }} />}
   </Screen>;
@@ -337,7 +360,7 @@ function FundOverview({ fund, trip, userId, locked, open, who }: Context) {
 }
 
 function FundRecords({ fund, trip, userId, locked, open, who, tab, members, onInstruction, onMomo, onClosure, onTab }: Context & {
-  tab: Exclude<Tab, "overview">; members: Membership[]; onInstruction(id: string): void; onMomo(item: Contribution): void; onClosure(id: string): void;
+  tab: Exclude<Tab, "overview">; members: Membership[]; onInstruction(item: Contribution): void; onMomo(item: Contribution): void; onClosure(id: string): void;
   onTab(tab: Tab): void;
 }) {
   const api = useApi();
@@ -403,7 +426,7 @@ function FundRecords({ fund, trip, userId, locked, open, who, tab, members, onIn
             <MomoPendingGate item={item} locked={locked} onOpen={onMomo}>
               {allocationActor.writable && item.member_user_id === userId && item.status === "PENDING" && (item.destination_type === 'MOMO_SANDBOX'
                 ? paymentSandboxEnabled && <Button label="Góp bằng MoMo Test" compact variant="soft" disabled={locked} onPress={() => onMomo(item)} />
-                : <Button label="Xem QR góp quỹ" compact variant="soft" disabled={locked} onPress={() => onInstruction(item.id)} />)}
+                : <Button label="Xem QR góp quỹ" compact variant="soft" disabled={locked} onPress={() => onInstruction(item)} />)}
               {contributionActions(item, allocationActor).map(action => <Button key={action} label={actionLabels[action]} compact accessibilityLabel={`${actionLabels[action]} · ${who(item.member_user_id)} · ${money(item.amount)}`} variant="soft" disabled={locked} onPress={() => open(contributionForm(fund, item, action, who))} />)}
             </MomoPendingGate>
           </View>
