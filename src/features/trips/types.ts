@@ -37,10 +37,11 @@ export type DressCodeInput = { scope_type: DressCode["scope_type"]; plan_date: s
 export type Plan = { trip_id: string; plan_version: number; export_revision: number; activities: Activity[]; selected_locations: SelectedLocation[]; dress_codes: DressCode[]; packing_items: PackingItem[]; permissions: { can_read: boolean; can_edit: boolean; can_complete: boolean };
   /** Writers this server offers beyond activities; absent on older backends. */
   capabilities?: { dress_codes_write?: boolean; dress_code_images_write?: boolean; packing_write?: boolean; locations_write?: boolean } };
-export type Invitation = { id: string; trip_id: string; invitation_type: "EMAIL" | "LINK"; email: string | null; status: "PENDING" | "ACCEPTED" | "DECLINED" | "REVOKED" | "EXPIRED"; version: number; expires_at: string; resolved_at: string | null; code_hint?: string | null; invited_by_user_id?: string | null };
-/** join_code (XXXX-XXXX) is returned once, at creation, for link invitations. */
-export type InvitationResult = { invitation: Invitation; one_time_link?: string; join_code?: string };
-export type InvitationPreview = { id: string; trip_name: string; inviter_display_name: string; status: Invitation["status"]; expires_at: string };
+/** max_uses > 1 is a group link (one code for several people); older servers omit both counts. */
+export type Invitation = { id: string; trip_id: string; invitation_type: "EMAIL" | "LINK"; email: string | null; status: "PENDING" | "ACCEPTED" | "DECLINED" | "REVOKED" | "EXPIRED"; version: number; expires_at: string; resolved_at: string | null; code_hint?: string | null; invited_by_user_id?: string | null; max_uses?: number; use_count?: number };
+/** join_code (XXXX-XXXX) and share_link (web page …/invitations#code=…) are returned once, at creation. */
+export type InvitationResult = { invitation: Invitation; one_time_link?: string; join_code?: string; share_link?: string };
+export type InvitationPreview = { id: string; trip_name: string; inviter_display_name: string; status: Invitation["status"]; expires_at: string; invitation_type?: "EMAIL" | "LINK" | null; trip_start_at?: string | null; trip_end_at?: string | null };
 export type TravelPlace = { id: string; name: string; address: string; coordinates: { latitude: number; longitude: number }; opening_hours: { weekday: number; opens_at: string; closes_at: string }[] };
 export type TravelMeta = { status: "SUCCESS" | "NO_RESULT" | "ERROR"; provider: string; fetched_at: string; stale: boolean; is_mock: boolean; warnings: string[]; attribution: { text: string; url: string }[] };
 

@@ -17,6 +17,8 @@ import { ClayButton, ClayIcon } from "@/shared/ui/setting-card";
 import { coverFor } from "../components/trip-card";
 import { Screen } from "@/shared/ui/screen";
 import { toast } from "@/shared/ui/toast";
+import { PendingInvitations } from "../components/pending-invitations";
+import { tripDatesLabel } from "../model/invitation-labels";
 import { pendingInvitation } from "../pending-invitation";
 import type { InvitationPreview } from "../types";
 import { dateLabel, invitationToken } from "../utils";
@@ -87,8 +89,10 @@ function Invitation({ linked }: { linked?: string }) {
     <Text accessibilityRole="header" style={typography.largeTitle}>{preview && !resolved ? "Cùng nhau lên đường nhé!" : "Đi cùng nhau, vui hơn nhiều!"}</Text>
     {validation && <Feedback message={validation} />}{command.error && <Feedback message={command.error} />}
     {resolved ? <><Feedback success message="Đã phản hồi lời mời." /><ClayButton label="Về chuyến đi của tôi" onPress={() => router.dismissTo("/(tabs)/trips")} /></> : !preview ? <>
+      {/* Email invitations to this account appear by themselves, without a code. */}
+      {status === "authenticated" && <PendingInvitations />}
       <FormField label="Mã mời" icon="mail" value={input} onChangeText={value => { setInput(value); setPreview(undefined); }} autoCapitalize="characters" autoCorrect={false} placeholder="VD: K7PQ-4M2X" editable={!command.busy} />
-      <Text style={typography.footnote}>Nhập mã 8 ký tự người tổ chức gửi bạn, hoặc dán cả tin nhắn mời.</Text>
+      <Text style={typography.footnote}>Nhập mã 8 ký tự người tổ chức gửi bạn, hoặc dán cả tin nhắn/liên kết mời. Lời mời qua email tự hiện ở trên khi bạn đăng nhập bằng đúng email đó.</Text>
       <Button label="Dán từ bộ nhớ tạm" variant="soft" compact disabled={command.busy} style={{ alignSelf: "flex-start" }} onPress={() => { void paste(); }} />
       {status !== "authenticated" ? <><Text style={typography.body}>Đăng nhập để xem và phản hồi lời mời.</Text><Button label="Đăng nhập" onPress={() => { const token = invitationToken(input); if (token) pendingInvitation.set(token); router.push("/sign-in"); }} /></> : <Button label="Xem lời mời" loading={command.busy} variant="soft" onPress={() => { void inspect(); }} />}
     </> : <>
@@ -100,7 +104,8 @@ function Invitation({ linked }: { linked?: string }) {
           <Text style={typography.headline}>{preview.inviter_display_name} đã mời bạn</Text>
           <Text style={typography.footnote}>Tham gia với vai trò thành viên</Text></View></View>
         <Text accessibilityRole="header" style={typography.title}>{preview.trip_name}</Text>
-        <View style={styles.row}><ClayIcon name="fieldCalendar" size={20} /><Text style={typography.body}>Hết hạn {dateLabel(preview.expires_at)}</Text></View>
+        {!!tripDatesLabel(preview) && <View style={styles.row}><ClayIcon name="fieldCalendar" size={20} /><Text style={typography.body}>{tripDatesLabel(preview)}</Text></View>}
+        <Text style={typography.footnote}>Lời mời hết hạn {dateLabel(preview.expires_at)}</Text>
       </View></View>
       {preview.status === "PENDING" && !expired ? <View style={{ gap: 10 }}>
         <ClayButton label="Chấp nhận lời mời" icon="arrowRight" loading={command.busy} onPress={() => { void respond("accept"); }} />

@@ -201,9 +201,19 @@ export function createTripsApi(client: ApiClient) {
       `/trips/${id(trip.id)}/members/${id(memberId)}`, write("DELETE", { reason: reason.trim(), expected_membership_revision: trip.membership_revision }, key),
     ),
     operation: (operationId: string, signal?: AbortSignal) => client.request<MembershipOperation>(`/operations/${id(operationId)}`, { signal }),
-    inviteLink: (trip: Trip, key: string) => client.request<InvitationResult>(
-      `/trips/${id(trip.id)}/invitations`, write("POST", { invitation_type: "LINK", expected_membership_revision: trip.membership_revision }, key),
+    /** maxUses > 1 makes a group link: one code for several people (server allows up to 50). */
+    inviteLink: (trip: Trip, key: string, maxUses = 1) => client.request<InvitationResult>(
+      `/trips/${id(trip.id)}/invitations`,
+      write("POST", { invitation_type: "LINK", expected_membership_revision: trip.membership_revision, ...(maxUses > 1 ? { max_uses: maxUses } : {}) }, key),
     ),
+    /** Pending EMAIL invitations sent to my verified email (found even without the email). */
+    myInvitations: (signal?: AbortSignal) =>
+      client.request<{ items: InvitationPreview[] }>("/me/invitations", { signal }),
+    respondInvitationById: (invitationId: string, action: "accept" | "decline", key: string) =>
+      client.request<{ membership?: Membership }>(
+        `/invitations/${action}`,
+        write("POST", { invitation_id: invitationId }, key),
+      ),
     policy: (
       trip: Trip,
       policy: PlanPolicy,

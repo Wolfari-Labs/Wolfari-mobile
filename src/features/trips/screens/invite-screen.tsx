@@ -18,13 +18,14 @@ import { Screen } from "@/shared/ui/screen";
 import { InviteQr } from "../components/invite-qr";
 import { useTrip } from "../hooks/use-trip";
 import { inviteMessage } from "../model/invite-message";
+import { GROUP_LINK_USES, invitationUsesLabel } from "../model/invitation-labels";
 import type { InvitationResult } from "../types";
 import { dateLabel } from "../utils";
 
 const STEPS = [
-  "Gửi mã qua Zalo, Messenger, tin nhắn — hoặc cho bạn quét QR ngay tại chỗ.",
-  "Bạn bè mở Wolfari → Tài khoản → Lời mời chuyến đi và nhập mã.",
-  "Khi họ nhận lời, bạn sẽ thấy họ trong Bạn đồng hành.",
+  "Gửi lời mời qua Zalo, Messenger, tin nhắn — hoặc cho bạn quét QR ngay tại chỗ.",
+  "Bạn bè mở liên kết (hoặc quét QR), hoặc vào Wolfari → Tài khoản → Tham gia bằng mã mời và nhập mã.",
+  "Khi có người nhận lời, bạn nhận thông báo và thấy họ trong Bạn đồng hành.",
 ];
 
 export default function InviteScreen() {
@@ -32,6 +33,8 @@ export default function InviteScreen() {
   const { data, api, id } = resource;
   const command = useCommand();
   const [kind, setKind] = useState<"LINK" | "EMAIL">("LINK");
+  // Like a chat group link: one code for the whole group by default, or one for a single person.
+  const [audience, setAudience] = useState<"GROUP" | "ONE">("GROUP");
   const [email, setEmail] = useState("");
   const [validation, setValidation] = useState<string>();
   const [result, setResult] = useState<InvitationResult>();
@@ -40,8 +43,9 @@ export default function InviteScreen() {
   const [shareError, setShareError] = useState<string>();
   const code = result?.join_code;
   const archived = data?.trip.lifecycle === "ARCHIVED";
-  // Owner and members who may edit the plan can invite; older servers omit can_invite.
+  // Only the Owner invites (SRS FR-TR03); the server decides through can_invite.
   const allowed = !archived && (data?.trip.permissions.can_invite ?? data?.trip.current_membership.role === "OWNER");
+  const uses = audience === "GROUP" ? GROUP_LINK_USES : 1;
   const writable = allowed && !resource.loading && !resource.error;
 
   async function copy() {
@@ -56,6 +60,8 @@ export default function InviteScreen() {
       tripName: data.trip.name,
       code,
       expiresLabel: dateLabel(result.invitation.expires_at),
+      link: result.share_link,
+      maxUses: result.invitation.max_uses,
     });
     try {
       await Share.share({ message, title: `Lời mời: ${data.trip.name}` });
@@ -71,8 +77,13 @@ export default function InviteScreen() {
     }
     setValidation(undefined);
     const response = await command.run(
-      { kind, email: kind === "EMAIL" ? email.trim().toLowerCase() : undefined, revision: data.trip.membership_revision },
-      (key) => (kind === "EMAIL" ? api.trips.invite(data.trip, email, key) : api.trips.inviteLink(data.trip, key)),
+      {
+        kind,
+        email: kind === "EMAIL" ? email.trim().toLowerCase() : undefined,
+        uses: kind === "LINK" ? uses : undefined,
+        revision: data.trip.membership_revision,
+      },
+      (key) => (kind === "EMAIL" ? api.trips.invite(data.trip, email, key) : api.trips.inviteLink(data.trip, key, uses)),
     );
     if (response) {
       setResult(response);
@@ -90,8 +101,9 @@ export default function InviteScreen() {
     if (!revoked) return;
     const fresh = await resource.reload();
     if (!fresh) return;
-    const next = await command.run({ kind: "LINK", replaces: old.id, revision: fresh.trip.membership_revision }, (key) =>
-      api.trips.inviteLink(fresh.trip, key),
+    const keepUses = old.max_uses ?? 1;
+    const next = await command.run({ kind: "LINK", replaces: old.id, uses: keepUses, revision: fresh.trip.membership_revision }, (key) =>
+      api.trips.inviteLink(fresh.trip, key, keepUses),
     );
     if (next) {
       setResult(next);
@@ -155,14 +167,15 @@ export default function InviteScreen() {
                     <View style={styles.ticketHead}>
                       <DesignIcon name="users" size={18} tintColor={colors.teal} />
                       <Text style={[typography.headline, { flex: 1 }]}>Mã mời vào nhóm</Text>
-                      <Text style={styles.expiry}>Dùng 1 lần · hết hạn {dateLabel(result.invitation.expires_at)}</Text>
+                      <Text style={styles.expiry}>{invitationUsesLabel(result.invitation)} · hết hạn {dateLabel(result.invitation.expires_at)}</Text>
                     </View>
                     <Text selectable accessibilityLabel={`Mã mời ${code.split("").join(" ")}`} style={styles.code}>
                       {code}
                     </Text>
-                    {/* Phone cameras open the app straight on the invitation with the code filled in. */}
+                    {/* Any phone camera opens the web invitation page (https) carrying the code; the
+                        app-only link is a fallback for servers that do not return share_link. */}
                     <InviteQr
-                      value={Linking.createURL("/invitation", { queryParams: { code } })}
+                      value={result.share_link ?? Linking.createURL("/invitation", { queryParams: { code } })}
                       label={`Mã QR lời mời ${code}`}
                     />
                     <Text style={[typography.footnote, { textAlign: "center" }]}>Bạn ngồi cạnh có thể quét QR bằng camera điện thoại.</Text>
@@ -258,8 +271,20 @@ export default function InviteScreen() {
                         <Text style={[typography.footnote, { flex: 1 }]}>{step}</Text>
                       </View>
                     ))}
+                    <Segments
+                      items={[
+                        { value: "GROUP", label: `Cả nhóm (tối đa ${GROUP_LINK_USES})` },
+                        { value: "ONE", label: "Một người" },
+                      ]}
+                      value={audience}
+                      onChange={(value) => {
+                        if (!command.busy) setAudience(value);
+                      }}
+                    />
                     <Text style={typography.footnote}>
-                      Mỗi mã dùng cho một người. Chỉ gửi cho người bạn muốn mời; ai có mã còn hạn đều có thể nhận lời.
+                      {audience === "GROUP"
+                        ? `Một mã cho cả nhóm, như link nhóm chat: tối đa ${GROUP_LINK_USES} người, mỗi tài khoản vào một lần. Chỉ gửi trong nhóm của bạn; ai có mã còn hạn đều có thể vào.`
+                        : "Mã dùng cho một người. Chỉ gửi cho người bạn muốn mời; ai có mã còn hạn đều có thể nhận lời."}
                     </Text>
                   </View>
                 )}
@@ -279,7 +304,7 @@ export default function InviteScreen() {
             message={
               archived
                 ? "Không thể tạo lời mời cho chuyến đi đã lưu trữ. Bạn vẫn có thể xem danh sách thành viên."
-                : "Người tổ chức và những thành viên được quyền sửa kế hoạch có thể mời bạn bè."
+                : "Chỉ người tổ chức chuyến đi mời được bạn bè. Hãy nhờ người tổ chức gửi mã hoặc lời mời."
             }
             icon="users"
           />
