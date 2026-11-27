@@ -23,6 +23,7 @@ import { useFinanceCommand } from '../../finance/use-finance-command';
 import { localWatchValues, QUICK_AIRPORTS, WATCH_TIMEZONE, watchFormDates, watchInput, type Watch } from '../../price-watch/api';
 import { PricePanel, RouteCard, watchRoute } from '../../price-watch/components/watch-panel';
 import { watchStatusReason } from '../../price-watch/labels';
+import { ANY_SOURCE, capabilitiesNote, type Capabilities, unsupportedReason } from '../../price-watch/capabilities';
 import { calendarLabel, dateKey } from '../utils';
 
 const cabins = [
@@ -31,9 +32,17 @@ const cabins = [
   { value: 'BUSINESS', label: 'Thương gia' },
   { value: 'FIRST', label: 'Hạng nhất' },
 ];
-function watchFields(w?: Watch): Field[] {
+/** SRS FR-AU03: offer only what the fare source can compare; a single choice is not a question. */
+function watchFields(w: Watch | undefined, can: Capabilities): Field[] {
   const q = w?.normalized_query;
   const dates = watchFormDates(w);
+  const journeys = [
+    { value: 'ONE_WAY', label: 'Một chiều' },
+    { value: 'ROUND_TRIP', label: 'Khứ hồi' },
+  ].filter((option) => can.journey_types.includes(option.value as 'ONE_WAY'));
+  const cabinOptions = cabins.filter((option) => can.cabin_classes.includes(option.value));
+  const pick = (value: string | undefined, options: { value: string }[]) =>
+    options.some((option) => option.value === value) ? value! : options[0]!.value;
   return [
     {
       key: 'origin',
@@ -59,11 +68,9 @@ function watchFields(w?: Watch): Field[] {
     {
       key: 'journey_type',
       label: 'Hành trình',
-      value: q?.journey_type ?? 'ONE_WAY',
-      options: [
-        { value: 'ONE_WAY', label: 'Một chiều' },
-        { value: 'ROUND_TRIP', label: 'Khứ hồi' },
-      ],
+      value: pick(q?.journey_type, journeys),
+      options: journeys,
+      visible: () => journeys.length > 1,
     },
     {
       key: 'return_date',
@@ -72,14 +79,33 @@ function watchFields(w?: Watch): Field[] {
       mode: 'date',
       visible: (values) => values.journey_type === 'ROUND_TRIP',
     },
-    { key: 'adults', label: 'Người lớn', value: String(q?.passengers.adults ?? 1), numeric: true },
-    { key: 'children', label: 'Trẻ em', value: String(q?.passengers.children ?? 0), numeric: true },
-    { key: 'infants', label: 'Em bé', value: String(q?.passengers.infants ?? 0), numeric: true },
+    {
+      key: 'adults',
+      label: 'Người lớn',
+      value: String(Math.min(q?.passengers.adults ?? 1, can.max_adults)),
+      numeric: true,
+      visible: () => can.max_adults > 1,
+    },
+    {
+      key: 'children',
+      label: 'Trẻ em',
+      value: String(Math.min(q?.passengers.children ?? 0, can.max_children)),
+      numeric: true,
+      visible: () => can.max_children > 0,
+    },
+    {
+      key: 'infants',
+      label: 'Em bé',
+      value: String(Math.min(q?.passengers.infants ?? 0, can.max_infants)),
+      numeric: true,
+      visible: () => can.max_infants > 0,
+    },
     {
       key: 'cabin_class',
       label: 'Hạng ghế',
-      value: q?.cabin_class ?? 'ECONOMY',
-      options: cabins,
+      value: pick(q?.cabin_class ?? 'ECONOMY', cabinOptions),
+      options: cabinOptions,
+      visible: () => cabinOptions.length > 1,
     },
     {
       key: 'threshold_price',
@@ -105,6 +131,12 @@ function WatchWorkspace({ id, userId }: { id: string; userId: string }) {
     useCallback((signal: AbortSignal) => api.priceWatch.list(id, null, signal), [api, id]),
     !!trip.data,
   );
+  const capabilities = useResource(
+    useCallback((signal: AbortSignal) => api.priceWatch.capabilities(signal), [api]),
+    !!trip.data,
+  );
+  // Until (or if) the source is known, offer everything and let the server decide.
+  const source = capabilities.data ?? ANY_SOURCE;
   const [form, setForm] = useState<ActionForm>(),
     [selectedId, setSelectedId] = useState<string>(),
     [draft, setDraft] = useState<{ key: string; value: string }>();
@@ -132,13 +164,16 @@ function WatchWorkspace({ id, userId }: { id: string; userId: string }) {
     !list.error &&
     !list.loading;
   function edit(w?: Watch) {
+    // An edit keeps the watch's own source; the capabilities describe the configured one.
+    const can = !w || w.normalized_query.provider === source.provider ? source : ANY_SOURCE;
     setForm({
       title: w ? 'Sửa theo dõi giá' : 'Tạo theo dõi giá',
-      message:
-        'Ngày và giờ bay theo giờ Việt Nam. Google Flights và Aviasales hỗ trợ vé một chiều, hạng phổ thông cho 1 người lớn.',
-      fields: watchFields(w),
+      message: `Ngày và giờ bay theo giờ Việt Nam. ${capabilitiesNote(can)}`,
+      fields: watchFields(w, can),
       submit: async (values) => {
         const input = watchInput(localWatchValues(values));
+        const unsupported = unsupportedReason(can, input);
+        if (unsupported) throw Error(unsupported);
         const result = await command.send({
           label: w ? 'Sửa theo dõi giá' : 'Tạo theo dõi giá',
           method: w ? 'PATCH' : 'POST',
@@ -219,10 +254,10 @@ function WatchWorkspace({ id, userId }: { id: string; userId: string }) {
       title="Theo dõi giá vé"
       onRefresh={() => { void refresh(); }}
       refreshing={list.loading && !!list.data}
-      headerRight={selected ? <ClayIconButton icon="plus" label="Tạo theo dõi giá" onPress={() => { if (!command.blocked && writable) edit(); }} /> : undefined}
+      headerRight={selected ? <ClayIconButton icon="plus" label="Tạo theo dõi giá" onPress={() => { if (!command.blocked && writable && source.available) edit(); }} /> : undefined}
       footer={selected
         ? live && own && <ClayButton label="Lưu ngưỡng giá" loading={command.busy} disabled={!editable || !threshold || threshold === selected.threshold_price} onPress={() => { Keyboard.dismiss(); void saveThreshold(); }} />
-        : list.data && <ClayButton label="Tạo theo dõi giá" disabled={command.blocked || !writable} onPress={() => edit()} />}
+        : list.data && <ClayButton label="Tạo theo dõi giá" disabled={command.blocked || !writable || !source.available} onPress={() => edit()} />}
     >
       <View style={{ gap: 4 }}>
         <Text accessibilityRole="header" style={typography.title}>Bay với giá tốt hơn</Text>
@@ -232,6 +267,9 @@ function WatchWorkspace({ id, userId }: { id: string; userId: string }) {
       <CommandFeedback command={command} />
       <ResourceFeedback {...list} hasData={!!list.data} onRetry={() => { void list.reload(); }} />
       {error && <Feedback message={error} />}
+      {capabilities.data && !capabilities.data.available && (
+        <Notice>Nguồn giá vé chưa sẵn sàng trên máy chủ nên chưa tạo được theo dõi mới. Các theo dõi đã có vẫn xem được.</Notice>
+      )}
       {watches.length > 1 && <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" style={{ marginHorizontal: -24, marginVertical: -6, flexGrow: 0 }} contentContainerStyle={{ gap: 8, paddingHorizontal: 24, paddingVertical: 6 }}>
         {watches.map((w) => <ClayChip key={w.id} role="tab" selected={w.id === selected?.id} onPress={() => { setSelectedId(w.id); setError(undefined); }}
           label={`${watchRoute(w)} · ${calendarLabel(dateKey(w.normalized_query.departure_at, WATCH_TIMEZONE)).slice(0, 5)}${w.status === 'ACTIVE' ? '' : ` · ${statusLabel[w.status]}`}`} />)}

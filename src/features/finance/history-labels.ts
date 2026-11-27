@@ -59,7 +59,7 @@ const entities: Record<string, string> = {
   contribution_request: "Đợt đóng góp", expense: "Khoản chi", refund: "Hoàn tiền", financial_note: "Ghi chú ngoài quỹ",
   closure: "Chốt quỹ", payment_attempt: "Thanh toán", payment_exception: "Đối soát", membership: "Thành viên",
 };
-const systems: Record<string, string> = { MOMO_IPN: "MoMo Sandbox", MOMO_RECONCILIATION: "Đối soát tự động", "BANK_WEBHOOK:SEPAY": "Ngân hàng (SePay) báo tiền về" };
+const systems: Record<string, string> = { MOMO_IPN: "MoMo Sandbox", MOMO_RECONCILIATION: "Đối soát tự động", "BANK_WEBHOOK:SEPAY": "Ngân hàng (SePay) báo tiền về", PAYOS_WEBHOOK: "payOS báo đã nhận tiền", PAYOS_RECONCILIATION: "Đối soát payOS tự động" };
 
 export function historyActionLabel(action: string) {
   return actions[action] ?? "Cập nhật quỹ";
